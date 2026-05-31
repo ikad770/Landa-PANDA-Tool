@@ -18,10 +18,7 @@ class UiErrorBoundary extends Component {
   }
 
   render() {
-    if (this.state.error) {
-      return <FallbackPage error={this.state.error} />;
-    }
-
+    if (this.state.error) return <FallbackPage error={this.state.error} />;
     return this.props.children;
   }
 }
@@ -40,26 +37,16 @@ function FallbackPage({ error }) {
   );
 }
 
-function renderFallback(error) {
-  const root = document.getElementById('root');
-  if (!root) return;
+const rootElement = document.getElementById('root');
 
-  root.innerHTML = '';
-  createRoot(root).render(<FallbackPage error={error} />);
+if (!rootElement) {
+  throw new Error('Root element #root was not found in index.html');
 }
 
-try {
-  const rootElement = document.getElementById('root');
-  if (!rootElement) {
-    throw new Error('Root element #root was not found in index.html');
-  }
-
-  createRoot(rootElement).render(
+createRoot(rootElement).render(
+  <React.StrictMode>
     <UiErrorBoundary>
       <App />
     </UiErrorBoundary>
-  );
-} catch (error) {
-  console.error('Landa PANDA Tool failed before React could mount', error);
-  renderFallback(error);
-}
+  </React.StrictMode>
+);
