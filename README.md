@@ -1,78 +1,44 @@
 # Landa PANDA Tool
 
-Stable GitHub-first base for the Landa PANDA Tool.
+Static v0.1 GitHub-only baseline for the Landa PANDA Tool.
 
-## What this project is
+PANDA means **Proactive Analyzer Notification DA**. This baseline is a standalone service-tool prototype that opens directly from `index.html` or GitHub Pages without installing anything and without building a bundle.
 
-PANDA is a service-team tool for analyzing machine log packages and preparing state-aware alerts based on machine systems, parameters, and rules.
+## How to use
 
-Current foundation includes:
+1. Open `index.html` directly in a browser.
+2. Or enable GitHub Pages from the repository main branch root.
+3. Open the GitHub Pages URL.
 
-- React + Vite frontend
-- Upload panel for ZIP/files/folders
-- Recursive ZIP inventory scanner via JSZip
-- Machine detection from folder/archive paths
-- System detection from log paths
-- Initial rule catalog model
-- Basic state-aware rule-evaluator services
-- Professional dark UI foundation
+## No setup required
 
-## Important: how to open the app
+- No npm install required.
+- No build required.
+- No Vite required.
+- No local server required.
+- No external network dependency.
 
-Do **not** open `index.html` directly from GitHub file preview. A Vite React app must be built and served.
+## What this baseline includes
 
-Use one of these options:
+- Dark enterprise SaaS-style PANDA interface.
+- Service Radar, Upload Logs, Rules Catalog, Machines, Alerts, Settings, and BSS Drill-down screens.
+- Browser-only upload controls for multiple files or folders.
+- Path/name scanning to infer machine IDs such as `S100100025` or `D110100023`.
+- Path/name detection for possible OPC archives, possible logs, and system tokens: BSS, IRD, IPS, FEC, ECC, LLCI, DPS, and QCS.
+- Initial static rules catalog for PSS, IRD, BSS, IPS, and NPD examples.
+- State-aware mock issue explanation for the BSS Blanket System.
 
-### Option A — GitHub Pages, no local CMD required
-
-1. Upload this full repository to GitHub.
-2. Go to repository **Settings → Pages**.
-3. Under **Build and deployment**, choose **GitHub Actions**.
-4. Push to `main`.
-5. Open the deployed URL shown in **Actions** or **Settings → Pages**.
-
-This repository includes `.github/workflows/deploy-github-pages.yml`, which builds the app and deploys `dist/` automatically.
-
-### Option B — Local development
-
-```bash
-npm install --no-audit --no-fund
-npm run dev
-```
-
-Then open:
+## Supported upload shape
 
 ```text
-http://localhost:5173/
+Root folder with machine folders:
+S100100025/
+D110100023/
+Each may contain autocollect zip / opc.zip / logs
 ```
 
-## Why GitHub file preview does not work
+This version does not deeply parse archives. It uses the browser File API to inspect selected file names and relative paths only.
 
-GitHub repository file preview only displays source files. It does not run Vite, does not install packages, and does not build React.
+## Future direction
 
-If you open the source `index.html` directly from GitHub, the browser may request `main.jsx` incorrectly or fail to load modules. Use GitHub Pages or local Vite instead.
-
-## Project structure
-
-```text
-index.html
-package.json
-vite.config.js
-.github/workflows/deploy-github-pages.yml
-src/
-  main.jsx
-  App.jsx
-  styles.css
-  components/
-  data/
-  services/
-  utils/
-```
-
-## Next development steps
-
-1. Import PANDA rules from Excel.
-2. Improve scanner progress and large ZIP handling.
-3. Parse StateMachine and relevant notification logs.
-4. Connect rules to real readings.
-5. Add alert lifecycle and service workflow.
+This is intentionally a stable GitHub-first prototype. Later, when the project is ready for local development and deployment automation, it can be migrated back to a framework-based implementation.
