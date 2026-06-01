@@ -3,26 +3,29 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PANDA Service Radar — Landa Digital Printing</title>
+  <title>PANDA Tool — Service Radar</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
     :root {
-      --bg: #03060a;
-      --bg-2: #070b10;
-      --panel: rgba(10, 17, 25, 0.78);
-      --panel-strong: rgba(12, 22, 31, 0.92);
-      --panel-soft: rgba(255, 255, 255, 0.035);
-      --line: rgba(118, 229, 255, 0.18);
-      --line-strong: rgba(65, 219, 255, 0.42);
-      --cyan: #2edcff;
-      --cyan-soft: rgba(46, 220, 255, 0.14);
-      --red: #ff465d;
-      --red-soft: rgba(255, 70, 93, 0.15);
-      --white: #f4fbff;
-      --text: #dceaf4;
-      --muted: #7d8c99;
-      --muted-2: #53616d;
-      --shadow: 0 24px 90px rgba(0, 0, 0, 0.48);
+      --bg: #030609;
+      --bg-2: #070c12;
+      --panel: #0a1118;
+      --panel-2: #0d1620;
+      --panel-3: #101b26;
+      --line: rgba(130, 224, 245, 0.16);
+      --line-2: rgba(130, 224, 245, 0.28);
+      --cyan: #41dfff;
+      --cyan-2: #00a8c9;
+      --cyan-soft: rgba(65, 223, 255, 0.12);
+      --red: #ff4257;
+      --red-soft: rgba(255, 66, 87, 0.14);
+      --amber: #ffbd5d;
+      --green: #64d89a;
+      --text: #d9e8f0;
+      --white: #f6fbff;
+      --muted: #7c8c98;
+      --muted-2: #52616c;
+      --shadow: 0 22px 70px rgba(0, 0, 0, 0.46);
       --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
       --sans: Inter, "Segoe UI", Roboto, Arial, sans-serif;
     }
@@ -33,341 +36,431 @@
       margin: 0;
       min-height: 100vh;
       color: var(--text);
-      font: 13px/1.45 var(--sans);
+      font: 12px/1.42 var(--sans);
+      background:
+        linear-gradient(rgba(65, 223, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(65, 223, 255, 0.02) 1px, transparent 1px),
+        radial-gradient(circle at 16% 0%, rgba(65, 223, 255, 0.13), transparent 30%),
+        radial-gradient(circle at 88% 20%, rgba(255, 66, 87, 0.08), transparent 24%),
+        linear-gradient(135deg, #020407 0%, #061017 54%, #030609 100%);
+      background-size: 44px 44px, 44px 44px, auto, auto, auto;
       overflow-x: hidden;
-      background:
-        linear-gradient(rgba(46, 220, 255, 0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(46, 220, 255, 0.02) 1px, transparent 1px),
-        radial-gradient(circle at 10% 0%, rgba(46, 220, 255, 0.15), transparent 28%),
-        radial-gradient(circle at 88% 18%, rgba(255, 70, 93, 0.10), transparent 22%),
-        linear-gradient(135deg, #020407 0%, #071017 52%, #03060a 100%);
-      background-size: 42px 42px, 42px 42px, auto, auto, auto;
     }
 
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      background:
-        linear-gradient(90deg, transparent 0 48%, rgba(46, 220, 255, 0.04) 50%, transparent 52% 100%),
-        radial-gradient(circle at center, transparent 0 52%, rgba(46, 220, 255, 0.05) 53%, transparent 54% 100%);
-      opacity: 0.55;
-      mix-blend-mode: screen;
-    }
+    button, input { font: inherit; }
+    input[type="file"] { display: none; }
+    .app { min-height: 100vh; padding: 14px 16px 48px; }
+    .shell { max-width: 1840px; margin: 0 auto; }
+    .hidden { display: none !important; }
 
-    .app { min-height: 100vh; padding: 22px; }
-    .shell { max-width: 1680px; margin: 0 auto; position: relative; }
-    .watermark {
-      position: fixed;
-      right: 28px;
-      bottom: 18px;
-      color: rgba(244, 251, 255, 0.035);
-      font: 800 84px/1 var(--sans);
-      letter-spacing: 0.14em;
-      pointer-events: none;
-      user-select: none;
-    }
-
-    .topbar {
+    .topHeader {
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: auto 1fr auto;
       gap: 18px;
-      align-items: stretch;
-      margin-bottom: 16px;
-    }
-
-    .masthead,
-    .uploadDock,
-    .card {
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, var(--panel), rgba(6, 10, 15, 0.70));
-      box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-      backdrop-filter: blur(18px);
-    }
-
-    .masthead {
-      position: relative;
-      min-height: 104px;
-      padding: 20px 22px;
-      border-radius: 24px;
-      overflow: hidden;
-    }
-
-    .masthead::after,
-    .card::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      border-radius: inherit;
-      background: linear-gradient(115deg, rgba(46, 220, 255, 0.12), transparent 22%, transparent 78%, rgba(255, 255, 255, 0.03));
-      opacity: 0.35;
-    }
-
-    .eyebrow {
-      color: var(--cyan);
-      font: 700 11px/1 var(--mono);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-    }
-
-    h1, h2, h3, p { margin-top: 0; }
-    h1 {
-      margin: 8px 0 4px;
-      color: var(--white);
-      font-size: clamp(30px, 4vw, 54px);
-      line-height: 0.95;
-      letter-spacing: -0.055em;
-    }
-
-    .subtitle { margin: 0; color: var(--muted); font-size: 14px; }
-    .modeStrip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-    .pill {
-      display: inline-flex;
       align-items: center;
-      gap: 7px;
-      min-height: 28px;
-      padding: 6px 10px;
+      min-height: 72px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(12, 21, 30, 0.96), rgba(6, 10, 15, 0.94));
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .brandBlock { display: flex; align-items: center; gap: 14px; min-width: 300px; }
+    .landaLogo {
+      display: grid;
+      place-items: center;
+      width: 88px;
+      height: 42px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 11px;
+      color: var(--white);
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(65,223,255,0.06));
+    }
+    .titleBlock h1 { margin: 0; color: var(--white); font-size: 22px; letter-spacing: -0.03em; line-height: 1.05; }
+    .titleBlock p { margin: 3px 0 0; color: var(--muted); font: 11px/1.2 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+    .nav { display: flex; align-items: center; gap: 6px; justify-content: center; flex-wrap: wrap; }
+    .navBtn {
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: transparent;
+      color: #91a3ae;
+      padding: 8px 11px;
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .navBtn.active, .navBtn:hover { color: var(--white); border-color: var(--line-2); background: rgba(65,223,255,0.07); }
+    .headerTools { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 360px; }
+    .dateSelect, .iconBtn, .userChip, .scanButton {
+      min-height: 36px;
       border: 1px solid var(--line);
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.035);
-      color: var(--muted);
-      font-size: 12px;
-      white-space: nowrap;
+      background: rgba(255,255,255,0.035);
+      color: var(--text);
+      padding: 7px 11px;
     }
+    .dateSelect { color-scheme: dark; outline: none; }
+    .iconBtn { width: 38px; display: grid; place-items: center; }
+    .userChip { display: inline-flex; align-items: center; gap: 8px; font-weight: 800; }
+    .avatar { width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, var(--cyan), #184b5c); display: inline-grid; place-items: center; color: #001017; font-size: 10px; }
 
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-2); box-shadow: 0 0 12px currentColor; }
-    .dot.cyan { background: var(--cyan); color: var(--cyan); }
-    .dot.red { background: var(--red); color: var(--red); }
-    .dot.white { background: var(--white); color: var(--white); }
-
-    .uploadDock {
-      width: min(420px, 35vw);
-      border-radius: 24px;
-      padding: 14px;
-    }
-
-    .uploadControls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    input[type="file"] { display: none; }
-    .btn {
+    .scanButton { cursor: pointer; border-color: rgba(65,223,255,0.34); color: var(--white); background: linear-gradient(180deg, rgba(65,223,255,0.14), rgba(65,223,255,0.04)); font-weight: 800; }
+    .scanStrip {
       display: grid;
-      place-items: center;
-      min-height: 44px;
-      padding: 10px 12px;
-      border: 1px solid var(--line-strong);
-      border-radius: 15px;
-      background: linear-gradient(180deg, rgba(46, 220, 255, 0.15), rgba(46, 220, 255, 0.04));
-      color: var(--white);
-      font-weight: 800;
-      letter-spacing: 0.02em;
-      cursor: pointer;
-      text-align: center;
-    }
-    .btn:hover { box-shadow: 0 0 28px rgba(46, 220, 255, 0.14); }
-    .hint { color: var(--muted); font-size: 12px; margin: 11px 2px 0; }
-    .progressMeta { display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; color: var(--muted); font: 11px/1.2 var(--mono); }
-    .progress { height: 7px; margin-top: 8px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.07); }
-    .bar { width: 0%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--cyan), var(--white)); box-shadow: 0 0 18px rgba(46, 220, 255, 0.55); transition: width 180ms ease; }
-
-    .hero { display: grid; grid-template-columns: minmax(420px, 0.95fr) 1.05fr; gap: 16px; margin-bottom: 16px; }
-    .card { position: relative; border-radius: 24px; overflow: hidden; }
-    .cardHeader {
-      display: flex;
-      justify-content: space-between;
-      gap: 16px;
+      grid-template-columns: auto auto 1fr auto;
       align-items: center;
-      padding: 15px 18px;
-      border-bottom: 1px solid rgba(118, 229, 255, 0.12);
-      background: rgba(255, 255, 255, 0.018);
+      gap: 10px;
+      margin: 10px 0 12px;
+      padding: 8px 10px;
+      border: 1px solid rgba(130,224,245,0.12);
+      border-radius: 14px;
+      background: rgba(8, 14, 20, 0.72);
+      color: var(--muted);
     }
-    .cardHeader h2, .cardHeader h3 {
-      margin: 0;
-      color: var(--white);
-      font-size: 13px;
-      letter-spacing: 0.13em;
-      text-transform: uppercase;
-    }
-    .cardHeader span { color: var(--muted); font: 11px/1.2 var(--mono); }
-    .cardBody { position: relative; z-index: 1; padding: 18px; }
+    .stage { font: 11px/1.2 var(--mono); color: #9fb3bf; }
+    .progress { height: 6px; border-radius: 99px; overflow: hidden; background: rgba(255,255,255,0.06); }
+    .bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--cyan-2), var(--cyan)); border-radius: inherit; transition: width 160ms ease; }
+    .scanPct { font: 11px/1.2 var(--mono); color: var(--cyan); }
 
-    .riskPanel { min-height: 344px; }
-    .riskReadout { display: grid; grid-template-columns: 140px 1fr; gap: 18px; align-items: center; }
-    .dial {
-      width: 140px;
-      height: 140px;
-      border: 1px solid var(--line-strong);
-      border-radius: 50%;
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(13, 22, 32, 0.94), rgba(7, 12, 18, 0.94));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+      overflow: hidden;
+    }
+    .cardHeader { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 43px; padding: 11px 13px; border-bottom: 1px solid rgba(130,224,245,0.11); background: rgba(255,255,255,0.017); }
+    .cardHeader h2, .cardHeader h3 { margin: 0; color: var(--white); font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
+    .cardHeader span { color: var(--muted); font: 10px/1.2 var(--mono); }
+    .cardBody { padding: 13px; }
+    .muted { color: var(--muted); }
+    .mono { font-family: var(--mono); }
+    .empty { display: grid; place-items: center; min-height: 78px; border: 1px dashed rgba(130,224,245,0.16); border-radius: 13px; color: var(--muted); text-align: center; padding: 15px; background: rgba(255,255,255,0.018); }
+
+    .kpiRow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .kpi { min-height: 95px; padding: 13px; border-left: 2px solid rgba(65,223,255,0.42); }
+    .kpi label { display: block; color: #99aab4; font: 10px/1.1 var(--mono); text-transform: uppercase; letter-spacing: 0.12em; }
+    .kpi strong { display: block; margin-top: 12px; color: var(--white); font-size: 25px; letter-spacing: -0.04em; }
+    .kpi small { display: block; margin-top: 6px; color: var(--muted); min-height: 16px; }
+    .kpi.locked strong { color: #9aa8b1; }
+
+    .serviceLayout { display: grid; grid-template-columns: minmax(760px, 1fr) 390px; gap: 12px; align-items: stretch; }
+    .machinePanel { min-height: 486px; }
+    .machineStage { position: relative; min-height: 418px; padding: 18px 16px 10px; }
+    .machineMeta { display: flex; justify-content: space-between; color: var(--muted); font: 11px/1.2 var(--mono); margin-bottom: 16px; }
+    .pressWrap { position: relative; height: 294px; margin-top: 10px; }
+    .pressBase {
+      position: absolute;
+      left: 4%; right: 4%; top: 90px; height: 122px;
+      border: 1px solid rgba(130,224,245,0.21);
+      border-radius: 26px 26px 18px 18px;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.055), transparent 12%, rgba(65,223,255,0.055) 28%, transparent 45%, rgba(255,255,255,0.045) 78%, transparent),
+        linear-gradient(180deg, #152432, #07111a 66%, #111a22);
+      box-shadow: 0 18px 60px rgba(0,0,0,0.55), inset 0 0 44px rgba(65,223,255,0.045);
+    }
+    .pressTop { position: absolute; left: 12%; right: 14%; top: 48px; height: 58px; border: 1px solid rgba(130,224,245,0.16); border-radius: 18px 18px 8px 8px; background: linear-gradient(180deg, #172633, #0b141d); }
+    .pressCabin { position: absolute; right: 7%; top: 35px; width: 120px; height: 94px; border: 1px solid rgba(130,224,245,0.19); border-radius: 16px; background: linear-gradient(135deg, rgba(65,223,255,0.10), rgba(255,255,255,0.025)); }
+    .pressModule { position: absolute; top: 110px; width: 13%; height: 80px; border-left: 1px solid rgba(130,224,245,0.15); border-right: 1px solid rgba(130,224,245,0.08); background: rgba(255,255,255,0.025); }
+    .m1 { left: 10%; } .m2 { left: 24%; } .m3 { left: 39%; } .m4 { left: 54%; } .m5 { left: 69%; }
+    .pressFeet { position: absolute; left: 8%; right: 8%; top: 218px; height: 25px; border-top: 8px solid rgba(130,224,245,0.08); }
+    .pressFeet::before, .pressFeet::after { content: ""; position: absolute; top: 0; width: 42px; height: 34px; background: #070c12; border: 1px solid rgba(130,224,245,0.13); border-radius: 0 0 8px 8px; }
+    .pressFeet::before { left: 8%; } .pressFeet::after { right: 10%; }
+    .hotspot {
+      position: absolute;
+      transform: translate(-50%, -50%);
       display: grid;
       place-items: center;
-      background:
-        radial-gradient(circle, rgba(46, 220, 255, 0.13) 0 18%, transparent 19% 100%),
-        conic-gradient(from 210deg, rgba(46, 220, 255, 0.55), rgba(255, 255, 255, 0.12), rgba(255, 70, 93, 0.35), rgba(46, 220, 255, 0.55));
-      box-shadow: inset 0 0 34px rgba(0, 0, 0, 0.72), 0 0 36px rgba(46, 220, 255, 0.12);
-      position: relative;
-    }
-    .dial::before { content: ""; position: absolute; inset: 12px; border-radius: 50%; background: rgba(3, 6, 10, 0.88); border: 1px solid rgba(255, 255, 255, 0.06); }
-    .dialText { position: relative; text-align: center; }
-    .dialText strong { display: block; color: var(--white); font-size: 22px; letter-spacing: -0.04em; }
-    .dialText span { color: var(--muted); font: 10px/1.2 var(--mono); text-transform: uppercase; }
-    .riskTitle { margin: 0 0 6px; color: var(--white); font-size: clamp(24px, 3vw, 40px); letter-spacing: -0.04em; }
-    .riskCopy { margin: 0 0 16px; color: var(--muted); }
-    .metricGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-    .metric {
-      padding: 12px;
-      border: 1px solid rgba(118, 229, 255, 0.13);
-      border-radius: 16px;
-      background: rgba(255, 255, 255, 0.03);
-    }
-    .metric label { display: block; color: var(--muted); font: 10px/1.1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
-    .metric b { display: block; margin-top: 6px; color: var(--white); font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rulesLock { margin-top: 14px; padding: 13px 14px; border: 1px solid rgba(255, 70, 93, 0.28); border-radius: 17px; background: var(--red-soft); color: #ffd6dc; }
-
-    .radarPanel { min-height: 344px; }
-    .radarGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-    .systemCard {
-      min-height: 128px;
-      padding: 13px;
-      border: 1px solid rgba(118, 229, 255, 0.16);
-      border-radius: 18px;
-      background:
-        linear-gradient(135deg, rgba(46, 220, 255, 0.055), transparent),
-        rgba(255, 255, 255, 0.026);
+      width: 42px;
+      height: 42px;
+      border: 1px solid rgba(130,224,245,0.42);
+      border-radius: 50%;
+      background: rgba(6, 13, 19, 0.88);
+      color: var(--white);
+      font: 900 10px/1 var(--mono);
       cursor: pointer;
-      transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+      box-shadow: 0 0 22px rgba(65,223,255,0.08);
     }
-    .systemCard:hover, .systemCard.active { transform: translateY(-1px); border-color: rgba(46, 220, 255, 0.62); box-shadow: 0 0 28px rgba(46, 220, 255, 0.12); }
-    .systemTop { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
-    .systemName { color: var(--white); font: 900 20px/1 var(--sans); letter-spacing: -0.03em; }
-    .severity { width: 9px; height: 9px; margin-top: 3px; border-radius: 50%; background: var(--muted-2); box-shadow: 0 0 16px rgba(83, 97, 109, 0.6); }
-    .severity.discovered { background: var(--cyan); box-shadow: 0 0 16px rgba(46, 220, 255, 0.65); }
-    .severity.hot { background: var(--red); box-shadow: 0 0 16px rgba(255, 70, 93, 0.70); }
-    .systemStatus { margin-top: 8px; color: var(--muted); font: 11px/1.2 var(--mono); text-transform: uppercase; }
-    .systemStats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
-    .systemStats div { color: var(--muted); font-size: 11px; }
-    .systemStats b { display: block; color: var(--white); font-size: 14px; }
-    .underLabel { margin-top: 8px; color: var(--cyan); font: 10px/1.2 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+    .hotspot::after { content: attr(data-label); position: absolute; top: 45px; white-space: nowrap; color: #9fb3bf; font: 10px/1.1 var(--mono); letter-spacing: 0.06em; }
+    .hotspot.hasData { border-color: rgba(65,223,255,0.85); box-shadow: 0 0 24px rgba(65,223,255,0.26); color: var(--cyan); }
+    .hotspot.issue { border-color: rgba(255,66,87,0.9); background: rgba(55, 9, 17, 0.92); box-shadow: 0 0 30px rgba(255,66,87,0.38); color: #ffd7dd; }
+    .hotspot.issue::before { content: ""; position: absolute; inset: -8px; border-radius: 50%; border: 1px solid rgba(255,66,87,0.27); animation: pulse 1.8s infinite; }
+    @keyframes pulse { 0% { transform: scale(.82); opacity: .8; } 100% { transform: scale(1.35); opacity: 0; } }
+    .stateRibbon { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
+    .stateChip { border: 1px solid rgba(130,224,245,0.12); border-radius: 12px; padding: 9px; background: rgba(255,255,255,0.025); }
+    .stateChip label { display: block; color: var(--muted); font: 9px/1.1 var(--mono); text-transform: uppercase; letter-spacing: 0.1em; }
+    .stateChip b { display: block; margin-top: 5px; color: var(--white); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-    .mainGrid { display: grid; grid-template-columns: 320px 1fr 390px; gap: 16px; align-items: start; }
-    .sourceList { display: grid; gap: 10px; }
-    .sourceItem { padding: 12px; border: 1px solid rgba(118, 229, 255, 0.13); border-radius: 16px; background: rgba(255, 255, 255, 0.025); }
-    .sourceItem b { color: var(--white); }
-    .sourceItem p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
-    .sourceCount { float: right; color: var(--cyan); font-family: var(--mono); }
+    .issuePanel { min-height: 486px; border-color: rgba(255,66,87,0.28); }
+    .issuePanel .cardHeader { border-bottom-color: rgba(255,66,87,0.2); }
+    .issueBadge { color: #ffd7dd; border: 1px solid rgba(255,66,87,0.35); border-radius: 99px; padding: 4px 8px; background: var(--red-soft); }
+    .fieldGrid { display: grid; gap: 9px; }
+    .field { padding: 9px 10px; border: 1px solid rgba(130,224,245,0.11); border-radius: 12px; background: rgba(255,255,255,0.023); }
+    .field label { display: block; color: var(--muted); font: 9px/1.1 var(--mono); text-transform: uppercase; letter-spacing: .12em; }
+    .field b, .field span { display: block; margin-top: 5px; color: var(--white); }
+    .field span { color: #b7c7d1; }
+    .chartBox { margin-top: 12px; border: 1px solid rgba(130,224,245,0.12); border-radius: 13px; padding: 10px; background: rgba(0,0,0,0.14); }
+    .chartBox h4 { margin: 0 0 8px; color: var(--white); font-size: 11px; }
+    .sparkSvg { width: 100%; height: 86px; display: block; }
+    .drillBtn { width: 100%; margin-top: 12px; min-height: 42px; border: 1px solid rgba(65,223,255,0.48); border-radius: 13px; background: linear-gradient(180deg, rgba(65,223,255,0.16), rgba(65,223,255,0.05)); color: var(--white); font-weight: 900; cursor: pointer; }
 
-    .timeline { display: flex; align-items: stretch; gap: 8px; min-height: 112px; overflow-x: auto; padding-bottom: 4px; }
-    .seg { min-width: 150px; padding: 11px; border: 1px solid rgba(118, 229, 255, 0.17); border-radius: 16px; background: rgba(46, 220, 255, 0.055); }
-    .seg b { display: block; color: var(--white); margin-bottom: 6px; }
-    .seg span { display: block; color: var(--muted); font: 11px/1.35 var(--mono); }
-    .transitionArrow { align-self: center; color: var(--muted-2); font-family: var(--mono); }
-
-    .stack { display: grid; gap: 16px; }
-    .tableWrap { overflow: auto; max-height: 520px; }
+    .bottomGrid { display: grid; grid-template-columns: 0.9fr 1.35fr 0.85fr; gap: 12px; margin-top: 12px; }
+    .timeline { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 4px; }
+    .seg { min-width: 132px; border: 1px solid rgba(130,224,245,0.14); border-radius: 12px; padding: 9px; background: rgba(65,223,255,0.045); }
+    .seg b { display: block; color: var(--white); }
+    .seg span { display: block; color: var(--muted); font: 10px/1.35 var(--mono); margin-top: 5px; }
+    .tableWrap { overflow: auto; max-height: 270px; }
     table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px 11px; border-bottom: 1px solid rgba(118, 229, 255, 0.095); text-align: left; vertical-align: top; }
-    th { position: sticky; top: 0; z-index: 2; color: #9eb2bf; background: rgba(7, 12, 18, 0.96); font: 10px/1.2 var(--mono); letter-spacing: 0.11em; text-transform: uppercase; }
-    td { color: #dceaf4; font-size: 12px; }
-    .raw { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); color: #aebdca; }
-    .empty { padding: 28px; color: var(--muted); text-align: center; border: 1px dashed rgba(118, 229, 255, 0.14); border-radius: 16px; background: rgba(255, 255, 255, 0.018); }
+    th, td { padding: 8px 9px; border-bottom: 1px solid rgba(130,224,245,0.09); text-align: left; vertical-align: top; }
+    th { color: #98a9b4; background: rgba(7,12,18,0.96); position: sticky; top: 0; z-index: 1; font: 9px/1.2 var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+    td { color: #d6e5ed; font-size: 11px; }
+    .raw { max-width: 330px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); color: #aebcc6; }
+    .actionList { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .actionList li { border: 1px solid rgba(130,224,245,0.12); border-radius: 12px; padding: 9px; color: #c8d8e0; background: rgba(255,255,255,0.022); }
 
-    .detailPanel { position: sticky; top: 18px; }
-    .detailSection { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(118, 229, 255, 0.11); }
-    .detailSection h4 { margin: 0 0 8px; color: var(--white); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
-    .small { color: var(--muted); font-size: 12px; }
-    .mono { font-family: var(--mono); }
-
-    @media (max-width: 1260px) {
-      .hero, .mainGrid { grid-template-columns: 1fr; }
-      .detailPanel { position: static; }
-      .uploadDock { width: auto; }
+    .footerStatus {
+      position: fixed;
+      left: 16px; right: 16px; bottom: 8px;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 8px;
+      max-width: 1840px;
+      margin: 0 auto;
+      padding: 7px 10px;
+      border: 1px solid rgba(130,224,245,0.13);
+      border-radius: 13px;
+      background: rgba(5, 9, 14, 0.92);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 46px rgba(0,0,0,0.45);
     }
-    @media (max-width: 780px) {
-      .app { padding: 12px; }
-      .topbar, .riskReadout { grid-template-columns: 1fr; }
-      .radarGrid, .metricGrid { grid-template-columns: 1fr; }
-      .uploadControls { grid-template-columns: 1fr; }
-      .watermark { display: none; }
+    .footItem { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b5c5ce; font: 10px/1.2 var(--mono); }
+    .footItem b { color: var(--muted); font-weight: 500; }
+
+    .breadcrumb { display: flex; align-items: center; gap: 8px; margin: 10px 0 12px; color: var(--muted); font: 11px/1.2 var(--mono); }
+    .breadcrumb b { color: var(--white); }
+    .drillLayout { display: grid; grid-template-columns: 300px minmax(620px, 1fr) 340px; gap: 12px; align-items: start; }
+    .sideStack, .rightStack { display: grid; gap: 12px; }
+    .miniPress { position: relative; height: 96px; border: 1px solid rgba(130,224,245,0.13); border-radius: 12px; background: linear-gradient(180deg, #101b26, #071017); overflow: hidden; }
+    .miniPress::before { content: ""; position: absolute; left: 22px; right: 22px; top: 38px; height: 28px; border: 1px solid rgba(130,224,245,0.2); border-radius: 8px; background: #162432; }
+    .miniPress::after { content: "BSS"; position: absolute; left: 190px; top: 31px; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255,66,87,0.8); color: #ffd7dd; font: 900 10px/1 var(--mono); background: rgba(55,9,17,0.86); }
+    .tree { margin: 0; padding: 0; list-style: none; }
+    .tree li { padding: 8px 9px; border-bottom: 1px solid rgba(130,224,245,0.08); color: #bed0d8; cursor: pointer; }
+    .tree li.active { color: var(--white); background: rgba(65,223,255,0.07); border-left: 2px solid var(--cyan); }
+    .tree small { color: var(--muted); float: right; }
+
+    .cutaway { min-height: 534px; }
+    .schematic { position: relative; height: 462px; border-radius: 14px; overflow: hidden; border: 1px solid rgba(130,224,245,0.12); background: radial-gradient(circle at center, rgba(65,223,255,0.08), transparent 52%), linear-gradient(180deg, #0b131b, #05090e); }
+    .schematic svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .componentHotspot {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      min-width: 34px;
+      height: 34px;
+      padding: 0 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(130,224,245,0.42);
+      background: rgba(3,8,12,0.9);
+      color: var(--white);
+      font: 900 10px/1 var(--mono);
+      cursor: pointer;
+      display: inline-grid;
+      place-items: center;
+      box-shadow: 0 0 18px rgba(65,223,255,0.11);
+    }
+    .componentHotspot::after { content: attr(data-name); position: absolute; top: 38px; left: 50%; transform: translateX(-50%); white-space: nowrap; color: #a8bac4; font: 10px/1.1 var(--mono); font-weight: 500; }
+    .componentHotspot.critical { border-color: rgba(255,66,87,0.92); color: #ffd7dd; background: rgba(55,9,17,0.9); box-shadow: 0 0 26px rgba(255,66,87,0.28); }
+    .componentHotspot.warning { border-color: rgba(255,189,93,0.8); color: #ffe2b8; box-shadow: 0 0 20px rgba(255,189,93,0.18); }
+    .componentHotspot.normal { border-color: rgba(100,216,154,0.36); color: #d9fff0; }
+    .componentHotspot.selected { outline: 2px solid rgba(65,223,255,0.7); outline-offset: 4px; }
+    .detailName { color: var(--white); font-size: 18px; margin: 0 0 6px; }
+    .rootGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .evidenceList { margin: 0; padding-left: 17px; color: #c9d8e0; }
+    .evidenceList li { margin: 0 0 7px; }
+
+    @media (max-width: 1280px) {
+      .topHeader, .serviceLayout, .bottomGrid, .drillLayout, .rootGrid { grid-template-columns: 1fr; }
+      .brandBlock, .headerTools { min-width: 0; }
+      .headerTools { justify-content: flex-start; flex-wrap: wrap; }
+      .footerStatus { position: static; grid-template-columns: 1fr 1fr; margin-top: 12px; }
+      .app { padding-bottom: 16px; }
+    }
+    @media (max-width: 760px) {
+      .kpiRow, .stateRibbon, .scanStrip { grid-template-columns: 1fr; }
+      .pressWrap { transform: scale(.82); transform-origin: left top; height: 250px; width: 122%; }
+      .footerStatus { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="app">
     <div class="shell">
-      <div class="watermark">PANDA</div>
-      <header class="topbar">
-        <section class="masthead" aria-label="PANDA Service Radar header">
-          <div class="eyebrow">Proactive ANomaly Detection Assistant</div>
-          <h1>PANDA Service Radar</h1>
-          <p class="subtitle">Landa Digital Printing / Proactive Machine Monitoring</p>
-          <div class="modeStrip">
-            <span class="pill"><span class="dot red"></span>Current mode: Rules Pending / Discovery Mode</span>
-            <span class="pill"><span class="dot" id="dataDot"></span><span id="dataStatus">No data loaded</span></span>
-            <span class="pill"><span class="dot cyan"></span>Static browser scan</span>
+      <header class="topHeader" aria-label="PANDA header">
+        <div class="brandBlock">
+          <div class="landaLogo">LANDA</div>
+          <div class="titleBlock">
+            <h1>PANDA Tool</h1>
+            <p>Proactive Analyzer Notification DA</p>
           </div>
-        </section>
-        <aside class="uploadDock" aria-label="Upload and scan controls">
-          <div class="uploadControls">
-            <label class="btn" for="fileInput">Upload Folder / Logs</label>
-            <input id="fileInput" type="file" multiple webkitdirectory directory />
-            <label class="btn" for="zipInput">Upload ZIP / Files</label>
-            <input id="zipInput" type="file" multiple accept=".zip,.log,.txt,.csv,.json,.xml" />
-          </div>
-          <p class="hint">Focused background scan only: FECNotification, LLCINotification, MachineStates, AlertsMonitoring, and AletrsMonitoring typo.</p>
-          <div class="progressMeta"><span id="scanStage">Idle / waiting for archive</span><span id="scanPct">0%</span></div>
-          <div class="progress"><div class="bar" id="bar"></div></div>
-        </aside>
+        </div>
+        <nav class="nav" aria-label="Primary navigation">
+          <button class="navBtn active" data-view="radar">Service Radar</button>
+          <button class="navBtn" type="button">Alerts</button>
+          <button class="navBtn" data-view="drill">Analysis</button>
+          <button class="navBtn" type="button">Machines</button>
+          <button class="navBtn" type="button">Reports</button>
+          <button class="navBtn" type="button">Knowledge</button>
+        </nav>
+        <div class="headerTools">
+          <select class="dateSelect" aria-label="Date range selector">
+            <option>Last data range</option>
+            <option>Last 24 hours</option>
+            <option>Last 7 days</option>
+          </select>
+          <button class="iconBtn" type="button" title="Notifications">◌</button>
+          <span class="userChip"><span class="avatar">SU</span>Service User</span>
+          <label class="scanButton" for="fileInput">Load Logs</label>
+          <input id="fileInput" type="file" multiple webkitdirectory directory />
+          <label class="scanButton" for="zipInput">Load ZIP</label>
+          <input id="zipInput" type="file" multiple accept=".zip,.log,.txt,.csv,.json,.xml" />
+        </div>
       </header>
 
-      <section class="hero">
-        <article class="card riskPanel">
-          <div class="cardHeader"><h2>Machine Risk Panel</h2><span>honest discovery view</span></div>
-          <div class="cardBody">
-            <div class="riskReadout">
-              <div class="dial"><div class="dialText"><strong id="riskLevel">Pending</strong><span>risk state</span></div></div>
-              <div>
-                <h2 class="riskTitle" id="activeMachine">No machine selected</h2>
-                <p class="riskCopy" id="riskMessage">Upload focused logs to build an operational machine health radar. Log scanning runs in the background.</p>
-                <div class="metricGrid">
-                  <div class="metric"><label>Current / last state</label><b id="lastState">Pending</b></div>
-                  <div class="metric"><label>Detected time range</label><b id="timeRange">Empty</b></div>
-                  <div class="metric"><label>Analysis completeness</label><b id="completeness">0 / 4 sources</b></div>
-                  <div class="metric"><label>Rules status</label><b>Pending</b></div>
-                </div>
-                <div class="rulesLock"><b>No real alerts are generated without Rules.</b><br />Alerts require Log Value + Machine State + Rule + Duration + Transition Grace.</div>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article class="card radarPanel">
-          <div class="cardHeader"><h2>System Radar</h2><span>click a system for drilldown</span></div>
-          <div class="cardBody"><div class="radarGrid" id="radarGrid"></div></div>
-        </article>
+      <section class="scanStrip" aria-label="Scan progress">
+        <span class="mono">Discovery mode only</span>
+        <span id="dataStatus">No data loaded</span>
+        <div class="progress"><div id="bar" class="bar"></div></div>
+        <span id="scanPct" class="scanPct">0%</span>
+        <span id="scanStage" class="stage">Idle / waiting for focused logs</span>
       </section>
 
-      <main class="mainGrid">
-        <aside class="card">
-          <div class="cardHeader"><h3>Focused Log Sources</h3><span>only these are parsed</span></div>
-          <div class="cardBody"><div class="sourceList" id="sourceList"></div></div>
-        </aside>
-
-        <section class="stack">
-          <article class="card">
-            <div class="cardHeader"><h3>State Timeline</h3><span>actual parsed states only</span></div>
-            <div class="cardBody"><div class="timeline" id="timeline"></div></div>
-          </article>
-
-          <article class="card">
-            <div class="cardHeader"><h3>Evidence Stream — Preliminary Findings</h3><span>not real alerts</span></div>
-            <div class="tableWrap"><table id="evidenceTable"></table></div>
-          </article>
+      <main id="serviceRadarView">
+        <section class="kpiRow" aria-label="Service Radar KPIs">
+          <article class="card kpi"><label>Machines at Risk</label><strong id="kpiMachinesAtRisk">Pending</strong><small id="kpiMachinesAtRiskNote">Requires focused findings</small></article>
+          <article class="card kpi locked"><label>P1 Alerts</label><strong id="kpiP1Alerts">Pending</strong><small>Locked until Rules exist</small></article>
+          <article class="card kpi locked"><label>Detection Confidence</label><strong id="kpiConfidence">Pending rules</strong><small>Discovery only</small></article>
+          <article class="card kpi locked"><label>Open Preventive Actions</label><strong id="kpiActions">Pending</strong><small>No action system connected</small></article>
+          <article class="card kpi locked"><label>Mean Time to Detect</label><strong id="kpiMTTD">No data</strong><small>Rules and duration required</small></article>
         </section>
 
-        <aside class="card detailPanel">
-          <div class="cardHeader"><h3 id="detailTitle">System Drilldown</h3><span>selected radar node</span></div>
-          <div class="cardBody" id="detailBody"><div class="empty">Choose a system card to inspect related preliminary evidence.</div></div>
-        </aside>
+        <section class="serviceLayout">
+          <article class="card machinePanel">
+            <div class="cardHeader"><h2>Central Machine Overview</h2><span id="machineCaption">MachineStates affect state labels only</span></div>
+            <div class="cardBody machineStage">
+              <div class="machineMeta"><span>Machine ID: <b id="machineId">Pending</b></span><span>Focused sources: <b id="sourceCoverage">0 / 5</b></span></div>
+              <div class="pressWrap" aria-label="Landa press silhouette placeholder">
+                <div class="pressTop"></div><div class="pressBase"></div><div class="pressCabin"></div>
+                <div class="pressModule m1"></div><div class="pressModule m2"></div><div class="pressModule m3"></div><div class="pressModule m4"></div><div class="pressModule m5"></div><div class="pressFeet"></div>
+                <button class="hotspot" data-system="IRD" data-label="Imaging" style="left:12%; top:38%;">IRD</button>
+                <button class="hotspot" data-system="FEC" data-label="Front End" style="left:27%; top:50%;">FEC</button>
+                <button class="hotspot" data-system="IPS" data-label="Ink System" style="left:44%; top:42%;">IPS</button>
+                <button class="hotspot" data-system="ECC" data-label="Engine Ctrl" style="left:59%; top:52%;">ECC</button>
+                <button class="hotspot" data-system="LLCI" data-label="Low Level" style="left:72%; top:40%;">LLCI</button>
+                <button class="hotspot" data-system="BSS" data-label="Blanket" style="left:84%; top:55%;">BSS</button>
+              </div>
+              <div class="stateRibbon">
+                <div class="stateChip"><label>Current state</label><b id="currentState">Pending</b></div>
+                <div class="stateChip"><label>State context</label><b id="stateContext">No MachineStates parsed</b></div>
+                <div class="stateChip"><label>Last data timestamp</label><b id="lastTimestamp">No data</b></div>
+                <div class="stateChip"><label>Service posture</label><b>Discovery only</b></div>
+              </div>
+            </div>
+          </article>
+
+          <aside class="card issuePanel">
+            <div class="cardHeader"><h2>Active Issue / Preliminary Finding</h2><span class="issueBadge">Not a real alert</span></div>
+            <div class="cardBody">
+              <div class="fieldGrid">
+                <div class="field"><label>System</label><b id="issueSystem">Pending</b></div>
+                <div class="field"><label>Subsystem</label><span id="issueSubsystem">No focused finding selected</span></div>
+                <div class="field"><label>Summary</label><span id="issueSummary">Upload FECNotification, LLCINotification, MachineStates, AlertsMonitoring, or AletrsMonitoring logs.</span></div>
+                <div class="field"><label>State Context</label><span id="issueState">Pending MachineStates</span></div>
+                <div class="field"><label>Duration if available</label><span id="issueDuration">No data</span></div>
+                <div class="field"><label>Confidence</label><span>Discovery only / Pending rules</span></div>
+                <div class="field"><label>Severity</label><span>Preliminary only</span></div>
+              </div>
+              <div id="issueChart" class="chartBox">Rules required for expected band</div>
+              <button id="openDrill" class="drillBtn" type="button">Open Drill-Down</button>
+            </div>
+          </aside>
+        </section>
+
+        <section class="bottomGrid">
+          <article class="card"><div class="cardHeader"><h3>State Machine Timeline</h3><span>Parsed from MachineStates</span></div><div class="cardBody"><div id="timeline" class="timeline"><div class="empty">No MachineStates timeline parsed yet.</div></div></div></article>
+          <article class="card"><div class="cardHeader"><h3>Evidence Log</h3><span>Preliminary Findings from focused logs only</span></div><div class="cardBody"><div class="tableWrap"><table id="evidenceTable"></table></div></div></article>
+          <article class="card"><div class="cardHeader"><h3>Recommended Service Action</h3><span>Rules locked</span></div><div class="cardBody"><ul id="serviceActions" class="actionList"></ul></div></article>
+        </section>
       </main>
+
+      <main id="drillDownView" class="hidden">
+        <div class="breadcrumb">Machine Overview <span>›</span> <b id="crumbMachine">Machine ID</b> <span>›</span> <b>BSS Blanket System</b> <span>›</span> <b>Component Analysis</b></div>
+        <section class="drillLayout">
+          <aside class="sideStack">
+            <article class="card"><div class="cardHeader"><h3>Machine Context</h3><span>Service Radar</span></div><div class="cardBody"><div class="miniPress"></div><div class="fieldGrid" style="margin-top:10px"><div class="field"><label>Machine ID</label><b id="sideMachine">Pending</b></div><div class="field"><label>Current State</label><span id="sideState">Pending</span></div></div></div></article>
+            <article class="card"><div class="cardHeader"><h3>Active Issue</h3><span>Preliminary</span></div><div class="cardBody"><p id="sideIssue" class="muted">No BSS finding loaded yet.</p></div></article>
+            <article class="card"><div class="cardHeader"><h3>Subsystem Navigation</h3><span>BSS tree</span></div><div class="cardBody"><ul id="componentTree" class="tree"></ul></div></article>
+          </aside>
+
+          <section>
+            <article class="card cutaway">
+              <div class="cardHeader"><h2>BSS Blanket System – Cutaway View</h2><span id="selectedComponentLabel">Blanket Cylinder</span></div>
+              <div class="cardBody">
+                <div class="schematic" aria-label="BSS dark schematic placeholder">
+                  <svg viewBox="0 0 900 460" role="img" aria-label="Blanket system schematic">
+                    <defs>
+                      <linearGradient id="metal" x1="0" x2="1"><stop offset="0" stop-color="#172837"/><stop offset="0.5" stop-color="#0b141d"/><stop offset="1" stop-color="#1b2e3c"/></linearGradient>
+                      <filter id="glow"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                    </defs>
+                    <rect x="94" y="144" width="712" height="172" rx="34" fill="url(#metal)" stroke="rgba(130,224,245,0.25)"/>
+                    <circle cx="280" cy="230" r="92" fill="#101b25" stroke="rgba(130,224,245,0.30)" stroke-width="3"/>
+                    <circle cx="280" cy="230" r="58" fill="#071017" stroke="rgba(65,223,255,0.17)"/>
+                    <circle cx="620" cy="230" r="72" fill="#101b25" stroke="rgba(130,224,245,0.22)" stroke-width="2"/>
+                    <path d="M350 193 H550 Q578 193 595 211" fill="none" stroke="rgba(65,223,255,0.40)" stroke-width="6" filter="url(#glow)"/>
+                    <path d="M350 266 H548 Q575 266 594 248" fill="none" stroke="rgba(65,223,255,0.18)" stroke-width="6"/>
+                    <rect x="468" y="116" width="112" height="54" rx="10" fill="#0d1822" stroke="rgba(130,224,245,0.20)"/>
+                    <rect x="670" y="112" width="74" height="72" rx="12" fill="#0d1822" stroke="rgba(130,224,245,0.18)"/>
+                    <rect x="133" y="330" width="168" height="42" rx="10" fill="#0d1822" stroke="rgba(130,224,245,0.18)"/>
+                    <rect x="585" y="331" width="170" height="42" rx="10" fill="#0d1822" stroke="rgba(130,224,245,0.18)"/>
+                    <line x1="140" y1="390" x2="760" y2="390" stroke="rgba(130,224,245,0.12)" stroke-dasharray="8 8"/>
+                  </svg>
+                  <button class="componentHotspot critical" data-component="Blanket Cylinder" data-name="Blanket Cylinder" style="left:31%; top:50%;">BC</button>
+                  <button class="componentHotspot warning" data-component="Pressure Sensor" data-name="Pressure Sensor" style="left:54%; top:27%;">PS</button>
+                  <button class="componentHotspot normal" data-component="Regulator" data-name="Regulator" style="left:68%; top:48%;">RG</button>
+                  <button class="componentHotspot normal" data-component="Valve Block" data-name="Valve Block" style="left:79%; top:33%;">VB</button>
+                  <button class="componentHotspot normal" data-component="Air Supply" data-name="Air Supply" style="left:23%; top:76%;">AS</button>
+                  <button class="componentHotspot normal" data-component="Drive Motor" data-name="Drive Motor" style="left:70%; top:76%;">DM</button>
+                  <button class="componentHotspot normal" data-component="Cooling Loop" data-name="Cooling Loop" style="left:47%; top:58%;">CL</button>
+                  <button class="componentHotspot normal" data-component="Feedback Sensor" data-name="Feedback Sensor" style="left:63%; top:59%;">FS</button>
+                </div>
+              </div>
+            </article>
+            <section class="rootGrid">
+              <article class="card"><div class="cardHeader"><h3>Component Health – Likely Root Cause</h3><span id="componentStatus">Critical</span></div><div class="cardBody"><h2 id="componentName" class="detailName">Blanket Cylinder</h2><p id="componentHealth" class="muted">Preliminary component context only. Rules are required before alerting.</p></div></article>
+              <article class="card"><div class="cardHeader"><h3>Why PANDA suspects this</h3><span>Discovery evidence</span></div><div class="cardBody"><ul id="whyList" class="evidenceList"></ul></div></article>
+              <article class="card"><div class="cardHeader"><h3>Related Rules</h3><span>Rules locked</span></div><div class="cardBody"><div id="relatedRules" class="empty">Rules pending</div></div></article>
+              <article class="card"><div class="cardHeader"><h3>Evidence Log</h3><span>LLCINotification / BSS</span></div><div class="cardBody"><div class="tableWrap"><table id="drillEvidenceTable"></table></div></div></article>
+              <article class="card"><div class="cardHeader"><h3>Recent Occurrences</h3><span>Parsed timestamps</span></div><div class="cardBody"><div id="recentOccurrences" class="timeline"><div class="empty">No recent BSS occurrences parsed.</div></div></div></article>
+              <article class="card"><div class="cardHeader"><h3>Selected Component Detail</h3><span>Hotspot context</span></div><div class="cardBody"><div id="componentDetail" class="fieldGrid"></div></div></article>
+            </section>
+          </section>
+
+          <aside class="rightStack">
+            <article class="card"><div class="cardHeader"><h3>Key Signal</h3><span>LLCINotification / BSS</span></div><div class="cardBody"><div id="keySignal" class="chartBox">No numeric trend detected yet</div></div></article>
+            <article class="card"><div class="cardHeader"><h3>Machine State Timeline</h3><span>Compact</span></div><div class="cardBody"><div id="compactTimeline" class="timeline"><div class="empty">No state context.</div></div></div></article>
+            <article class="card"><div class="cardHeader"><h3>Recommended Actions</h3><span>Discovery only</span></div><div class="cardBody"><ul id="drillActions" class="actionList"></ul></div></article>
+          </aside>
+        </section>
+      </main>
+
+      <footer class="footerStatus" aria-label="Footer status">
+        <span class="footItem"><b>Data connection</b> <span id="footConnection">No data loaded</span></span>
+        <span class="footItem"><b>PANDA Engine</b> Discovery / Rules locked</span>
+        <span class="footItem"><b>Last data timestamp</b> <span id="footTimestamp">No data</span></span>
+        <span class="footItem"><b>Machine ID</b> <span id="footMachine">Pending</span></span>
+        <span class="footItem"><b>Site</b> <span id="footSite">Pending</span></span>
+        <span class="footItem"><b>Service User</b> Service User</span>
+      </footer>
     </div>
   </div>
 
@@ -376,11 +469,15 @@
       { key: 'FECNotification', label: 'FECNotification', match: /FECNotification/i },
       { key: 'LLCINotification', label: 'LLCINotification', match: /LLCINotification/i },
       { key: 'MachineStates', label: 'MachineStates', match: /MachineStates/i },
-      { key: 'AlertsMonitoring', label: 'AlertsMonitoring', match: /AlertsMonitoring|AletrsMonitoring/i }
+      { key: 'AlertsMonitoring', label: 'AlertsMonitoring', match: /AlertsMonitoring/i },
+      { key: 'AletrsMonitoring', label: 'AletrsMonitoring', match: /AletrsMonitoring/i }
     ];
-    const RADAR_SYSTEMS = ['FEC', 'LLCI', 'BSS', 'IPS', 'MachineStates', 'AlertsMonitoring'];
     const MACHINE_STATES = ['Standby', 'Ready', 'Prepare2Print', 'Printing', 'PrintEnd', 'Recovery', 'Error', 'Init', 'Idle', 'Maintenance', 'Shutdown', 'Starting', 'Stopped', 'Service'];
-    const NOTIFICATION_EVENT = /\b(error|fatal|exception|failed|failure|fault|warning|warn|timeout|disconnect|alarm|alert)\b/i;
+    const FINDING_RE = /\b(error|fatal|exception|failed|failure|fault|warning|warn|timeout|disconnect|alarm|alert|pressure|sensor|blanket|bss|ips|fec)\b/i;
+    const COMPONENTS = [
+      ['Blanket Cylinder', 'critical'], ['Pressure Sensor', 'warning'], ['Regulator', 'normal'], ['Valve Block', 'normal'],
+      ['Air Supply', 'normal'], ['Drive Motor', 'normal'], ['Cooling Loop', 'normal'], ['Feedback Sensor', 'normal']
+    ];
     const $ = selector => document.querySelector(selector);
     const $$ = selector => Array.from(document.querySelectorAll(selector));
 
@@ -389,13 +486,16 @@
       parsedPaths: new Set(),
       scannedArchives: new Set(),
       files: [],
+      focusedPathSet: new Set(),
+      sourceCounts: new Map(),
       machines: new Map(),
       systems: new Map(),
-      sourceCounts: new Map(),
       states: [],
       evidence: [],
-      lastStateByMachine: new Map(),
-      selectedSystem: null
+      numericSignals: [],
+      selectedComponent: 'Blanket Cylinder',
+      activeIssue: null,
+      lastStateByMachine: new Map()
     };
 
     function escapeHtml(value) {
@@ -416,16 +516,18 @@
       appState.parsedPaths.clear();
       appState.scannedArchives.clear();
       appState.files = [];
+      appState.focusedPathSet.clear();
+      appState.sourceCounts.clear();
       appState.machines.clear();
       appState.systems.clear();
-      appState.sourceCounts.clear();
       appState.states = [];
       appState.evidence = [];
+      appState.numericSignals = [];
+      appState.activeIssue = null;
       appState.lastStateByMachine.clear();
-      appState.selectedSystem = null;
       $('#bar').style.width = '0%';
       $('#scanPct').textContent = '0%';
-      setStage('Idle / waiting for archive', 0);
+      setStage('Idle / waiting for focused logs', 0);
     }
 
     function focusedLog(path) {
@@ -452,199 +554,215 @@
       return match ? match[0] : 'UNKNOWN';
     }
 
+    function siteFrom(path) {
+      const parts = path.split(/[\\/→]+/).map(p => p.trim()).filter(Boolean);
+      const sitePart = parts.find(p => /site|customer|plant/i.test(p));
+      return sitePart || 'Pending';
+    }
+
     function systemFrom(path, line = '') {
       const source = normalizeSource(path);
       const haystack = `${path} ${line}`.toUpperCase();
-      if (source === 'MachineStates') return 'MachineStates';
-      if (source === 'AlertsMonitoring') return 'AlertsMonitoring';
+      if (source === 'MachineStates') return 'State Context';
+      if (source === 'AlertsMonitoring' || source === 'AletrsMonitoring') return 'AlertsMonitoring';
       if (source === 'FECNotification') return 'FEC';
       if (source === 'LLCINotification') {
-        if (/\bBSS\b|BSS[._:-]/i.test(haystack)) return 'BSS';
-        if (/\bIPS\b|IPS[._:-]/i.test(haystack)) return 'IPS';
+        if (/\bBSS\b|BLANKET|PRESSURE/i.test(haystack)) return 'BSS';
+        if (/\bIPS\b|INK\s*PRESSURE|INK\s*PUMP/i.test(haystack)) return 'IPS';
         return 'LLCI';
       }
       return 'Pending';
     }
 
-    function ensureMachine(id) {
-      if (!appState.machines.has(id)) {
-        appState.machines.set(id, { id, files: new Set(), systems: new Set(), first: '', last: '' });
-      }
+    function detectState(line) {
+      const lower = line.toLowerCase();
+      if (!lower.includes('state')) return '';
+      return MACHINE_STATES.find(state => lower.includes(state.toLowerCase())) || '';
+    }
+
+    function eventType(line, source, detectedState) {
+      if (detectedState) return 'State transition';
+      if (/\b(error|fatal|exception|failed|failure|fault)\b/i.test(line)) return 'Error-like preliminary finding';
+      if (/\b(warning|warn|timeout|disconnect)\b/i.test(line)) return 'Warning-like preliminary finding';
+      if (/\b(alarm|alert)\b/i.test(line)) return source.includes('Alerts') ? 'Alert-like log entry (rules locked)' : 'Notification event';
+      if (/\bBSS\b|blanket/i.test(line)) return 'BSS LLCI preliminary finding';
+      if (/\bIPS\b/i.test(line)) return 'IPS LLCI preliminary finding';
+      return 'Focused log sample';
+    }
+
+    function severityScore(row) {
+      let score = 1;
+      if (/Error-like|Alert-like/i.test(row.eventType)) score += 5;
+      if (row.system === 'BSS') score += 3;
+      if (row.system === 'IPS' || row.system === 'FEC') score += 2;
+      if (row.timestamp) score += 1;
+      return score;
+    }
+
+    function ensureMachine(id, path = '', text = '') {
+      if (!appState.machines.has(id)) appState.machines.set(id, { id, files: new Set(), systems: new Set(), first: '', last: '', site: siteFrom(path || text) });
       return appState.machines.get(id);
     }
 
     function ensureSystem(system) {
-      if (!appState.systems.has(system)) {
-        appState.systems.set(system, { name: system, status: 'pending', count: 0, last: '', files: new Set(), severity: 'pending' });
-      }
+      if (!appState.systems.has(system)) appState.systems.set(system, { name: system, count: 0, last: '', files: new Set(), hot: false });
       return appState.systems.get(system);
     }
 
-    function registerEvent({ machine, system, source, timestamp, path, severity = 'discovered' }) {
-      const m = ensureMachine(machine);
-      m.files.add(path);
-      m.systems.add(system);
+    function register(machine, system, source, timestamp, path, hot = false) {
+      const machineRecord = ensureMachine(machine, path);
+      machineRecord.files.add(path);
+      machineRecord.systems.add(system);
       if (timestamp) {
-        if (!m.first || timestamp < m.first) m.first = timestamp;
-        if (!m.last || timestamp > m.last) m.last = timestamp;
+        if (!machineRecord.first || timestamp < machineRecord.first) machineRecord.first = timestamp;
+        if (!machineRecord.last || timestamp > machineRecord.last) machineRecord.last = timestamp;
       }
-
-      const sys = ensureSystem(system);
-      sys.status = 'discovered';
-      sys.count += 1;
-      sys.files.add(path);
-      if (timestamp && (!sys.last || timestamp > sys.last)) sys.last = timestamp;
-      if (severity === 'hot') sys.severity = 'hot';
-      else if (sys.severity !== 'hot') sys.severity = 'discovered';
-
-      if (source === 'LLCINotification' && system !== 'LLCI') {
-        const parent = ensureSystem('LLCI');
-        parent.status = 'discovered';
-        parent.count += 1;
-        parent.files.add(path);
-        if (timestamp && (!parent.last || timestamp > parent.last)) parent.last = timestamp;
-        if (severity === 'hot') parent.severity = 'hot';
-        else if (parent.severity !== 'hot') parent.severity = 'discovered';
-      }
-
+      const systemRecord = ensureSystem(system);
+      systemRecord.count += 1;
+      systemRecord.files.add(path);
+      if (timestamp && (!systemRecord.last || timestamp > systemRecord.last)) systemRecord.last = timestamp;
+      systemRecord.hot = systemRecord.hot || hot;
       appState.sourceCounts.set(source, (appState.sourceCounts.get(source) || 0) + 1);
     }
 
-    function detectState(line) {
-      const lower = line.toLowerCase();
-      if (!lower.includes('state')) return '';
-      return MACHINE_STATES.find(machineState => lower.includes(machineState.toLowerCase())) || '';
-    }
-
-    function classifyEvent(line, source, detectedState) {
-      if (detectedState) return 'State transition';
-      if (/\b(error|fatal|exception|failed|failure|fault)\b/i.test(line)) return 'Error-like log event';
-      if (/\b(warning|warn|timeout|disconnect)\b/i.test(line)) return 'Warning-like log event';
-      if (/\b(alarm|alert)\b/i.test(line)) return source === 'AlertsMonitoring' ? 'Alert-like log entry' : 'Notification event';
-      if (/BSS/i.test(line)) return 'BSS LLCI notification';
-      if (/IPS/i.test(line)) return 'IPS LLCI notification';
-      return 'Notification sample';
-    }
-
-    function evidenceSeverity(eventType) {
-      return /Error|Alert-like/i.test(eventType) ? 'hot' : 'discovered';
-    }
-
-    function addEvidence(row) {
-      if (appState.evidence.length < 1200) appState.evidence.push(row);
+    function parseNumericSignal(line, timestamp, path, machine, system, source) {
+      if (source !== 'LLCINotification' || system !== 'BSS') return;
+      const numericMatches = Array.from(line.matchAll(/(?:=|:|\s)(-?\d+(?:\.\d+)?)(?:\s?(bar|psi|pa|kpa|c|°c|rpm|mm|%)\b)?/ig));
+      const signal = numericMatches.find(match => Number.isFinite(Number(match[1])));
+      if (!signal) return;
+      appState.numericSignals.push({ timestamp, path, machine, system, value: Number(signal[1]), unit: signal[2] || '', raw: line.slice(0, 280) });
     }
 
     async function processText(path, text) {
       if (appState.parsedPaths.has(path)) return;
       appState.parsedPaths.add(path);
-
       const focus = focusedLog(path);
       if (!focus) return;
 
       const source = focus.key;
       const machine = machineFrom(path, text);
       appState.files.push({ path, source, machine, size: text.length });
+      ensureMachine(machine, path, text);
       const lines = text.split(/\r?\n/);
       const sampleLimit = Math.min(lines.length, 40000);
-      let capturedSamples = 0;
+      let captured = 0;
 
       for (let i = 0; i < sampleLimit; i += 1) {
         const line = lines[i];
         if (!line) continue;
-
         const timestamp = parseTimestamp(line, path);
-        const system = systemFrom(path, line);
         const detectedState = detectState(line);
-        const lastKnownState = detectedState || appState.lastStateByMachine.get(machine) || '';
-        const isFinding = NOTIFICATION_EVENT.test(line) || detectedState || /\b(BSS|IPS)\b/i.test(line) || capturedSamples < 3;
+        const system = systemFrom(path, line);
+        const stateContext = detectedState || appState.lastStateByMachine.get(machine) || '';
+        const finding = detectedState || FINDING_RE.test(line) || captured < 2;
 
         if (detectedState) {
-          const stateRow = { machine, system: 'MachineStates', state: detectedState, timestamp, end: '', duration: '', source: path, raw: line.slice(0, 500) };
-          appState.states.push(stateRow);
+          appState.states.push({ machine, timestamp, state: detectedState, source: path, raw: line.slice(0, 420), end: '', duration: '' });
           appState.lastStateByMachine.set(machine, detectedState);
         }
 
-        if (isFinding) {
-          const eventType = classifyEvent(line, source, detectedState);
-          const severity = evidenceSeverity(eventType);
-          registerEvent({ machine, system, source, timestamp, path, severity });
-          addEvidence({
-            timestamp,
-            machine,
-            source,
-            system,
-            state: lastKnownState,
-            eventType,
-            raw: line.slice(0, 650)
-          });
-          capturedSamples += 1;
-        } else {
-          registerEvent({ machine, system, source, timestamp, path });
+        if (finding) {
+          const row = { timestamp, machine, source, system, state: stateContext, eventType: eventType(line, source, detectedState), raw: line.slice(0, 650), path };
+          appState.evidence.push(row);
+          register(machine, system, source, timestamp, path, /Error-like|Alert-like/i.test(row.eventType));
+          parseNumericSignal(line, timestamp, path, machine, system, source);
+          captured += 1;
         }
       }
     }
 
-    async function scanZip(blob, prefix = '') {
-      const archiveKey = `${prefix}${blob.name || blob.size || 'zip'}`;
-      if (appState.scannedArchives.has(archiveKey)) return;
-      appState.scannedArchives.add(archiveKey);
-      setStage('Opening archive', 8);
-
-      const zip = await JSZip.loadAsync(blob);
-      const entries = Object.values(zip.files).filter(entry => !entry.dir);
-      const focusedEntries = entries.filter(entry => focusedLog(`${prefix}${entry.name}`) || /\.zip$/i.test(entry.name));
-      setStage('Finding focused logs', 22);
-
-      for (let index = 0; index < focusedEntries.length; index += 1) {
-        const entry = focusedEntries[index];
-        const path = `${prefix}${entry.name}`;
-        const sliceProgress = 22 + ((index + 1) / Math.max(1, focusedEntries.length)) * 58;
-
-        if (/\.zip$/i.test(entry.name)) {
-          if (!appState.scannedArchives.has(path)) {
-            const nestedBlob = await entry.async('blob');
-            await scanZip(nestedBlob, `${path} → `);
-          }
-        } else if (focusedLog(path)) {
-          setStage(focusedLog(path).key === 'MachineStates' ? 'Parsing machine states' : 'Profiling selected notifications', sliceProgress);
-          const text = await entry.async('text').catch(() => null);
-          if (text !== null) await processText(path, text);
+    function indexFocusedFiles(files) {
+      const matches = [];
+      for (const file of files) {
+        const path = file.webkitRelativePath || file.name;
+        if (focusedLog(path) && !appState.focusedPathSet.has(path)) {
+          appState.focusedPathSet.add(path);
+          matches.push({ path, file });
         }
       }
+      return matches;
+    }
+
+    async function scanZip(blob, prefix = '') {
+      const archiveKey = `${prefix}${blob.name || blob.size || 'zip'}`;
+      if (appState.scannedArchives.has(archiveKey)) return [];
+      appState.scannedArchives.add(archiveKey);
+      setStage('Opening archive', 8);
+      const zip = await JSZip.loadAsync(blob);
+      const entries = Object.values(zip.files).filter(entry => !entry.dir);
+      const focusedEntries = [];
+      const nestedEntries = [];
+      for (const entry of entries) {
+        const path = `${prefix}${entry.name}`;
+        if (focusedLog(path) && !appState.focusedPathSet.has(path)) {
+          appState.focusedPathSet.add(path);
+          focusedEntries.push({ path, entry });
+        } else if (/\.zip$/i.test(entry.name) && !appState.scannedArchives.has(path)) {
+          nestedEntries.push({ path, entry });
+        }
+      }
+      setStage('Finding focused logs', 22);
+      for (let i = 0; i < nestedEntries.length; i += 1) {
+        const nestedBlob = await nestedEntries[i].entry.async('blob');
+        const nestedMatches = await scanZip(nestedBlob, `${nestedEntries[i].path} → `);
+        focusedEntries.push(...nestedMatches);
+      }
+      return focusedEntries;
     }
 
     async function handleFiles(fileList) {
       resetScan();
       $('#dataStatus').textContent = 'Scanning…';
-      $('#dataDot').className = 'dot cyan';
-
       const files = Array.from(fileList || []);
-      if (!files.length) {
-        render();
-        return;
-      }
+      if (!files.length) { render(); return; }
 
+      const textJobs = [];
       setStage('Opening archive', 4);
-      for (let index = 0; index < files.length; index += 1) {
-        const file = files[index];
-        const path = file.webkitRelativePath || file.name;
-        try {
-          if (/\.zip$/i.test(file.name)) {
-            await scanZip(file, file.webkitRelativePath ? `${file.webkitRelativePath} → ` : '');
-          } else if (focusedLog(path)) {
-            const stage = normalizeSource(path) === 'MachineStates' ? 'Parsing machine states' : 'Profiling selected notifications';
-            setStage(stage, 12 + (index / Math.max(1, files.length)) * 68);
-            await processText(path, await file.text());
-          }
-        } catch (error) {
-          addEvidence({ timestamp: '', machine: 'UNKNOWN', source: normalizeSource(path), system: 'Pending', state: '', eventType: 'Scan issue', raw: String(error) });
-        }
-        setStage('Building evidence view', 80 + ((index + 1) / Math.max(1, files.length)) * 14);
+      const directFiles = files.filter(file => !/\.zip$/i.test(file.name));
+      textJobs.push(...indexFocusedFiles(directFiles));
+
+      for (const file of files.filter(file => /\.zip$/i.test(file.name))) {
+        const matches = await scanZip(file, file.webkitRelativePath ? `${file.webkitRelativePath} → ` : '');
+        textJobs.push(...matches);
+      }
+      setStage('Finding focused logs', 28);
+
+      const machineStateJobs = textJobs.filter(job => normalizeSource(job.path) === 'MachineStates');
+      const notificationJobs = textJobs.filter(job => normalizeSource(job.path) !== 'MachineStates');
+      const total = Math.max(1, textJobs.length);
+      let complete = 0;
+
+      setStage('Parsing MachineStates', 38);
+      for (const job of machineStateJobs) {
+        const text = job.file ? await job.file.text() : await job.entry.async('text').catch(() => '');
+        await processText(job.path, text);
+        complete += 1;
+        setStage('Parsing MachineStates', 38 + (complete / total) * 24);
       }
 
+      setStage('Parsing Notifications', 62);
+      for (const job of notificationJobs) {
+        const text = job.file ? await job.file.text() : await job.entry.async('text').catch(() => '');
+        await processText(job.path, text);
+        complete += 1;
+        setStage('Parsing Notifications', 62 + (complete / total) * 24);
+      }
+
+      setStage('Building Service Radar', 92);
       deriveStateDurations();
+      selectActiveIssue();
       render();
-      setStage('Building evidence view', 100);
+      setStage('Building Service Radar', 100);
+    }
+
+    function durationText(start, end) {
+      const a = new Date(start.replace(' ', 'T'));
+      const b = new Date(end.replace(' ', 'T'));
+      if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) return '';
+      const seconds = Math.round((b - a) / 1000);
+      if (seconds < 60) return `${seconds}s`;
+      if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+      return `${Math.round(seconds / 3600)}h`;
     }
 
     function deriveStateDurations() {
@@ -655,130 +773,22 @@
         current.end = next ? next.timestamp : '';
         current.duration = current.timestamp && current.end ? durationText(current.timestamp, current.end) : '';
       }
+      appState.evidence.sort((a, b) => severityScore(b) - severityScore(a) || String(b.timestamp).localeCompare(String(a.timestamp)));
     }
 
-    function durationText(start, end) {
-      const a = new Date(start.replace(' ', 'T'));
-      const b = new Date(end.replace(' ', 'T'));
-      if (Number.isNaN(a.valueOf()) || Number.isNaN(b.valueOf())) return '';
-      const seconds = Math.max(0, Math.round((b - a) / 1000));
-      if (seconds < 60) return `${seconds}s`;
-      if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
-      return `${(seconds / 3600).toFixed(1)}h`;
+    function selectActiveIssue() {
+      appState.activeIssue = appState.evidence.find(row => row.source !== 'MachineStates') || null;
+      if (!appState.activeIssue && appState.evidence.length) appState.activeIssue = appState.evidence[0];
     }
 
-    function renderSourceList() {
-      $('#sourceList').innerHTML = FOCUSED_LOGS.map(log => {
-        const fileCount = appState.files.filter(file => file.source === log.key).length;
-        const eventCount = appState.sourceCounts.get(log.key) || 0;
-        const status = fileCount ? 'discovered' : 'pending / empty';
-        return `<div class="sourceItem"><span class="sourceCount">${eventCount}</span><b>${escapeHtml(log.label)}</b><p>${status} · ${fileCount} file(s)</p></div>`;
-      }).join('');
-    }
-
-    function renderRadar() {
-      const html = RADAR_SYSTEMS.map(systemName => {
-        const record = appState.systems.get(systemName) || { status: 'pending', count: 0, last: '', severity: 'pending', files: new Set() };
-        const hasData = record.count > 0;
-        const status = hasData ? 'discovered' : 'pending / no data';
-        const severity = record.severity === 'hot' ? 'hot' : hasData ? 'discovered' : 'pending';
-        const emphasis = ['BSS', 'IPS'].includes(systemName) ? '<div class="underLabel">under LLCINotification</div>' : '';
-        return `<button class="systemCard ${appState.selectedSystem === systemName ? 'active' : ''}" data-system="${escapeHtml(systemName)}" type="button">
-          <div class="systemTop"><div class="systemName">${escapeHtml(systemName)}</div><span class="severity ${severity}"></span></div>
-          <div class="systemStatus">${status}</div>
-          ${emphasis}
-          <div class="systemStats"><div><b>${record.count || 0}</b>events</div><div><b>${escapeHtml(record.last || '—')}</b>last event</div></div>
-        </button>`;
-      }).join('');
-      $('#radarGrid').innerHTML = html;
-      $$('.systemCard').forEach(card => {
-        card.addEventListener('click', () => {
-          appState.selectedSystem = card.dataset.system;
-          renderRadar();
-          renderDetail();
-        });
-      });
-    }
-
-    function renderTimeline() {
-      if (!appState.states.length) {
-        $('#timeline').innerHTML = '<div class="empty">No parsed machine states found in focused logs.</div>';
-        return;
-      }
-      $('#timeline').innerHTML = appState.states.slice(0, 80).map((row, index) => {
-        const arrow = index < Math.min(appState.states.length, 80) - 1 ? '<div class="transitionArrow">→</div>' : '';
-        return `<div class="seg"><b>${escapeHtml(row.state)}</b><span>${escapeHtml(row.machine)}</span><span>${escapeHtml(row.timestamp || 'time pending')}</span><span>${escapeHtml(row.duration || 'duration pending')}</span></div>${arrow}`;
-      }).join('');
-    }
-
-    function renderEvidence() {
-      table($('#evidenceTable'), [
-        ['Timestamp', row => row.timestamp || '—'],
-        ['Machine ID', row => row.machine],
-        ['Source log', row => row.source],
-        ['System', row => row.system],
-        ['State', row => row.state || '—'],
-        ['Event type', row => row.eventType],
-        ['Raw line preview', row => row.raw, 'raw']
-      ], appState.evidence.slice(0, 700), 'No preliminary findings captured yet. Upload focused logs to populate evidence.');
-    }
-
-    function renderHero() {
+    function activeMachine() {
       const machines = Array.from(appState.machines.values()).sort((a, b) => b.files.size - a.files.size);
-      const active = machines[0];
-      const sourceCoverage = FOCUSED_LOGS.filter(log => appState.files.some(file => file.source === log.key)).length;
-      const hotCount = appState.evidence.filter(row => /Error|Alert-like/i.test(row.eventType)).length;
-      const activeStates = active ? appState.states.filter(row => row.machine === active.id) : [];
-      const lastState = activeStates.length ? activeStates[activeStates.length - 1].state : '';
-
-      $('#activeMachine').textContent = active ? active.id : 'No machine selected';
-      $('#lastState').textContent = lastState || 'Pending';
-      $('#timeRange').textContent = active && (active.first || active.last) ? `${active.first || '—'} → ${active.last || '—'}` : 'Empty';
-      $('#completeness').textContent = `${sourceCoverage} / ${FOCUSED_LOGS.length} sources`;
-      $('#riskLevel').textContent = hotCount ? 'Review' : active ? 'Pending' : 'Pending';
-      $('#riskMessage').textContent = active
-        ? `${appState.files.length} focused log file(s) scanned. ${appState.evidence.length} preliminary finding(s) are available for service review.`
-        : 'Upload focused logs to build an operational machine health radar. Log scanning runs in the background.';
-      $('#dataStatus').textContent = appState.files.length ? 'Focused data discovered' : 'No data loaded';
-      $('#dataDot').className = `dot ${appState.files.length ? 'cyan' : ''}`;
+      return machines[0] || null;
     }
 
-    function renderDetail() {
-      const selected = appState.selectedSystem;
-      if (!selected) {
-        $('#detailTitle').textContent = 'System Drilldown';
-        $('#detailBody').innerHTML = '<div class="empty">Choose a system card to inspect related preliminary evidence.</div>';
-        return;
-      }
-
-      $('#detailTitle').textContent = `${selected} Drilldown`;
-      let related = appState.evidence.filter(row => row.system === selected);
-      if (selected === 'BSS' || selected === 'IPS') {
-        related = appState.evidence.filter(row => row.source === 'LLCINotification' && (row.system === selected || new RegExp(`\\b${selected}\\b`, 'i').test(row.raw)));
-      } else if (selected === 'MachineStates') {
-        related = appState.states.map(row => ({ ...row, eventType: 'State timeline detail', state: row.state, raw: row.raw }));
-      } else if (selected === 'AlertsMonitoring') {
-        related = appState.evidence.filter(row => row.source === 'AlertsMonitoring');
-      }
-
-      const system = appState.systems.get(selected) || { count: 0, last: '', status: 'pending' };
-      const guidance = selected === 'AlertsMonitoring'
-        ? 'Alert-like entries remain preliminary until Rules Excel exists and duration/state/grace checks can be applied.'
-        : selected === 'MachineStates'
-          ? 'State details are parsed timeline evidence and are not alerts.'
-          : selected === 'BSS' || selected === 'IPS'
-            ? `${selected} evidence is derived from related LLCINotification entries.`
-            : 'Discovery mode shows source-backed evidence only; real status requires Rules.';
-
-      $('#detailBody').innerHTML = `
-        <div class="metricGrid">
-          <div class="metric"><label>Status</label><b>${escapeHtml(system.count ? 'Discovered' : 'Pending')}</b></div>
-          <div class="metric"><label>Event count</label><b>${system.count || related.length || 0}</b></div>
-          <div class="metric"><label>Last event</label><b>${escapeHtml(system.last || '—')}</b></div>
-          <div class="metric"><label>Severity</label><b>${escapeHtml(system.severity === 'hot' ? 'Preliminary red' : system.count ? 'Preliminary' : 'No data')}</b></div>
-        </div>
-        <div class="detailSection"><h4>Interpretation</h4><p class="small">${escapeHtml(guidance)}</p></div>
-        <div class="detailSection"><h4>Related entries</h4>${miniTable(related.slice(0, 12))}</div>`;
+    function latestTimestamp() {
+      const values = [...appState.evidence, ...appState.states].map(row => row.timestamp).filter(Boolean).sort();
+      return values.length ? values[values.length - 1] : '';
     }
 
     function table(element, columns, rows, emptyText) {
@@ -786,35 +796,189 @@
         element.innerHTML = `<tbody><tr><td><div class="empty">${escapeHtml(emptyText)}</div></td></tr></tbody>`;
         return;
       }
-      const header = columns.map(([label]) => `<th>${escapeHtml(label)}</th>`).join('');
-      const body = rows.map(row => `<tr>${columns.map(([, getter, className]) => `<td class="${className || ''}">${escapeHtml(getter(row))}</td>`).join('')}</tr>`).join('');
-      element.innerHTML = `<thead><tr>${header}</tr></thead><tbody>${body}</tbody>`;
+      element.innerHTML = `<thead><tr>${columns.map(([label]) => `<th>${escapeHtml(label)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${columns.map(([, getter, cls]) => `<td class="${cls || ''}">${escapeHtml(getter(row))}</td>`).join('')}</tr>`).join('')}</tbody>`;
     }
 
-    function miniTable(rows) {
-      if (!rows.length) return '<div class="empty">No related entries for this system.</div>';
-      const trimmed = rows.map(row => ({
-        Time: row.timestamp || '—',
-        Machine: row.machine || '—',
-        Type: row.eventType || 'State',
-        State: row.state || '—',
-        Raw: (row.raw || '').slice(0, 150)
-      }));
-      const keys = Object.keys(trimmed[0]);
-      return `<div class="tableWrap"><table><thead><tr>${keys.map(key => `<th>${escapeHtml(key)}</th>`).join('')}</tr></thead><tbody>${trimmed.map(row => `<tr>${keys.map(key => `<td class="${key === 'Raw' ? 'raw' : ''}">${escapeHtml(row[key])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    function sparkline(signals) {
+      if (!signals.length) return '';
+      const values = signals.slice(-20).map(s => s.value);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = max - min || 1;
+      const points = values.map((value, index) => `${(index / Math.max(1, values.length - 1)) * 300},${72 - ((value - min) / range) * 58}`).join(' ');
+      return `<h4>Actual signal parsed <span class="muted">Expected band locked</span></h4><svg class="sparkSvg" viewBox="0 0 300 86" preserveAspectRatio="none"><rect x="0" y="24" width="300" height="38" fill="rgba(65,223,255,0.06)" stroke="rgba(130,224,245,0.12)"/><polyline points="${points}" fill="none" stroke="#41dfff" stroke-width="3"/><text x="4" y="82" fill="#7c8c98" font-size="10">${escapeHtml(String(min))}</text><text x="250" y="14" fill="#7c8c98" font-size="10">${escapeHtml(String(max))}</text></svg>`;
+    }
+
+    function renderHotspots() {
+      const bss = appState.evidence.some(row => row.source === 'LLCINotification' && (row.system === 'BSS' || /\bBSS\b|blanket/i.test(row.raw)));
+      const ips = appState.evidence.some(row => row.source === 'LLCINotification' && (row.system === 'IPS' || /\bIPS\b/i.test(row.raw)));
+      const fec = appState.evidence.some(row => row.source === 'FECNotification');
+      const llci = appState.evidence.some(row => row.source === 'LLCINotification');
+      $$('.hotspot').forEach(btn => {
+        btn.classList.remove('hasData', 'issue');
+        const system = btn.dataset.system;
+        if ((system === 'BSS' && bss) || (system === 'IPS' && ips) || (system === 'FEC' && fec) || (system === 'LLCI' && llci)) btn.classList.add('hasData');
+        if ((system === 'BSS' && bss) || (system === 'IPS' && ips) || (system === 'FEC' && fec)) btn.classList.add('issue');
+      });
+    }
+
+    function renderKpis() {
+      const machines = Array.from(appState.machines.values());
+      const atRisk = machines.filter(machine => appState.evidence.some(row => row.machine === machine.id && /Error-like|Warning-like|BSS|IPS|FEC/i.test(row.eventType))).length;
+      $('#kpiMachinesAtRisk').textContent = machines.length ? String(atRisk) : 'Pending';
+      $('#kpiMachinesAtRiskNote').textContent = machines.length ? 'Preliminary findings only' : 'Requires focused findings';
+      $('#kpiP1Alerts').textContent = 'Pending';
+      $('#kpiConfidence').textContent = appState.files.length ? 'Discovery only' : 'Pending rules';
+      $('#kpiActions').textContent = 'Pending';
+      $('#kpiMTTD').textContent = 'No data';
+    }
+
+    function renderMachine() {
+      const machine = activeMachine();
+      const stateRows = machine ? appState.states.filter(row => row.machine === machine.id) : [];
+      const lastState = stateRows.length ? stateRows[stateRows.length - 1] : null;
+      const sourceCoverage = FOCUSED_LOGS.filter(log => appState.files.some(file => file.source === log.key)).length;
+      $('#machineId').textContent = machine ? machine.id : 'Pending';
+      $('#sourceCoverage').textContent = `${sourceCoverage} / ${FOCUSED_LOGS.length}`;
+      $('#currentState').textContent = lastState ? lastState.state : 'Pending';
+      $('#stateContext').textContent = lastState ? `From MachineStates${lastState.duration ? ` / ${lastState.duration}` : ''}` : 'No MachineStates parsed';
+      $('#lastTimestamp').textContent = latestTimestamp() || 'No data';
+      renderHotspots();
+    }
+
+    function renderIssue() {
+      const issue = appState.activeIssue;
+      const signals = appState.numericSignals;
+      if (!issue) {
+        $('#issueSystem').textContent = 'Pending';
+        $('#issueSubsystem').textContent = 'No focused finding selected';
+        $('#issueSummary').textContent = 'Upload FECNotification, LLCINotification, MachineStates, AlertsMonitoring, or AletrsMonitoring logs.';
+        $('#issueState').textContent = 'Pending MachineStates';
+        $('#issueDuration').textContent = 'No data';
+        $('#issueChart').innerHTML = 'Rules required for expected band';
+        return;
+      }
+      $('#issueSystem').textContent = issue.system;
+      $('#issueSubsystem').textContent = issue.system === 'BSS' ? 'BSS Blanket System' : issue.source;
+      $('#issueSummary').textContent = issue.eventType + ': ' + issue.raw.slice(0, 180);
+      $('#issueState').textContent = issue.state || 'No state context parsed';
+      const state = appState.states.find(row => row.machine === issue.machine && row.state === issue.state && row.duration);
+      $('#issueDuration').textContent = state?.duration || 'No duration parsed';
+      $('#issueChart').innerHTML = signals.length ? sparkline(signals) : 'Rules required for expected band';
+    }
+
+    function renderTimeline(target = '#timeline', compact = false) {
+      const machine = activeMachine();
+      const rows = (machine ? appState.states.filter(row => row.machine === machine.id) : appState.states).slice(-12);
+      const element = $(target);
+      if (!rows.length) {
+        element.innerHTML = '<div class="empty">No MachineStates timeline parsed yet.</div>';
+        return;
+      }
+      element.innerHTML = rows.map(row => `<div class="seg"><b>${escapeHtml(row.state)}</b><span>${escapeHtml(row.timestamp || 'time pending')}</span><span>${escapeHtml(row.duration || 'duration pending')}</span>${compact ? '' : `<span>${escapeHtml(row.machine)}</span>`}</div>`).join('');
+    }
+
+    function renderEvidence() {
+      table($('#evidenceTable'), [
+        ['Time', row => row.timestamp || '—'], ['Machine', row => row.machine || '—'], ['Source', row => row.source], ['System', row => row.system], ['Preliminary Finding', row => row.eventType], ['Raw', row => row.raw, 'raw']
+      ], appState.evidence.slice(0, 90), 'No preliminary findings captured from focused logs yet.');
+    }
+
+    function renderActions() {
+      const hasIssue = Boolean(appState.activeIssue);
+      const items = hasIssue ? [
+        'Review preliminary evidence in the focused source log before dispatch.',
+        'Confirm machine state and duration manually; real alerts require rules, duration, and transition grace.',
+        appState.activeIssue.system === 'BSS' ? 'Inspect BSS blanket system context and pressure/sensor entries if present.' : `Inspect ${appState.activeIssue.system} source context if service review is needed.`
+      ] : [
+        'Load only focused logs to populate Service Radar.',
+        'Create Rules before enabling real alerts.',
+        'No preventive action can be opened from missing data.'
+      ];
+      $('#serviceActions').innerHTML = items.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+      $('#drillActions').innerHTML = items.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+    }
+
+    function renderFooter() {
+      const machine = activeMachine();
+      $('#dataStatus').textContent = appState.files.length ? `${appState.files.length} focused file(s) parsed` : 'No data loaded';
+      $('#footConnection').textContent = appState.files.length ? 'Focused logs loaded' : 'No data loaded';
+      $('#footTimestamp').textContent = latestTimestamp() || 'No data';
+      $('#footMachine').textContent = machine ? machine.id : 'Pending';
+      $('#footSite').textContent = machine?.site || 'Pending';
+      $('#crumbMachine').textContent = machine ? machine.id : 'Machine ID';
+      $('#sideMachine').textContent = machine ? machine.id : 'Pending';
+      $('#sideState').textContent = $('#currentState').textContent;
+    }
+
+    function renderComponentTree() {
+      $('#componentTree').innerHTML = COMPONENTS.map(([name, status]) => `<li class="${name === appState.selectedComponent ? 'active' : ''}" data-component="${escapeHtml(name)}">${escapeHtml(name)} <small>${escapeHtml(status)}</small></li>`).join('');
+    }
+
+    function componentEvidence() {
+      return appState.evidence.filter(row => row.system === 'BSS' || /\bBSS\b|blanket|pressure/i.test(row.raw));
+    }
+
+    function renderDrillDown() {
+      const selected = appState.selectedComponent;
+      const status = COMPONENTS.find(([name]) => name === selected)?.[1] || 'normal';
+      const related = componentEvidence();
+      $('#selectedComponentLabel').textContent = selected;
+      $('#componentName').textContent = selected;
+      $('#componentStatus').textContent = status.charAt(0).toUpperCase() + status.slice(1);
+      $('#componentHealth').textContent = `${selected} status is ${status}. This is a discovery-only component context, not a real alert.`;
+      $('#sideIssue').textContent = appState.activeIssue ? `${appState.activeIssue.system}: ${appState.activeIssue.eventType}` : 'No BSS finding loaded yet.';
+      $$('.componentHotspot').forEach(btn => btn.classList.toggle('selected', btn.dataset.component === selected));
+      renderComponentTree();
+      const why = related.length ? [
+        `${related.length} BSS/blanket-related focused entries were parsed.`,
+        appState.numericSignals.length ? 'At least one numeric BSS signal was detected in LLCINotification.' : 'No numeric BSS trend has been detected yet.',
+        'Rules are pending, so severity remains preliminary only.'
+      ] : ['No BSS-related LLCINotification evidence has been parsed yet.', 'Rules pending; no real alert is generated.'];
+      $('#whyList').innerHTML = why.map(item => `<li>${escapeHtml(item)}</li>`).join('');
+      $('#relatedRules').textContent = 'Rules pending';
+      table($('#drillEvidenceTable'), [
+        ['Time', row => row.timestamp || '—'], ['Source', row => row.source], ['Finding', row => row.eventType], ['Raw', row => row.raw, 'raw']
+      ], related.slice(0, 60), 'No BSS evidence parsed from LLCINotification yet.');
+      $('#recentOccurrences').innerHTML = related.filter(row => row.timestamp).slice(0, 8).map(row => `<div class="seg"><b>${escapeHtml(row.system)}</b><span>${escapeHtml(row.timestamp)}</span><span>${escapeHtml(row.eventType)}</span></div>`).join('') || '<div class="empty">No recent BSS occurrences parsed.</div>';
+      $('#keySignal').innerHTML = appState.numericSignals.length ? sparkline(appState.numericSignals) : 'No numeric trend detected yet';
+      renderTimeline('#compactTimeline', true);
+      $('#componentDetail').innerHTML = `<div class="field"><label>Component</label><b>${escapeHtml(selected)}</b></div><div class="field"><label>Status</label><span>${escapeHtml(status)} / preliminary only</span></div><div class="field"><label>Rule status</label><span>Rules pending</span></div>`;
     }
 
     function render() {
-      renderHero();
-      renderSourceList();
-      renderRadar();
+      renderKpis();
+      renderMachine();
+      renderIssue();
       renderTimeline();
       renderEvidence();
-      renderDetail();
+      renderActions();
+      renderFooter();
+      renderDrillDown();
+    }
+
+    function showView(view) {
+      const isDrill = view === 'drill';
+      $('#serviceRadarView').classList.toggle('hidden', isDrill);
+      $('#drillDownView').classList.toggle('hidden', !isDrill);
+      $$('.navBtn[data-view]').forEach(btn => btn.classList.toggle('active', btn.dataset.view === view || (!isDrill && btn.dataset.view === 'radar')));
+      if (isDrill) renderDrillDown();
     }
 
     $('#fileInput').addEventListener('change', event => handleFiles(event.target.files));
     $('#zipInput').addEventListener('change', event => handleFiles(event.target.files));
+    $('#openDrill').addEventListener('click', () => showView('drill'));
+    $$('.navBtn[data-view]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.view)));
+    $$('.hotspot').forEach(btn => btn.addEventListener('click', () => {
+      if (btn.dataset.system === 'BSS') showView('drill');
+    }));
+    document.addEventListener('click', event => {
+      const componentButton = event.target.closest('[data-component]');
+      if (componentButton && componentButton.dataset.component) {
+        appState.selectedComponent = componentButton.dataset.component;
+        renderDrillDown();
+      }
+    });
     render();
   </script>
 </body>
