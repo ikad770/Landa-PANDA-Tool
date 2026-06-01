@@ -136,7 +136,7 @@ function SettingsFoundation() {
       <section className="card">
         <div className="section-heading"><div><p className="eyebrow">Settings</p><h2>Product foundation status</h2></div></div>
         <div className="readiness-list">
-          <span>Vite entrypoint fixed to /src/main.jsx</span>
+          <span>Vite entrypoint fixed</span>
           <span>Dependencies pinned in package.json</span>
           <span>No favicon or binary asset requirement</span>
           <span>Parser, rule engine, and alert services separated from UI</span>

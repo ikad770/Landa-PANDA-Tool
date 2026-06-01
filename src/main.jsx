@@ -1,52 +1,34 @@
-import React, { Component } from 'react';
-import { createRoot } from 'react-dom/client';
-import App from './App.jsx';
-import './styles.css';
+import React from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App.jsx";
+import "./styles.css";
 
-class UiErrorBoundary extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { error: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error('Landa PANDA Tool UI failed to initialize', error, errorInfo);
-  }
-
-  render() {
-    if (this.state.error) return <FallbackPage error={this.state.error} />;
-    return this.props.children;
-  }
-}
-
-function FallbackPage({ error }) {
-  const message = error?.message || String(error || 'Unknown error');
-
+function BootFallback({ error }) {
   return (
-    <main className="fallback-page" role="alert">
-      <section className="fallback-card">
-        <div className="brand-mark">P</div>
-        <h1>Landa PANDA Tool loaded, but UI failed to initialize</h1>
-        <p>{message}</p>
-      </section>
-    </main>
+    <div style={{ padding: 24, fontFamily: "Arial, sans-serif", color: "#111" }}>
+      <h1>Landa PANDA Tool loaded, but UI failed to initialize</h1>
+      <pre style={{ whiteSpace: "pre-wrap", color: "#b00020" }}>
+        {String(error?.stack || error)}
+      </pre>
+    </div>
   );
 }
 
-const rootElement = document.getElementById('root');
+const rootElement = document.getElementById("root");
 
-if (!rootElement) {
-  throw new Error('Root element #root was not found in index.html');
-}
+try {
+  if (!rootElement) {
+    throw new Error("Missing #root element in index.html");
+  }
 
-createRoot(rootElement).render(
-  <React.StrictMode>
-    <UiErrorBoundary>
+  createRoot(rootElement).render(
+    <React.StrictMode>
       <App />
-    </UiErrorBoundary>
-  </React.StrictMode>
-);
+    </React.StrictMode>
+  );
+} catch (error) {
+  console.error(error);
+  if (rootElement) {
+    createRoot(rootElement).render(<BootFallback error={error} />);
+  }
+}
