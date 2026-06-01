@@ -3,937 +3,291 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PANDA Tool — Service Command Center</title>
+  <title>Landa PANDA Tool — Service Command Center</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     :root {
-      --bg: #020609;
-      --panel: #081019;
-      --panel-2: #0b1621;
-      --panel-3: #101d29;
-      --line: rgba(115, 226, 255, 0.17);
-      --line-strong: rgba(65, 223, 255, 0.38);
-      --cyan: #41dfff;
-      --cyan-soft: rgba(65, 223, 255, 0.11);
-      --red: #ff4257;
-      --red-soft: rgba(255, 66, 87, 0.16);
-      --orange: #ffb457;
-      --orange-soft: rgba(255, 180, 87, 0.14);
-      --green: #64d89a;
-      --green-soft: rgba(100, 216, 154, 0.12);
-      --white: #f5fbff;
-      --text: #cfe0e8;
-      --muted: #899ba8;
-      --muted-2: #5d6c77;
-      --shadow: 0 26px 70px rgba(0, 0, 0, 0.48);
-      --sans: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      --bg: #03070b; --panel: #09121c; --panel2: #0d1824; --panel3: #122130;
+      --line: rgba(135, 229, 255, .16); --line2: rgba(72, 219, 255, .38);
+      --cyan: #42dcff; --cyan2: rgba(66, 220, 255, .12);
+      --red: #ff475d; --red2: rgba(255, 71, 93, .16);
+      --amber: #ffb547; --amber2: rgba(255, 181, 71, .16);
+      --green: #62d99a; --green2: rgba(98, 217, 154, .13);
+      --text: #d6e6ef; --muted: #91a2af; --muted2: #657582; --white: #f7fcff;
+      --shadow: 0 24px 70px rgba(0,0,0,.44); --sans: Inter, "Segoe UI", Roboto, Arial, sans-serif;
       --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     }
-
     * { box-sizing: border-box; }
-    html { background: var(--bg); }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      color: var(--text);
-      font: 15px/1.5 var(--sans);
-      background:
-        radial-gradient(circle at 18% 4%, rgba(65, 223, 255, 0.13), transparent 30%),
-        radial-gradient(circle at 82% 18%, rgba(65, 223, 255, 0.06), transparent 28%),
-        linear-gradient(135deg, #010306 0%, #07111a 55%, #020609 100%);
-      overflow-x: hidden;
-    }
-    button, input { font: inherit; }
-    input[type="file"] { display: none; }
-    .hidden { display: none !important; }
-    .app { min-height: 100vh; padding: 16px; }
-    .shell { max-width: 1800px; margin: 0 auto; }
-
-    .topHeader {
-      min-height: 72px;
-      display: grid;
-      grid-template-columns: minmax(260px, auto) 1fr minmax(330px, auto);
-      gap: 18px;
-      align-items: center;
-      padding: 10px 14px;
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      background: linear-gradient(180deg, rgba(11, 20, 30, 0.97), rgba(4, 9, 14, 0.96));
-      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.04);
-    }
-    .brandBlock { display: flex; align-items: center; gap: 14px; }
-    .landaLogo {
-      width: 92px;
-      height: 42px;
-      display: grid;
-      place-items: center;
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 12px;
-      color: var(--white);
-      font-weight: 900;
-      letter-spacing: 0.16em;
-      background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(65,223,255,0.08));
-    }
-    .titleBlock h1 { margin: 0; color: var(--white); font-size: 24px; line-height: 1.05; letter-spacing: -0.03em; }
-    .titleBlock p { margin: 4px 0 0; color: var(--muted); font-size: 13px; line-height: 1.2; }
-    .nav { display: flex; justify-content: center; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .navBtn {
-      min-height: 38px;
-      border: 1px solid transparent;
-      border-radius: 999px;
-      background: transparent;
-      color: #97a9b5;
-      padding: 8px 12px;
-      cursor: pointer;
-      font-weight: 750;
-    }
-    .navBtn.active, .navBtn:hover { color: var(--white); border-color: var(--line-strong); background: var(--cyan-soft); }
-    .headerTools { display: flex; align-items: center; justify-content: flex-end; gap: 9px; flex-wrap: wrap; }
-    .dataRange, .loadButton {
-      min-height: 38px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: rgba(255,255,255,0.035);
-      color: var(--text);
-      padding: 8px 13px;
-    }
-    .dataRange { color: #adbdc7; }
-    .loadButton { cursor: pointer; color: var(--white); font-weight: 850; border-color: rgba(65,223,255,0.34); background: linear-gradient(180deg, rgba(65,223,255,0.15), rgba(65,223,255,0.04)); }
-
-    .scanStrip {
-      margin: 12px 0;
-      display: grid;
-      grid-template-columns: minmax(260px, auto) 1fr auto;
-      gap: 12px;
-      align-items: center;
-      min-height: 48px;
-      padding: 10px 14px;
-      border: 1px solid rgba(115,226,255,0.13);
-      border-radius: 15px;
-      background: rgba(7, 13, 20, 0.78);
-    }
-    .stage { color: #b4c6d0; font-weight: 800; }
-    .progress { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.07); overflow: hidden; }
-    .bar { width: 0%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #009fc3, var(--cyan)); transition: width 180ms ease; }
-    .scanPct { color: var(--cyan); font: 800 13px/1 var(--mono); }
-    .dataStatus { color: var(--muted); font-size: 13px; }
-
-    .card {
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      background: linear-gradient(180deg, rgba(12, 22, 33, 0.96), rgba(5, 10, 16, 0.96));
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
-      overflow: hidden;
-    }
-    .cardHeader {
-      min-height: 54px;
-      padding: 14px 16px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      border-bottom: 1px solid rgba(115,226,255,0.11);
-      background: rgba(255,255,255,0.018);
-    }
-    .cardHeader h2, .cardHeader h3 { margin: 0; color: var(--white); font-size: 17px; line-height: 1.2; letter-spacing: -0.01em; }
-    .cardHeader span { color: var(--muted); font-size: 13px; }
-    .cardBody { padding: 16px; }
-    .muted, .empty { color: var(--muted); }
-    .empty { padding: 14px; border: 1px dashed rgba(115,226,255,0.17); border-radius: 14px; background: rgba(255,255,255,0.02); }
-    .pill { border-radius: 999px; padding: 5px 10px; border: 1px solid var(--line); color: #b7c8d2; background: rgba(255,255,255,0.03); font-size: 13px; font-weight: 800; }
-    .badgePrelim { color: #ffdce1; border-color: rgba(255,66,87,0.38); background: var(--red-soft); }
-
-    .kpiRow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
-    .kpi { padding: 18px; min-height: 128px; }
-    .kpi label { display: block; color: #a9bac5; font-weight: 800; margin-bottom: 12px; }
-    .kpi strong { display: block; color: var(--white); font-size: clamp(24px, 2.2vw, 38px); line-height: 1.05; letter-spacing: -0.04em; }
-    .kpi small { display: block; margin-top: 10px; color: var(--muted); font-size: 13px; }
-    .kpi.preliminary { border-color: rgba(255,180,87,0.32); }
-
-    .serviceLayout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(340px, 3fr); gap: 12px; }
-    .machineMeta { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); margin-bottom: 14px; flex-wrap: wrap; }
-    .machineMeta b { color: var(--white); }
-    .radarCanvas {
-      position: relative;
-      min-height: 430px;
-      padding: 28px;
-      border: 1px solid rgba(115,226,255,0.12);
-      border-radius: 20px;
-      background: radial-gradient(circle at 50% 45%, rgba(65,223,255,0.08), transparent 48%), rgba(0,0,0,0.15);
-    }
-    .pressBlock {
-      position: absolute;
-      left: 6%; right: 6%; top: 118px; height: 190px;
-      border: 1px solid rgba(115,226,255,0.22);
-      border-radius: 34px;
-      background: linear-gradient(180deg, #142434, #0a141e 60%, #0e1924);
-      box-shadow: 0 26px 70px rgba(0,0,0,0.52), inset 0 0 42px rgba(65,223,255,0.05);
-    }
-    .pressBlock::before { content: "LANDA PRESS SYSTEMS"; position: absolute; left: 24px; top: 18px; color: rgba(245,251,255,0.62); font-weight: 900; letter-spacing: .12em; font-size: 13px; }
-    .llciGroup {
-      position: absolute;
-      left: 39%; right: 10%; bottom: 24px;
-      height: 112px;
-      border: 1px dashed rgba(65,223,255,0.28);
-      border-radius: 20px;
-      background: rgba(65,223,255,0.035);
-    }
-    .llciGroupLabel { position: absolute; left: 18px; top: 10px; color: #9bc0cb; font-size: 13px; font-weight: 850; }
-    .hotspotCard {
-      position: absolute;
-      z-index: 2;
-      width: min(180px, 18%);
-      min-width: 142px;
-      min-height: 112px;
-      border: 1px solid rgba(115,226,255,0.2);
-      border-radius: 17px;
-      background: rgba(8, 16, 25, 0.94);
-      color: var(--text);
-      padding: 14px;
-      text-align: left;
-      cursor: pointer;
-      box-shadow: 0 12px 30px rgba(0,0,0,0.28);
-    }
-    .hotspotCard b { display: block; color: var(--white); font-size: 24px; line-height: 1; margin-bottom: 9px; }
-    .hotspotCard span { display: block; color: var(--muted); font-size: 13px; line-height: 1.25; }
-    .hotspotCard .count { color: var(--cyan); font-weight: 900; margin-top: 9px; }
-    .hotspotCard.discovered { border-color: rgba(65,223,255,0.55); background: linear-gradient(180deg, rgba(65,223,255,0.10), rgba(8,16,25,0.94)); }
-    .hotspotCard.warning { border-color: rgba(255,180,87,0.7); background: linear-gradient(180deg, var(--orange-soft), rgba(8,16,25,0.94)); }
-    .hotspotCard.issue { border-color: rgba(255,66,87,0.75); background: linear-gradient(180deg, var(--red-soft), rgba(15,8,13,0.96)); }
-    .hotspotCard.noData { opacity: 0.78; }
-    .hotspotCard[data-system="IRD"] { left: 10%; top: 48px; }
-    .hotspotCard[data-system="FEC"] { left: 27%; top: 88px; }
-    .hotspotCard[data-system="IPS"] { left: 43%; top: 206px; }
-    .hotspotCard[data-system="ECC"] { left: 56%; top: 62px; }
-    .hotspotCard[data-system="LLCI"] { left: 70%; top: 88px; }
-    .hotspotCard[data-system="BSS"] { left: 73%; top: 206px; }
-    .stateRibbon { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
-    .stateChip { border: 1px solid rgba(115,226,255,0.12); border-radius: 14px; padding: 12px; background: rgba(255,255,255,0.024); }
-    .stateChip label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
-    .stateChip b { color: var(--white); font-size: 16px; }
-
-    .issuePanel { border-color: rgba(255,66,87,0.24); }
-    .fieldGrid { display: grid; gap: 11px; }
-    .field { border: 1px solid rgba(115,226,255,0.11); border-radius: 14px; padding: 12px 13px; background: rgba(255,255,255,0.025); }
-    .field label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
-    .field b, .field span { display: block; color: var(--white); overflow-wrap: anywhere; }
-    .field span { color: #c4d4dd; }
-    .drillBtn { width: 100%; margin-top: 14px; min-height: 46px; border: 1px solid rgba(65,223,255,0.5); border-radius: 14px; background: linear-gradient(180deg, rgba(65,223,255,0.16), rgba(65,223,255,0.05)); color: var(--white); font-weight: 900; cursor: pointer; }
-
-    .bottomGrid { display: grid; grid-template-columns: minmax(260px, .92fr) minmax(460px, 1.42fr) minmax(260px, .86fr); gap: 12px; margin-top: 12px; }
-    .timeline { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
-    .segment { min-width: 150px; padding: 12px; border: 1px solid rgba(115,226,255,0.14); border-top: 4px solid var(--cyan); border-radius: 14px; background: rgba(65,223,255,0.045); }
-    .segment.printing, .segment.ready { border-top-color: var(--green); }
-    .segment.error, .segment.recovery { border-top-color: var(--red); }
-    .segment.maintenance, .segment.warning { border-top-color: var(--orange); }
-    .segment b { display: block; color: var(--white); }
-    .segment span { display: block; color: var(--muted); font-size: 13px; margin-top: 6px; }
-    .tableWrap { overflow: auto; max-height: 330px; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px 11px; border-bottom: 1px solid rgba(115,226,255,0.09); text-align: left; vertical-align: top; }
-    th { position: sticky; top: 0; z-index: 1; color: #a6b6c0; background: rgba(6, 11, 17, 0.98); font-size: 13px; }
-    td { color: #d7e7ef; font-size: 14px; }
-    .messageCell { max-width: 480px; }
-    .messageText { max-height: 44px; overflow: hidden; color: #c4d4dd; }
-    .detailsToggle { margin-top: 5px; border: 0; background: transparent; color: var(--cyan); padding: 0; cursor: pointer; font-weight: 800; }
-    .rawLine { margin-top: 8px; display: none; color: #9dafba; font: 12px/1.45 var(--mono); white-space: pre-wrap; }
-    tr.expanded .rawLine { display: block; }
-    .actionList { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-    .actionList li { border: 1px solid rgba(115,226,255,0.12); border-radius: 14px; padding: 12px; color: #d0e0e8; background: rgba(255,255,255,0.024); }
-
-    .breadcrumb { display: flex; align-items: center; gap: 8px; margin: 14px 0 12px; color: var(--muted); font-weight: 750; flex-wrap: wrap; }
-    .breadcrumb b { color: var(--white); }
-    .drillLayout { display: grid; grid-template-columns: 300px minmax(540px, 1fr) 360px; gap: 12px; align-items: start; }
-    .sideStack, .rightStack { display: grid; gap: 12px; }
-    .sourceList, .findingList { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-    .sourceList li, .findingList li { border: 1px solid rgba(115,226,255,0.1); border-radius: 12px; padding: 10px; background: rgba(255,255,255,0.022); }
-    .mapCanvas { position: relative; min-height: 530px; border: 1px solid rgba(115,226,255,0.12); border-radius: 18px; background: radial-gradient(circle at 50% 45%, rgba(65,223,255,0.08), transparent 50%), rgba(0,0,0,0.16); padding: 22px; }
-    .connectorSvg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-    .componentCard {
-      position: absolute;
-      width: 180px;
-      min-height: 92px;
-      padding: 14px;
-      border: 1px solid rgba(115,226,255,0.18);
-      border-radius: 16px;
-      background: rgba(9, 17, 26, 0.96);
-      box-shadow: 0 14px 34px rgba(0,0,0,0.28);
-    }
-    .componentCard b { display: block; color: var(--white); font-size: 16px; line-height: 1.2; }
-    .componentCard span { display: block; margin-top: 8px; color: var(--muted); font-size: 13px; }
-    .componentCard.inferred { border-color: rgba(255,180,87,0.74); background: linear-gradient(180deg, var(--orange-soft), rgba(9,17,26,0.96)); }
-    .componentCard.issue { border-color: rgba(255,66,87,0.78); background: linear-gradient(180deg, var(--red-soft), rgba(15,8,13,0.96)); }
-    .componentCard.neutral { border-color: rgba(65,223,255,0.28); }
-    .signalBox { border: 1px solid rgba(115,226,255,0.12); border-radius: 14px; min-height: 126px; padding: 12px; background: rgba(255,255,255,0.022); }
-    .sparkSvg { width: 100%; height: 130px; display: block; }
-    .whyGrid { display: grid; grid-template-columns: 1fr 320px; gap: 12px; margin-top: 12px; }
-
-    .footerStatus {
-      margin-top: 14px;
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 8px;
-      padding: 10px;
-      border: 1px solid rgba(115,226,255,0.13);
-      border-radius: 15px;
-      background: rgba(5, 9, 14, 0.9);
-    }
-    .footItem { color: #b7c8d2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-    .footItem b { color: var(--muted); font-weight: 650; }
-
-    @media (max-width: 1320px) {
-      .topHeader, .serviceLayout, .bottomGrid, .drillLayout, .whyGrid { grid-template-columns: 1fr; }
-      .headerTools { justify-content: flex-start; }
-      .kpiRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .radarCanvas { min-height: 720px; }
-      .hotspotCard { width: 42%; min-width: 0; }
-      .hotspotCard[data-system="IRD"] { left: 6%; top: 60px; }
-      .hotspotCard[data-system="FEC"] { left: 52%; top: 60px; }
-      .hotspotCard[data-system="IPS"] { left: 6%; top: 210px; }
-      .hotspotCard[data-system="ECC"] { left: 52%; top: 210px; }
-      .hotspotCard[data-system="LLCI"] { left: 6%; top: 360px; }
-      .hotspotCard[data-system="BSS"] { left: 52%; top: 360px; }
-      .pressBlock { top: 520px; height: 120px; }
-      .llciGroup { display: none; }
-      .footerStatus { grid-template-columns: 1fr 1fr; }
-    }
-    @media (max-width: 760px) {
-      .app { padding: 10px; }
-      .kpiRow, .stateRibbon, .scanStrip, .footerStatus { grid-template-columns: 1fr; }
-      .hotspotCard { position: static; width: 100%; margin-bottom: 10px; }
-      .radarCanvas { min-height: auto; }
-      .pressBlock, .llciGroup { display: none; }
-      .componentCard { position: static; width: 100%; margin-bottom: 10px; }
-      .mapCanvas { min-height: auto; }
-      .connectorSvg { display: none; }
-    }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); }
+    body { color: var(--text); font: 15px/1.5 var(--sans); background:
+      radial-gradient(circle at 14% 0%, rgba(66,220,255,.14), transparent 34%),
+      radial-gradient(circle at 82% 9%, rgba(98,217,154,.06), transparent 30%),
+      linear-gradient(135deg, #020509 0%, #07111b 56%, #03070b 100%); }
+    button, input, select { font: inherit; } input[type=file] { display: none; }
+    button { cursor: pointer; } .hidden { display: none !important; }
+    .app { max-width: 1860px; margin: 0 auto; padding: 16px; }
+    .top { display: grid; grid-template-columns: minmax(285px, auto) 1fr minmax(430px, auto); gap: 18px; align-items: center;
+      padding: 12px 14px; border: 1px solid var(--line); border-radius: 20px; background: rgba(8,16,25,.92); box-shadow: var(--shadow); }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .logo { width: 92px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--white); font-weight: 900; letter-spacing: .15em; border: 1px solid rgba(255,255,255,.16); background: linear-gradient(135deg, rgba(255,255,255,.08), rgba(66,220,255,.09)); }
+    h1 { margin: 0; color: var(--white); font-size: 25px; line-height: 1; letter-spacing: -.04em; }
+    .subtitle { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .nav { display: flex; justify-content: center; gap: 7px; flex-wrap: wrap; }
+    .nav button { border: 1px solid transparent; background: transparent; color: #9db0bd; border-radius: 999px; padding: 9px 12px; font-weight: 800; }
+    .nav button.active, .nav button:hover { color: var(--white); border-color: var(--line2); background: var(--cyan2); }
+    .tools { display: flex; justify-content: flex-end; align-items: center; gap: 9px; flex-wrap: wrap; }
+    .range, .toolBtn { min-height: 39px; border-radius: 999px; border: 1px solid var(--line); padding: 8px 13px; color: var(--text); background: rgba(255,255,255,.035); }
+    .toolBtn { display: inline-flex; align-items: center; gap: 8px; color: var(--white); font-weight: 850; border-color: rgba(66,220,255,.34); background: linear-gradient(180deg, rgba(66,220,255,.15), rgba(66,220,255,.04)); }
+    .analyze { border-color: rgba(98,217,154,.45); background: linear-gradient(180deg, rgba(98,217,154,.16), rgba(98,217,154,.05)); }
+    .strip { margin: 12px 0; display: grid; grid-template-columns: minmax(265px, auto) 1fr auto; gap: 13px; align-items: center; padding: 11px 14px; border: 1px solid rgba(135,229,255,.13); border-radius: 16px; background: rgba(6,13,21,.82); }
+    .mode { color: var(--white); font-weight: 900; } .stage { color: var(--muted); font-weight: 750; }
+    .progress { height: 9px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+    .bar { width: 0%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #119dbd, var(--cyan)); transition: width .18s ease; }
+    .counts { color: var(--muted); font-size: 13px; white-space: nowrap; }
+    .card { border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, rgba(13,24,36,.96), rgba(5,10,16,.97)); box-shadow: inset 0 1px 0 rgba(255,255,255,.035); overflow: hidden; }
+    .head { min-height: 55px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid rgba(135,229,255,.11); }
+    .head h2, .head h3 { margin: 0; color: var(--white); font-size: 17px; letter-spacing: -.01em; } .head span { color: var(--muted); font-size: 13px; }
+    .body { padding: 16px; } .muted { color: var(--muted); } .small { font-size: 13px; color: var(--muted); }
+    .empty { padding: 16px; border: 1px dashed rgba(135,229,255,.21); border-radius: 14px; background: rgba(255,255,255,.025); color: var(--muted); }
+    .empty ol { margin: 9px 0 0 22px; padding: 0; }
+    .kpis { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
+    .kpi { padding: 17px; min-height: 118px; } .kpi label { display: block; color: #a7bac6; font-weight: 850; margin-bottom: 10px; }
+    .kpi strong { display: block; color: var(--white); font-size: clamp(24px,2.3vw,38px); line-height: 1.05; letter-spacing: -.045em; }
+    .kpi small { display: block; color: var(--muted); margin-top: 9px; }
+    .mainGrid { display: grid; grid-template-columns: minmax(250px, 1.05fr) minmax(430px, 2.1fr) minmax(330px, 1.25fr); gap: 12px; align-items: start; }
+    .machineList { display: grid; gap: 10px; } .machine { width: 100%; text-align: left; border: 1px solid rgba(135,229,255,.13); border-radius: 15px; background: rgba(255,255,255,.025); padding: 13px; color: var(--text); }
+    .machine.active { border-color: var(--line2); background: var(--cyan2); } .machine b { color: var(--white); font-size: 17px; } .machine .row { display: flex; justify-content: space-between; margin-top: 6px; color: var(--muted); font-size: 13px; gap: 10px; }
+    .systems { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+    .systemCard { min-height: 188px; padding: 16px; text-align: left; border-radius: 18px; border: 1px solid rgba(135,229,255,.15); background: rgba(255,255,255,.025); color: var(--text); }
+    .systemCard:hover, .systemCard.active { border-color: var(--line2); background: rgba(66,220,255,.08); }
+    .sysTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; } .sysTop b { color: var(--white); font-size: 24px; letter-spacing: -.03em; }
+    .badge { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font-size: 12px; color: #c7d7df; font-weight: 900; white-space: nowrap; }
+    .critical { border-color: rgba(255,71,93,.55)!important; background: var(--red2)!important; color: #ffdce2!important; } .warning { border-color: rgba(255,181,71,.58)!important; background: var(--amber2)!important; color: #ffe4b7!important; }
+    .ok { border-color: rgba(98,217,154,.5)!important; background: var(--green2)!important; color: #cff6df!important; } .discovery { border-color: rgba(66,220,255,.52)!important; background: var(--cyan2)!important; color: #d7f8ff!important; }
+    .nodata { border-color: rgba(145,162,175,.22)!important; background: rgba(145,162,175,.07)!important; color: #adb9c1!important; }
+    .sysStats { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin: 12px 0; }
+    .stat { border: 1px solid rgba(135,229,255,.1); border-radius: 12px; padding: 9px; background: rgba(0,0,0,.12); } .stat label { display: block; color: var(--muted); font-size: 12px; } .stat strong { color: var(--white); font-size: 16px; }
+    .issueTitle { margin: 0 0 11px; color: var(--white); font-size: 20px; line-height: 1.2; } .fields { display: grid; gap: 10px; }
+    .field { border: 1px solid rgba(135,229,255,.12); border-radius: 13px; padding: 11px 12px; background: rgba(255,255,255,.025); } .field label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; } .field span { color: #d7e6ee; overflow-wrap: anywhere; }
+    .tabs { margin-top: 12px; } .tabBtns { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px; border-bottom: 1px solid rgba(135,229,255,.11); }
+    .tabBtns button { border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.025); color: #aebfc9; padding: 8px 12px; font-weight: 850; } .tabBtns button.active { color: var(--white); border-color: var(--line2); background: var(--cyan2); }
+    .panel { padding: 14px; } table { width: 100%; border-collapse: collapse; } th, td { padding: 11px 10px; border-bottom: 1px solid rgba(135,229,255,.09); text-align: left; vertical-align: top; } th { color: #acc0cb; font-size: 12px; letter-spacing: .03em; text-transform: uppercase; } td { color: #d0dee7; } tr:hover td { background: rgba(66,220,255,.035); }
+    .tableWrap { overflow: auto; max-height: 520px; } .raw { max-width: 420px; color: #aab8c1; } .mono { font-family: var(--mono); font-size: 12px; }
+    .timeline { display: grid; gap: 10px; } .segment { display: grid; grid-template-columns: 170px 1fr 170px; gap: 12px; align-items: center; } .rail { height: 28px; border-radius: 999px; background: rgba(255,255,255,.07); overflow: hidden; } .fill { height: 100%; min-width: 5%; border-radius: inherit; background: linear-gradient(90deg, var(--cyan), var(--green)); }
+    .actions { margin-top: 12px; } .actions ul { margin: 0; padding-left: 20px; } .actions li { margin: 8px 0; }
+    .viewOnly { display: none; } .viewOnly.active { display: block; }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; } select { border: 1px solid var(--line); border-radius: 999px; background: #09131d; color: var(--text); padding: 8px 11px; }
+    @media (max-width: 1250px) { .top, .strip, .mainGrid { grid-template-columns: 1fr; } .tools { justify-content: flex-start; } .kpis { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+    @media (max-width: 720px) { .app { padding: 10px; } .systems, .kpis { grid-template-columns: 1fr; } .segment { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <div class="app">
-    <div class="shell">
-      <header class="topHeader" aria-label="PANDA service header">
-        <div class="brandBlock">
-          <div class="landaLogo">LANDA</div>
-          <div class="titleBlock">
-            <h1>PANDA Tool</h1>
-            <p>Proactive Analyzer Notification DA</p>
-          </div>
-        </div>
-        <nav class="nav" aria-label="Primary navigation">
-          <button class="navBtn active" type="button" data-view="radar">Service Radar</button>
-          <button class="navBtn" type="button">Alerts</button>
-          <button class="navBtn" type="button" data-view="drill">Analysis</button>
-          <button class="navBtn" type="button">Machines</button>
-          <button class="navBtn" type="button">Reports</button>
-          <button class="navBtn" type="button">Knowledge</button>
-        </nav>
-        <div class="headerTools">
-          <span class="dataRange" id="lastDataRange">Last data range: No data</span>
-          <label class="loadButton" for="fileInput">Load Logs</label>
-          <label class="loadButton" for="zipInput">Load ZIP</label>
-          <input id="fileInput" type="file" multiple webkitdirectory />
-          <input id="zipInput" type="file" multiple accept=".zip,application/zip" />
-        </div>
-      </header>
+    <header class="top">
+      <div class="brand"><div class="logo">LANDA</div><div><h1>PANDA Tool</h1><p class="subtitle">Proactive Analyzer Notification DA</p></div></div>
+      <nav class="nav" id="nav"></nav>
+      <div class="tools">
+        <span class="range" id="dataRange">Last data range: No data</span>
+        <label class="toolBtn">Upload Logs<input id="logInput" type="file" multiple webkitdirectory /></label>
+        <label class="toolBtn">Upload ZIP / Files<input id="logZipInput" type="file" multiple /></label>
+        <label class="toolBtn">Upload Rules<input id="rulesInput" type="file" accept=".xlsx,.xls,.csv" /></label>
+        <button class="toolBtn analyze" id="analyzeBtn">Analyze</button>
+      </div>
+    </header>
 
-      <section class="scanStrip" aria-label="Scan status">
-        <div><span id="scanStage" class="stage">Idle / waiting for focused logs</span><div id="dataStatus" class="dataStatus">Discovery mode only</div></div>
-        <div class="progress"><div id="bar" class="bar"></div></div>
-        <div id="scanPct" class="scanPct">0%</div>
+    <section class="strip">
+      <div><span class="mode" id="modeText">Idle</span> <span class="stage" id="stageText">/ Idle / waiting for files</span></div>
+      <div class="progress"><div class="bar" id="progressBar"></div></div>
+      <div class="counts" id="countsText">0 focused files · 0 rules · 0 machines</div>
+    </section>
+
+    <main>
+      <section id="serviceView" class="viewOnly active">
+        <div class="kpis" id="kpis"></div>
+        <div class="mainGrid">
+          <section class="card"><div class="head"><h2>Machine Selector</h2><span id="machineHint">No data</span></div><div class="body"><div id="machineList" class="machineList"></div></div></section>
+          <section class="card"><div class="head"><h2>System Health</h2><span>Evidence-backed status only</span></div><div class="body"><div id="systems" class="systems"></div></div></section>
+          <aside class="card"><div class="head"><h2>Selected Issue Details</h2><span id="detailHint">No selection</span></div><div class="body" id="selectedIssue"></div></aside>
+        </div>
+        <section class="card tabs"><div class="tabBtns" id="tabBtns"></div><div class="panel" id="tabPanel"></div></section>
+        <section class="card actions"><div class="head"><h2>Recommended Actions</h2><span>Rules first, discovery second</span></div><div class="body" id="actionsPanel"></div></section>
       </section>
 
-      <main id="serviceRadarView">
-        <section class="kpiRow" aria-label="KPI summary">
-          <article class="card kpi" id="kpiRiskCard"><label>Machines at Risk</label><strong id="kpiMachinesAtRisk">Pending Rules</strong><small id="kpiMachinesAtRiskNote">Discovery Only</small></article>
-          <article class="card kpi"><label>P1 Alerts</label><strong id="kpiP1Alerts">No real alerts</strong><small>Rules required before alerting</small></article>
-          <article class="card kpi"><label>Detection Confidence</label><strong id="kpiConfidence">Pending Rules</strong><small>Discovery Only</small></article>
-          <article class="card kpi"><label>Open Preventive Actions</label><strong id="kpiActions">Pending Rules</strong><small>No dispatch decision without rules</small></article>
-          <article class="card kpi"><label>Mean Time to Detect</label><strong id="kpiMTTD">Pending Rules</strong><small>Duration rules required</small></article>
-        </section>
-
-        <section class="serviceLayout">
-          <article class="card machinePanel">
-            <div class="cardHeader"><h2>Machine System Radar</h2><span id="machineCaption">MachineStates provide state context only</span></div>
-            <div class="cardBody">
-              <div class="machineMeta"><span>Machine ID: <b id="machineId">Pending</b></span><span>Focused sources: <b id="sourceCoverage">0 / 5</b></span><span>Files parsed: <b id="focusedFilesCount">0</b></span></div>
-              <div class="radarCanvas" aria-label="Simplified press system radar">
-                <div class="pressBlock"></div>
-                <div class="llciGroup"><span class="llciGroupLabel">Grouped under LLCINotification</span></div>
-                <button class="hotspotCard noData" type="button" data-system="IRD"><b>IRD</b><span class="source">No focused source</span><span class="count">0 events</span><span class="status">No data</span></button>
-                <button class="hotspotCard noData" type="button" data-system="FEC"><b>FEC</b><span class="source">FECNotification</span><span class="count">0 events</span><span class="status">No data</span></button>
-                <button class="hotspotCard noData" type="button" data-system="IPS"><b>IPS</b><span class="source">LLCINotification</span><span class="count">0 events</span><span class="status">No data</span></button>
-                <button class="hotspotCard noData" type="button" data-system="ECC"><b>ECC</b><span class="source">No focused source</span><span class="count">0 events</span><span class="status">No data</span></button>
-                <button class="hotspotCard noData" type="button" data-system="LLCI"><b>LLCI</b><span class="source">LLCINotification</span><span class="count">0 events</span><span class="status">No data</span></button>
-                <button class="hotspotCard noData" type="button" data-system="BSS"><b>BSS</b><span class="source">LLCINotification</span><span class="count">0 events</span><span class="status">No data</span></button>
-              </div>
-              <div class="stateRibbon">
-                <div class="stateChip"><label>Current State</label><b id="currentState">Pending</b></div>
-                <div class="stateChip"><label>State Context</label><b id="stateContext">No MachineStates parsed</b></div>
-                <div class="stateChip"><label>Last Timestamp</label><b id="lastTimestamp">No data</b></div>
-                <div class="stateChip"><label>Service Posture</label><b>Discovery only</b></div>
-              </div>
-            </div>
-          </article>
-
-          <aside class="card issuePanel">
-            <div class="cardHeader"><h2>Active Finding</h2><span class="pill badgePrelim">Preliminary only / Not a real alert</span></div>
-            <div class="cardBody">
-              <div id="noFinding" class="empty">No focused finding selected.<br />Upload FECNotification, LLCINotification, MachineStates or AlertsMonitoring logs.</div>
-              <div id="findingFields" class="fieldGrid hidden">
-                <div class="field"><label>System</label><b id="issueSystem">Pending</b></div>
-                <div class="field"><label>Source log</label><span id="issueSource">Pending</span></div>
-                <div class="field"><label>Current state</label><span id="issueState">Pending MachineStates</span></div>
-                <div class="field"><label>Summary</label><span id="issueSummary">No focused finding selected</span></div>
-                <div class="field"><label>Evidence count</label><span id="issueEvidenceCount">0</span></div>
-                <div class="field"><label>Last timestamp</label><span id="issueTimestamp">No data</span></div>
-                <div class="field"><label>Rules status</label><span>Required for real alert</span></div>
-              </div>
-              <button id="openInvestigation" class="drillBtn" type="button">Open Investigation</button>
-            </div>
-          </aside>
-        </section>
-
-        <section class="bottomGrid">
-          <article class="card"><div class="cardHeader"><h3>State Timeline</h3><span>MachineStates only</span></div><div class="cardBody"><div id="timeline" class="timeline"><div class="empty">No MachineStates parsed</div></div></div></article>
-          <article class="card"><div class="cardHeader"><h3>Preliminary Evidence</h3><span>Focused logs only</span></div><div class="cardBody"><div class="tableWrap"><table id="evidenceTable"></table></div></div></article>
-          <article class="card"><div class="cardHeader"><h3>Recommended Next Step</h3><span>Discovery mode</span></div><div class="cardBody"><ul id="serviceActions" class="actionList"></ul></div></article>
-        </section>
-      </main>
-
-      <main id="drillDownView" class="hidden">
-        <div class="breadcrumb">Machine Overview <span>›</span> <b id="crumbMachine">Machine ID</b> <span>›</span> <b id="crumbSystem">Selected System</b> <span>›</span> <b>Investigation</b></div>
-        <section class="drillLayout">
-          <aside class="sideStack">
-            <article class="card"><div class="cardHeader"><h3>Machine Context</h3><span>Discovery</span></div><div class="cardBody"><div class="fieldGrid"><div class="field"><label>Machine ID</label><b id="sideMachine">Pending</b></div><div class="field"><label>Current State</label><span id="sideState">Pending</span></div><div class="field"><label>Selected System</label><span id="sideSystem">Pending</span></div></div></div></article>
-            <article class="card"><div class="cardHeader"><h3>Source Logs</h3><span>Focused files</span></div><div class="cardBody"><ul id="sourceLogList" class="sourceList"><li>No focused logs loaded</li></ul></div></article>
-            <article class="card"><div class="cardHeader"><h3>Focused Findings</h3><span>Preliminary</span></div><div class="cardBody"><ul id="focusedFindingList" class="findingList"><li>No focused findings parsed</li></ul></div></article>
-          </aside>
-
-          <section>
-            <article class="card">
-              <div class="cardHeader"><h2>System Investigation Map</h2><span id="mapSubtitle">Component mapping pending</span></div>
-              <div class="cardBody"><div id="systemMap" class="mapCanvas"></div></div>
-            </article>
-            <section class="whyGrid">
-              <article class="card"><div class="cardHeader"><h3>Why PANDA suspects this</h3><span>Honest discovery evidence</span></div><div class="cardBody"><ul id="whyList" class="actionList"></ul></div></article>
-              <article class="card"><div class="cardHeader"><h3>Related Rules</h3><span>Rules status</span></div><div class="cardBody"><div class="empty">Rules pending</div></div></article>
-            </section>
-          </section>
-
-          <aside class="rightStack">
-            <article class="card"><div class="cardHeader"><h3>Key Signal / Numeric Values</h3><span id="signalCount">0 values</span></div><div class="cardBody"><div id="keySignal" class="signalBox">No numeric signal detected yet.</div></div></article>
-            <article class="card"><div class="cardHeader"><h3>State Context</h3><span>MachineStates</span></div><div class="cardBody"><div id="drillStateContext" class="empty">No MachineStates parsed</div></div></article>
-            <article class="card"><div class="cardHeader"><h3>Evidence Summary</h3><span>Selected system</span></div><div class="cardBody"><div id="evidenceSummary" class="fieldGrid"></div></div></article>
-          </aside>
-        </section>
-      </main>
-
-      <footer class="footerStatus" aria-label="Footer status">
-        <span class="footItem"><b>Data</b> <span id="footConnection">No data loaded</span></span>
-        <span class="footItem"><b>PANDA Engine</b> Discovery / Rules pending</span>
-        <span class="footItem"><b>Last timestamp</b> <span id="footTimestamp">No data</span></span>
-        <span class="footItem"><b>Machine ID</b> <span id="footMachine">Pending</span></span>
-        <span class="footItem"><b>Site</b> <span id="footSite">Pending</span></span>
-      </footer>
-    </div>
+      <section id="alertsView" class="viewOnly card"><div class="head"><h2>Alerts</h2><span>Confirmed alerts only</span></div><div class="body" id="alertsPanel"></div></section>
+      <section id="analysisView" class="viewOnly card"><div class="head"><h2>Analysis</h2><span>Rule matches, signal discovery, coverage</span></div><div class="body" id="analysisPanel"></div></section>
+      <section id="machinesView" class="viewOnly card"><div class="head"><h2>Machines</h2><span>Detected machine summary</span></div><div class="body" id="machinesPanel"></div></section>
+      <section id="reportsView" class="viewOnly card"><div class="head"><h2>Reports</h2><span>Future export workspace</span></div><div class="body" id="reportsPanel"></div></section>
+      <section id="knowledgeView" class="viewOnly card"><div class="head"><h2>Knowledge</h2><span>Future service knowledge articles</span></div><div class="body" id="knowledgePanel"></div></section>
+    </main>
   </div>
 
   <script>
-    const FOCUSED_LOGS = [
-      { key: 'FECNotification', label: 'FECNotification', match: /FECNotification/i },
-      { key: 'LLCINotification', label: 'LLCINotification', match: /LLCINotification/i },
-      { key: 'MachineStates', label: 'MachineStates', match: /MachineStates/i },
-      { key: 'AlertsMonitoring', label: 'AlertsMonitoring', match: /AlertsMonitoring/i },
-      { key: 'AletrsMonitoring', label: 'AletrsMonitoring', match: /AletrsMonitoring/i }
-    ];
-    const MACHINE_STATES = ['Standby', 'Ready', 'Prepare2Print', 'Printing', 'PrintEnd', 'Recovery', 'Error', 'Init', 'Idle', 'Maintenance', 'Shutdown', 'Starting', 'Stopped', 'Service'];
-    const FINDING_RE = /\b(error|fatal|exception|failed|failure|fault|warning|warn|timeout|disconnect|alarm|alert|pressure|sensor|blanket|bss|ips|ink|fec)\b/i;
-    const COMPONENT_SETS = {
-      BSS: ['Blanket Cylinder', 'Pressure Sensor', 'Regulator', 'Valve Block', 'Air Supply', 'Drive Motor', 'Cooling Loop', 'Feedback Sensor'],
-      IPS: ['Ink Pressure', 'Ink Flow', 'Temperature', 'Pump', 'Filter', 'Valve'],
-      FEC: ['Feeder', 'Sheet Transport', 'Sensors', 'Registration'],
-      LLCI: ['LLCI Controller', 'I/O Channel', 'State Reporter', 'Notification Bus'],
-      AlertsMonitoring: ['Alert Collector', 'Alert State', 'Alert Source'],
-      IRD: ['Component mapping pending'],
-      ECC: ['Component mapping pending']
-    };
-    const COMPONENT_KEYWORDS = {
-      'Blanket Cylinder': /blanket|cylinder/i,
-      'Pressure Sensor': /pressure|sensor/i,
-      Regulator: /regulator/i,
-      'Valve Block': /valve/i,
-      'Air Supply': /air|pneumatic/i,
-      'Drive Motor': /drive|motor/i,
-      'Cooling Loop': /cool|temperature|temp/i,
-      'Feedback Sensor': /feedback|encoder|sensor/i,
-      'Ink Pressure': /ink.*pressure|pressure.*ink/i,
-      'Ink Flow': /ink.*flow|flow.*ink/i,
-      Temperature: /temperature|temp|°c/i,
-      Pump: /pump/i,
-      Filter: /filter/i,
-      Valve: /valve/i,
-      Feeder: /feeder|feed/i,
-      'Sheet Transport': /sheet|transport/i,
-      Sensors: /sensor/i,
-      Registration: /registration|register/i
-    };
-    const $ = selector => document.querySelector(selector);
-    const $$ = selector => Array.from(document.querySelectorAll(selector));
-
+    const FOCUSED_LOGS = ['FECNotification', 'LLCINotification', 'MachineStates', 'AlertsMonitoring', 'AletrsMonitoring'];
+    const SYSTEMS = ['FEC', 'LLCI', 'BSS', 'IPS', 'AlertsMonitoring'];
+    const STAGES = ['Idle / waiting for files', 'Opening archive', 'Finding focused logs', 'Parsing MachineStates', 'Parsing Notifications', 'Loading Rules', 'Evaluating Rules', 'Building Dashboard', 'Complete'];
+    const STATE_NAMES = ['Standby','Ready','Prepare2Print','Printing','PrintEnd','Recovery','Error','ON','Offline','Unknown'];
+    const SUPPORTED_CHECKS = ['range', 'above threshold', 'below threshold'];
     const appState = {
-      focusedFiles: [],
-      machineStates: [],
-      evidence: [],
-      systems: {
-        FEC: systemRecord('FEC'),
-        LLCI: systemRecord('LLCI'),
-        BSS: systemRecord('BSS'),
-        IPS: systemRecord('IPS'),
-        AlertsMonitoring: systemRecord('AlertsMonitoring')
-      },
-      selectedSystem: '',
-      selectedFinding: null,
-      parsedPaths: new Set(),
-      focusedPathSet: new Set(),
-      scannedArchives: new Set(),
-      progress: 0,
-      machines: new Map(),
-      lastStateByMachine: new Map(),
-      numericSignals: []
+      mode: 'Idle', scanStage: STAGES[0], progress: 0, focusedFiles: [], machines: {}, machineStates: [], evidence: [], signalProfiles: [], rules: [], ruleMatches: [], alerts: [], needsValidation: [], selectedMachineId: null, selectedSystem: null, selectedIssue: null,
+      visitedZips: new Set(), parsedPaths: new Set(), view: 'Service Radar', activeTab: 'State Timeline', dashboard: { systems: {}, range: null }
     };
 
-    function systemRecord(name) { return { name, count: 0, files: new Set(), last: '', findings: [], source: sourceForSystem(name) }; }
-    function sourceForSystem(system) {
-      if (system === 'FEC') return 'FECNotification';
-      if (system === 'BSS' || system === 'IPS' || system === 'LLCI') return 'LLCINotification';
-      if (system === 'AlertsMonitoring') return 'AlertsMonitoring';
-      return 'No focused source';
-    }
-    function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
-    function focusForPath(path) { return FOCUSED_LOGS.find(log => log.match.test(path)); }
-    function normalizeSource(path) { return focusForPath(path)?.key || 'Pending'; }
-    function activeMachine() { return Array.from(appState.machines.values()).sort((a, b) => (b.last || '').localeCompare(a.last || ''))[0] || null; }
-    function latestTimestamp() { return [...appState.evidence.map(e => e.timestamp), ...appState.machineStates.map(s => s.timestamp)].filter(Boolean).sort().pop() || ''; }
-    function currentState() { return appState.machineStates.filter(s => s.state).sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))[0]?.state || 'Pending'; }
-
-    function setStage(stage, progress) {
-      $('#scanStage').textContent = stage;
-      if (typeof progress === 'number') {
-        appState.progress = Math.max(appState.progress, Math.min(100, Math.round(progress)));
-        $('#bar').style.width = `${appState.progress}%`;
-        $('#scanPct').textContent = `${appState.progress}%`;
-      }
-    }
-    function resetScan() {
-      appState.focusedFiles = [];
-      appState.machineStates = [];
-      appState.evidence = [];
-      appState.systems = { FEC: systemRecord('FEC'), LLCI: systemRecord('LLCI'), BSS: systemRecord('BSS'), IPS: systemRecord('IPS'), AlertsMonitoring: systemRecord('AlertsMonitoring') };
-      appState.selectedSystem = '';
-      appState.selectedFinding = null;
-      appState.parsedPaths.clear();
-      appState.focusedPathSet.clear();
-      appState.scannedArchives.clear();
-      appState.progress = 0;
-      appState.machines.clear();
-      appState.lastStateByMachine.clear();
-      appState.numericSignals = [];
-      setStage('Idle / waiting for focused logs', 0);
-      $('#dataStatus').textContent = 'Discovery mode only';
+    function initApp() {
+      renderNav(); document.getElementById('logInput').addEventListener('change', handleLogUpload); document.getElementById('logZipInput').addEventListener('change', handleLogUpload); document.getElementById('rulesInput').addEventListener('change', handleRulesUpload); document.getElementById('analyzeBtn').addEventListener('click', analyze); renderDashboard();
     }
 
-    function parseTimestamp(line, path = '') {
-      let match = line.match(/\[(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}:\d{2})(?:[\.:](\d+))?\]/);
-      if (match) return `${match[3]}-${match[2]}-${match[1]} ${match[4]}`;
-      match = line.match(/(20\d{2})[-_](\d{2})[-_](\d{2})[T_\s](\d{2})[-:]?(\d{2})[-:]?(\d{2})/);
-      if (match) return `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`;
-      match = path.match(/(20\d{2})[-_](\d{2})[-_](\d{2})[T_\s-]?(\d{2})?[-:]?(\d{2})?[-:]?(\d{2})?/);
-      if (match) return `${match[1]}-${match[2]}-${match[3]} ${match[4] || '00'}:${match[5] || '00'}:${match[6] || '00'}`;
-      return '';
+    function setStage(stage, progress) { appState.scanStage = stage; appState.progress = Math.max(appState.progress || 0, Math.min(100, progress)); renderStatus(); }
+    function completeStage() { appState.progress = 100; appState.scanStage = STAGES[8]; renderStatus(); }
+    function normalizePath(path) { return String(path || '').replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, ''); }
+    function isFocusedPath(path) { return FOCUSED_LOGS.some(key => normalizePath(path).toLowerCase().includes(key.toLowerCase())); }
+    function isZipPath(path) { return /\.zip$/i.test(path || ''); }
+    function sourceTypeFromPath(path) { const hit = FOCUSED_LOGS.find(key => String(path).toLowerCase().includes(key.toLowerCase())); return hit === 'AletrsMonitoring' ? 'AlertsMonitoring' : (hit || 'Other'); }
+    function detectMachineId(text) { const match = String(text || '').match(/\b[SD]\d{8,12}\b/i); return match ? match[0].toUpperCase() : 'UNKNOWN'; }
+    function parseNumber(value) { if (value === null || value === undefined || value === '') return null; const clean = String(value).replace(/[,%]/g, '').match(/[-+]?\d*\.?\d+/); return clean ? Number(clean[0]) : null; }
+    function parseDate(text) { const s = String(text || ''); const iso = s.match(/\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?/); const euro = s.match(/\d{2}[-/]\d{2}[-/]\d{4}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?/); let raw = iso ? iso[0] : euro ? euro[0] : ''; if (!raw) return null; raw = raw.replace(',', '.'); if (euro) { const [d,m,yRest] = raw.split(/[/-]/); raw = `${yRest.slice(0,4)}-${m}-${d}${yRest.slice(4)}`; } const d = new Date(raw.replace(' ', 'T')); return Number.isNaN(d.getTime()) ? null : d.toISOString(); }
+    function fmtTime(ts) { if (!ts) return 'No Data'; const d = new Date(ts); return Number.isNaN(d.getTime()) ? String(ts) : d.toLocaleString(); }
+    function normText(v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' '); }
+    function normalizeState(v) { const n = normText(v); if (!n) return 'Unknown'; if (['prepare2print','prepare 2 print','prepare to print','preparetoprint'].includes(n.replace(/\s/g,'')) || n.includes('prepare')) return 'Prepare2Print'; if (n === 'printend' || n === 'print end' || n.includes('print end')) return 'PrintEnd'; if (n === 'err' || n.includes('error')) return 'Error'; if (n.includes('standby')) return 'Standby'; if (n.includes('ready')) return 'Ready'; if (n.includes('printing')) return 'Printing'; if (n.includes('recovery')) return 'Recovery'; if (n === 'on' || n.includes(' online')) return 'ON'; if (n.includes('offline')) return 'Offline'; return STATE_NAMES.find(s => normText(s) === n) || 'Unknown'; }
+
+    async function handleLogUpload(event) {
+      resetLogs(); appState.mode = appState.rules.length ? 'Rules Loaded' : 'Idle'; appState.progress = 0; setStage(STAGES[1], 5);
+      await scanFiles(Array.from(event.target.files || []));
+      setStage(STAGES[7], 92); buildSignalDiscovery(); buildDashboardModel(); appState.mode = appState.rules.length ? 'Rules Loaded' : 'Discovery Mode'; if (appState.focusedFiles.length && !appState.rules.length) appState.mode = 'Discovery Mode'; completeStage(); renderDashboard();
     }
-    function machineFrom(path, text = '') {
-      const match = `${path}\n${text.slice(0, 2500)}`.match(/[SD]\d{9,10}/);
-      return match ? match[0] : 'UNKNOWN';
-    }
-    function siteFrom(path) {
-      const parts = path.split(/[\\/→]+/).map(p => p.trim()).filter(Boolean);
-      return parts.find(p => /site|customer|plant/i.test(p)) || 'Pending';
-    }
-    function detectState(line) {
-      const lower = line.toLowerCase();
-      if (!lower.includes('state')) return '';
-      return MACHINE_STATES.find(state => lower.includes(state.toLowerCase())) || '';
-    }
-    function systemFrom(path, line = '') {
-      const source = normalizeSource(path);
-      const text = `${path} ${line}`;
-      if (source === 'MachineStates') return 'State Context';
-      if (source === 'AlertsMonitoring' || source === 'AletrsMonitoring') return 'AlertsMonitoring';
-      if (source === 'FECNotification') return 'FEC';
-      if (source === 'LLCINotification') {
-        if (/\bBSS\b|Blanket/i.test(text)) return 'BSS';
-        if (/\bIPS\b|\bInk\b/i.test(text)) return 'IPS';
-        return 'LLCI';
-      }
-      return 'Pending';
-    }
-    function eventType(line, source, state) {
-      if (state) return 'State context';
-      if (/\b(error|fatal|exception|failed|failure|fault)\b/i.test(line)) return 'Error-like preliminary finding';
-      if (/\b(warning|warn|timeout|disconnect)\b/i.test(line)) return 'Warning-like preliminary finding';
-      if (/\b(alarm|alert)\b/i.test(line)) return source.includes('Alerts') ? 'Alert-like log entry (rules pending)' : 'Notification event';
-      if (/\bBSS\b|blanket/i.test(line)) return 'BSS LLCI preliminary finding';
-      if (/\bIPS\b|\bInk\b/i.test(line)) return 'IPS LLCI preliminary finding';
-      if (/\bFEC\b/i.test(line)) return 'FEC preliminary finding';
-      return 'Focused log sample';
-    }
-    function conciseMessage(line) {
-      return String(line || '').replace(/^\s*\[[^\]]+\]\s*/, '').replace(/\s+/g, ' ').slice(0, 170) || 'Focused log entry parsed';
-    }
-    function severityRank(row) {
-      let score = 1;
-      if (/Error-like|Alert-like/i.test(row.type)) score += 5;
-      if (/Warning-like/i.test(row.type)) score += 3;
-      if (row.system === 'BSS') score += 3;
-      if (row.system === 'IPS' || row.system === 'FEC') score += 2;
-      if (row.timestamp) score += 1;
-      return score;
-    }
-    function ensureMachine(id, path = '') {
-      if (!appState.machines.has(id)) appState.machines.set(id, { id, files: new Set(), systems: new Set(), first: '', last: '', site: siteFrom(path) });
-      return appState.machines.get(id);
-    }
-    function registerSystem(row) {
-      const machine = ensureMachine(row.machine, row.path);
-      machine.files.add(row.path);
-      machine.systems.add(row.system);
-      if (row.timestamp) {
-        if (!machine.first || row.timestamp < machine.first) machine.first = row.timestamp;
-        if (!machine.last || row.timestamp > machine.last) machine.last = row.timestamp;
-      }
-      if (!appState.systems[row.system]) appState.systems[row.system] = systemRecord(row.system);
-      const system = appState.systems[row.system];
-      system.count += 1;
-      system.files.add(row.path);
-      system.findings.push(row);
-      if (row.timestamp && (!system.last || row.timestamp > system.last)) system.last = row.timestamp;
-    }
-    function parseNumericSignal(line, timestamp, path, machine, system, source) {
-      if (!['BSS', 'IPS', 'FEC'].includes(system)) return;
-      const matches = Array.from(line.matchAll(/(?:=|:|\s)(-?\d+(?:\.\d+)?)(?:\s?(bar|psi|pa|kpa|c|°c|rpm|mm|%)\b)?/ig));
-      for (const match of matches.slice(0, 3)) {
-        const value = Number(match[1]);
-        if (Number.isFinite(value)) appState.numericSignals.push({ timestamp, path, machine, system, source, value, unit: match[2] || '', raw: line.slice(0, 260) });
-      }
+    function resetLogs() { appState.focusedFiles = []; appState.machines = {}; appState.machineStates = []; appState.evidence = []; appState.signalProfiles = []; appState.ruleMatches = []; appState.alerts = []; appState.needsValidation = []; appState.visitedZips = new Set(); appState.parsedPaths = new Set(); appState.selectedIssue = null; appState.selectedSystem = null; }
+
+    async function scanFiles(files) {
+      setStage(STAGES[2], 12); const focused = [], zips = [];
+      for (const file of files) { const path = normalizePath(file.webkitRelativePath || file.name); if (isZipPath(path)) zips.push({ file, path }); else if (isFocusedPath(path)) focused.push({ file, path }); }
+      for (const z of zips) await scanZip(await z.file.arrayBuffer(), z.path);
+      for (const item of focused) await readFocusedFile(item.file, item.path);
+      setStage(STAGES[3], 45); parseFocusedLogsByType('MachineStates'); setStage(STAGES[4], 62); parseFocusedLogsByType('Notifications'); attachStateContext();
     }
 
-    async function processText(path, text) {
-      if (appState.parsedPaths.has(path)) return;
-      appState.parsedPaths.add(path);
-      const focus = focusForPath(path);
-      if (!focus) return;
-      const source = focus.key;
-      const machine = machineFrom(path, text);
-      appState.focusedFiles.push({ path, source, machine, size: text.length });
-      ensureMachine(machine, path);
-      const lines = text.split(/\r?\n/);
-      let captured = 0;
-      for (let i = 0; i < Math.min(lines.length, 40000); i += 1) {
-        const line = lines[i];
-        if (!line.trim()) continue;
-        const timestamp = parseTimestamp(line, path);
-        const detectedState = detectState(line);
-        const system = systemFrom(path, line);
-        if (detectedState && source === 'MachineStates') {
-          appState.machineStates.push({ machine, timestamp, state: detectedState, source, path, raw: line.slice(0, 420) });
-          appState.lastStateByMachine.set(machine, detectedState);
-          continue;
-        }
-        if (source === 'MachineStates') continue;
-        const isFinding = FINDING_RE.test(line) || captured < 2;
-        if (!isFinding) continue;
-        const row = {
-          timestamp,
-          machine,
-          source: source === 'AletrsMonitoring' ? 'AletrsMonitoring' : source,
-          system,
-          state: appState.lastStateByMachine.get(machine) || '',
-          type: eventType(line, source, detectedState),
-          message: conciseMessage(line),
-          raw: line.slice(0, 700),
-          path
-        };
-        appState.evidence.push(row);
-        registerSystem(row);
-        parseNumericSignal(line, timestamp, path, machine, system, source);
-        captured += 1;
-      }
+    async function scanZip(arrayBuffer, zipPath) {
+      const normalizedZip = normalizePath(zipPath); if (appState.visitedZips.has(normalizedZip)) return; appState.visitedZips.add(normalizedZip); setStage(STAGES[1], Math.min(25, appState.progress + 4));
+      const zip = await JSZip.loadAsync(arrayBuffer); const entries = Object.values(zip.files).filter(e => !e.dir); setStage(STAGES[2], Math.min(36, appState.progress + 6));
+      for (const entry of entries) { const nestedPath = normalizePath(`${normalizedZip}/${entry.name}`); if (isZipPath(entry.name) && !appState.visitedZips.has(nestedPath)) { await scanZip(await entry.async('arraybuffer'), nestedPath); } }
+      for (const entry of entries) { const nestedPath = normalizePath(`${normalizedZip}/${entry.name}`); if (isFocusedPath(nestedPath) && !isZipPath(entry.name)) await readFocusedText(await entry.async('text'), nestedPath); }
     }
+    async function readFocusedFile(file, path) { await readFocusedText(await file.text(), path); }
+    async function readFocusedText(text, path) { const normalized = normalizePath(path); if (appState.parsedPaths.has(normalized)) return; appState.parsedPaths.add(normalized); appState.focusedFiles.push({ path: normalized, sourceType: sourceTypeFromPath(normalized), text, machineId: detectMachineId(`${normalized}\n${text.slice(0, 2000)}`) }); }
+    function parseFocusedLogsByType(kind) { appState.focusedFiles.filter(f => kind === 'MachineStates' ? f.sourceType === 'MachineStates' : f.sourceType !== 'MachineStates').forEach(parseFocusedLog); }
 
-    function indexFocusedFiles(files) {
-      const matches = [];
-      for (const file of files) {
-        const path = file.webkitRelativePath || file.name;
-        if (focusForPath(path) && !appState.focusedPathSet.has(path)) {
-          appState.focusedPathSet.add(path);
-          matches.push({ path, file });
-        }
-      }
-      return matches;
+    function parseFocusedLog(file) { if (file.sourceType === 'MachineStates') return parseMachineStates(file); const lines = file.text.split(/\r?\n/).filter(Boolean); for (const [idx, line] of lines.entries()) { const ev = parseNotificationLine(line, file, idx); if (ev) appState.evidence.push(ev); } }
+    function parseMachineStates(file) {
+      const records = []; file.text.split(/\r?\n/).forEach((line, idx) => { const ts = parseDate(line); const state = extractState(line); if (!ts || !state) return; records.push({ id: `state-${appState.machineStates.length}-${idx}`, machineId: detectMachineId(`${file.machineId} ${line}`), timestamp: ts, state, sourceFile: file.path, rawLine: line }); });
+      records.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+      records.forEach((r, i) => { const next = records[i+1]; r.startTime = r.timestamp; r.endTime = next ? next.timestamp : null; r.duration = next ? Math.max(0, (new Date(next.timestamp) - new Date(r.timestamp)) / 1000) : null; r.transitionIndex = i; appState.machineStates.push(r); });
     }
-    async function scanZip(blob, prefix = '') {
-      const archiveKey = `${prefix}${blob.name || blob.size || 'zip'}`;
-      if (appState.scannedArchives.has(archiveKey)) return [];
-      appState.scannedArchives.add(archiveKey);
-      const zip = await JSZip.loadAsync(blob);
-      const entries = Object.values(zip.files).filter(entry => !entry.dir);
-      const focusedEntries = [];
-      const nestedEntries = [];
-      for (const entry of entries) {
-        const path = `${prefix}${entry.name}`;
-        if (focusForPath(path) && !appState.focusedPathSet.has(path)) {
-          appState.focusedPathSet.add(path);
-          focusedEntries.push({ path, entry });
-        } else if (/\.zip$/i.test(entry.name) && !appState.scannedArchives.has(path)) {
-          nestedEntries.push({ path, entry });
-        }
-      }
-      for (const nested of nestedEntries) {
-        const nestedBlob = await nested.entry.async('blob');
-        focusedEntries.push(...await scanZip(nestedBlob, `${nested.path} → `));
-      }
-      return focusedEntries;
+    function extractState(line) { const n = normText(line); for (const state of STATE_NAMES) if (n.includes(normText(state))) return normalizeState(state); const key = line.match(/(?:state|machine state)\s*[:=]\s*([A-Za-z0-9 ]+)/i); return key ? normalizeState(key[1]) : null; }
+    function parseNotificationLine(line, file, idx) {
+      const timestamp = parseDate(line); const numericValues = extractNumericValues(line); const sourceType = file.sourceType; const system = mapLogSourceToSystem(sourceType, line); const possibleSignals = extractPossibleSignals(line, numericValues); const severityHint = extractSeverityHint(line);
+      return { id: `ev-${appState.evidence.length}-${idx}`, timestamp, machineId: detectMachineId(`${file.machineId} ${line}`), sourceFile: file.path, sourceType, system, subsystem: inferSubsystem(line, system), component: inferComponent(line), state: null, message: cleanupMessage(line), rawLine: line, numericValues, possibleSignals, severityHint };
     }
-    async function handleFiles(fileList) {
-      resetScan();
-      const files = Array.from(fileList || []);
-      if (!files.length) { render(); return; }
-      $('#dataStatus').textContent = 'Scanning paths first…';
-      setStage('Scanning paths only', 6);
-      const textJobs = [];
-      const directMatches = indexFocusedFiles(files.filter(file => !/\.zip$/i.test(file.name)));
-      textJobs.push(...directMatches.map(match => ({ path: match.path, read: () => match.file.text() })));
-      const zipFiles = files.filter(file => /\.zip$/i.test(file.name));
-      for (let i = 0; i < zipFiles.length; i += 1) {
-        setStage('Scanning archive paths', 10 + (i / Math.max(zipFiles.length, 1)) * 22);
-        const matches = await scanZip(zipFiles[i], `${zipFiles[i].name} → `);
-        textJobs.push(...matches.map(match => ({ path: match.path, read: () => match.entry.async('text') })));
-      }
-      if (!textJobs.length) {
-        setStage('Scan complete — no focused logs found', 100);
-        $('#dataStatus').textContent = 'No focused files parsed';
-        render();
-        return;
-      }
-      for (let i = 0; i < textJobs.length; i += 1) {
-        setStage('Reading focused logs', 36 + (i / textJobs.length) * 58);
-        try { await processText(textJobs[i].path, await textJobs[i].read()); }
-        catch (error) { console.warn('Unable to parse focused log', textJobs[i].path, error); }
-      }
-      appState.evidence.sort((a, b) => severityRank(b) - severityRank(a));
-      appState.selectedFinding = appState.evidence[0] || null;
-      appState.selectedSystem = appState.selectedFinding?.system || '';
-      setStage('Focused logs loaded', 100);
-      $('#dataStatus').textContent = `${appState.focusedFiles.length} focused file(s) parsed`;
-      render();
-    }
+    function extractNumericValues(line) { const values = []; const re = /([-+]?\d*\.?\d+)\s*(psi|bar|mbar|°c|c|%|mm|sec|ms|counts?)?\b/ig; let m; while ((m = re.exec(line)) !== null) values.push({ value: Number(m[1]), unit: m[2] || '', text: m[0] }); return values; }
+    function extractPossibleSignals(line, values) { let clean = String(line).replace(/\d{4}[-/]\d{2}[-/]\d{2}[^\s]*/g, '').replace(/\d{2}[-/]\d{2}[-/]\d{4}[^\s]*/g, ''); values.forEach(v => clean = clean.replace(v.text, ' ')); const parts = clean.split(/[|,;\[\](){}]+/).map(s => s.trim()).filter(s => s.length > 2 && !/^\d+$/.test(s)); return [...new Set(parts.slice(-4))]; }
+    function extractSeverityHint(line) { const hit = String(line).match(/\b(error|warning|critical|fault|failed|fail|deviation|low|high|timeout|disconnected|pressure|vacuum|temperature)\b/i); return hit ? hit[1].toLowerCase() : ''; }
+    function cleanupMessage(line) { return String(line).replace(/^\s*\[?\d{2,4}[-/][^\]]+\]?\s*/, '').trim(); }
+    function inferSubsystem(line, system) { const n = normText(line); if (system === 'BSS') return 'Blanket Supply System'; if (system === 'IPS') return 'Ink Process System'; if (n.includes('cooling')) return 'Cooling'; if (n.includes('filter')) return 'Filter'; return ''; }
+    function inferComponent(line) { const m = String(line).match(/\b(BCU|Tub|Tank|Fill|Drain|Filter|Cooling|Pressure|Vacuum|Temperature|Ink|Blanket|FEC)\b/i); return m ? m[1] : ''; }
+    function mapLogSourceToSystem(source, line = '') { const s = normText(source); const l = normText(line); if (s.includes('fec')) return 'FEC'; if (s.includes('machine') || s.includes('state')) return 'MachineStates'; if (s.includes('alert')) return 'AlertsMonitoring'; if (s.includes('bss') || /\b(blanket|bcu|tub|tank|fill|drain|filter|cooling)\b/.test(l)) return 'BSS'; if (s.includes('ips') || /\b(ips|ink|ink process)\b/.test(l)) return 'IPS'; if (s.includes('llci') || s.includes('bssnotification')) return 'LLCI'; return 'LLCI'; }
+    function sourceCompatible(rule, evidence) { const src = normText(rule.logSource); const ev = normText(evidence.sourceType); if (!src) return rule.system ? normText(rule.system) === normText(evidence.system) : true; if (src.includes('bss')) return evidence.sourceType === 'LLCINotification' && evidence.system === 'BSS'; if (src.includes('ips')) return evidence.sourceType === 'LLCINotification' && evidence.system === 'IPS'; if (src.includes('fec')) return evidence.sourceType === 'FECNotification'; if (src.includes('state')) return evidence.sourceType === 'MachineStates'; if (src.includes('alert')) return evidence.sourceType === 'AlertsMonitoring'; if (src.includes('opc')) return ev.includes('notification') || ev.includes('alert'); if (src.includes('other')) return true; return ev.includes(src) || src.includes(ev) || normText(rule.system) === normText(evidence.system); }
 
-    function systemStatus(systemName) {
-      const record = appState.systems[systemName];
-      const count = record?.count || 0;
-      const hasIssue = record?.findings?.some(row => /Error-like|Alert-like|Warning-like|preliminary/i.test(row.type));
-      if (!count) return { cls: 'noData', label: 'No data' };
-      if ((systemName === 'BSS' || systemName === 'FEC') && hasIssue) return { cls: 'issue', label: 'Preliminary issue' };
-      if (systemName === 'IPS' && hasIssue) return { cls: /Error-like|Alert-like/i.test(record.findings[0]?.type || '') ? 'issue' : 'warning', label: 'Preliminary issue' };
-      return { cls: 'discovered', label: 'Discovered' };
+    async function handleRulesUpload(event) { const file = event.target.files && event.target.files[0]; if (!file) return; appState.progress = 0; appState.mode = appState.focusedFiles.length ? 'Evaluating' : 'Rules Loaded'; setStage(STAGES[5], 68); const data = await file.arrayBuffer(); parseRulesWorkbook(data, file.name); setStage(STAGES[7], 90); if (appState.evidence.length) analyze(); else { buildDashboardModel(); completeStage(); renderDashboard(); } }
+    function parseRulesWorkbook(data, fileName) {
+      const workbook = XLSX.read(data, { type: 'array' }); const sheetName = workbook.SheetNames.includes('PANDA Rules Template') ? 'PANDA Rules Template' : workbook.SheetNames[0]; const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '' }); const headerIndex = detectRulesHeader(rows); appState.rules = [];
+      if (headerIndex < 0) return; const headers = rows[headerIndex].map(h => String(h).trim());
+      for (let r = headerIndex + 1; r < rows.length; r++) { const row = rows[r]; if (!row || row.every(c => String(c).trim() === '')) break; const raw = {}; headers.forEach((h, i) => raw[h] = row[i]); const rule = normalizeRule(raw, r + 1); if (rule) appState.rules.push(rule); }
     }
-    function renderKpis() {
-      const preliminarySystems = ['BSS', 'IPS', 'FEC'].filter(system => (appState.systems[system]?.findings || []).some(row => /Error-like|Alert-like|Warning-like|preliminary/i.test(row.type)));
-      $('#kpiMachinesAtRisk').textContent = preliminarySystems.length ? `${preliminarySystems.length} Preliminary` : 'Pending Rules';
-      $('#kpiMachinesAtRiskNote').textContent = preliminarySystems.length ? 'Preliminary findings only' : 'Discovery Only';
-      $('#kpiRiskCard').classList.toggle('preliminary', preliminarySystems.length > 0);
-      $('#kpiP1Alerts').textContent = 'No real alerts';
-      $('#kpiConfidence').textContent = 'Pending Rules';
-      $('#kpiActions').textContent = 'Pending Rules';
-      $('#kpiMTTD').textContent = 'Pending Rules';
+    function detectRulesHeader(rows) { const required = ['system','subsystem','component','log signal name','log source']; return rows.findIndex(row => { const names = row.map(c => normText(c)); return required.every(req => names.includes(req)); }); }
+    function getCol(raw, names) { const key = Object.keys(raw).find(k => names.some(n => normText(k) === normText(n))); return key ? raw[key] : ''; }
+    function normalizeRule(raw, rowNumber) {
+      const system = String(getCol(raw, ['System'])).trim(); const component = String(getCol(raw, ['Component'])).trim(); const logSignalName = String(getCol(raw, ['Log Signal Name'])).trim(); if (!system && !component && !logSignalName) return null;
+      const id = String(getCol(raw, ['Rule ID','RuleId','ID'])).trim() || `RULE-${rowNumber}-${slug(system || 'System')}-${slug(component || logSignalName || 'Signal')}`;
+      const expectedByState = {}; ['ON','Standby','Ready','Prepare2Print','Printing','PrintEnd','Recovery','Error'].forEach(st => expectedByState[st] = getCol(raw, [`Expected ${st}`]));
+      const checkType = String(getCol(raw, ['Check Type'])).trim() || 'Range'; const evaluatorSupported = SUPPORTED_CHECKS.includes(normText(checkType));
+      return { id, rowNumber, system, subsystem: getCol(raw, ['Subsystem']), component, parameterName: getCol(raw, ['Parameter Name']), logSignalName, logSource: getCol(raw, ['Log Source']), valueMetric: getCol(raw, ['Value Metric']), checkType, expectedByState, specTolerance: getCol(raw, ['Spec Tolerance']), warningLow: getCol(raw, ['Warning Low']), warningHigh: getCol(raw, ['Warning High']), criticalLow: getCol(raw, ['Critical Low']), criticalHigh: getCol(raw, ['Critical High']), warningDurationSec: parseNumber(getCol(raw, ['Warning Duration Sec'])), criticalDurationSec: parseNumber(getCol(raw, ['Critical Duration Sec'])), transitionGraceSec: parseNumber(getCol(raw, ['Transition Grace Sec'])), warningSeverity: getCol(raw, ['Warning Severity']), criticalSeverity: getCol(raw, ['Critical Severity']), warningAction: getCol(raw, ['Warning Action']), criticalAction: getCol(raw, ['Critical Action']), notes: getCol(raw, ['Notes']), evaluatorSupported };
     }
-    function renderMachine() {
-      const machine = activeMachine();
-      $('#machineId').textContent = machine?.id || 'Pending';
-      $('#focusedFilesCount').textContent = appState.focusedFiles.length;
-      $('#sourceCoverage').textContent = `${new Set(appState.focusedFiles.map(file => file.source)).size} / ${FOCUSED_LOGS.length}`;
-      $('#currentState').textContent = currentState();
-      $('#stateContext').textContent = appState.machineStates.length ? `${appState.machineStates.length} state entries parsed` : 'No MachineStates parsed';
-      $('#lastTimestamp').textContent = latestTimestamp() || 'No data';
-      for (const card of $$('.hotspotCard')) {
-        const systemName = card.dataset.system;
-        const record = appState.systems[systemName] || systemRecord(systemName);
-        const status = systemStatus(systemName);
-        card.className = `hotspotCard ${status.cls}`;
-        card.querySelector('.source').textContent = sourceForSystem(systemName);
-        card.querySelector('.count').textContent = `${record.count || 0} event${record.count === 1 ? '' : 's'}`;
-        card.querySelector('.status').textContent = status.label;
-      }
-    }
-    function selectSystem(system) {
-      appState.selectedSystem = system;
-      const findings = appState.systems[system]?.findings || [];
-      appState.selectedFinding = findings[0] || (system === appState.selectedFinding?.system ? appState.selectedFinding : null);
-      render();
-    }
-    function renderIssue() {
-      const finding = appState.selectedFinding;
-      $('#noFinding').classList.toggle('hidden', Boolean(finding));
-      $('#findingFields').classList.toggle('hidden', !finding);
-      if (!finding) return;
-      const related = appState.evidence.filter(row => row.system === finding.system);
-      $('#issueSystem').textContent = finding.system;
-      $('#issueSource').textContent = finding.source;
-      $('#issueState').textContent = finding.state || currentState() || 'State context missing';
-      $('#issueSummary').textContent = `${finding.type}: ${finding.message}`;
-      $('#issueEvidenceCount').textContent = `${related.length} focused entries`;
-      $('#issueTimestamp').textContent = finding.timestamp || 'No timestamp detected';
-    }
-    function renderTimeline(target = '#timeline') {
-      const container = $(target);
-      if (!appState.machineStates.length) {
-        container.innerHTML = '<div class="empty">No MachineStates parsed</div>';
-        return;
-      }
-      container.innerHTML = appState.machineStates.slice(-18).map(state => `<div class="segment ${escapeHtml(state.state.toLowerCase())}"><b>${escapeHtml(state.state)}</b><span>${escapeHtml(state.timestamp || 'No timestamp')}</span><span>${escapeHtml(state.machine)}</span></div>`).join('');
-    }
-    function renderEvidence() {
-      const rows = appState.evidence.slice(0, 80);
-      if (!rows.length) {
-        $('#evidenceTable').innerHTML = '<tbody><tr><td><div class="empty">No focused evidence parsed yet.</div></td></tr></tbody>';
-        return;
-      }
-      $('#evidenceTable').innerHTML = `<thead><tr><th>Time</th><th>Source</th><th>System</th><th>State</th><th>Type</th><th>Message</th></tr></thead><tbody>${rows.map((row, index) => `<tr data-row="${index}"><td>${escapeHtml(row.timestamp || '—')}</td><td>${escapeHtml(row.source)}</td><td>${escapeHtml(row.system)}</td><td>${escapeHtml(row.state || '—')}</td><td>${escapeHtml(row.type)}</td><td class="messageCell"><div class="messageText">${escapeHtml(row.message)}</div><button class="detailsToggle" type="button">Show raw</button><div class="rawLine">${escapeHtml(row.raw)}</div></td></tr>`).join('')}</tbody>`;
-    }
-    function renderActions() {
-      const items = [
-        'Review focused evidence before treating any item as service relevant.',
-        'Confirm MachineStates context and timing around the preliminary finding.',
-        'Load Rules Excel in a future workflow before real alert classification.',
-        'No dispatch decision without rules, duration, and service validation.'
-      ];
-      $('#serviceActions').innerHTML = items.map(item => `<li>${escapeHtml(item)}</li>`).join('');
-    }
-    function renderFooter() {
-      const machine = activeMachine();
-      const latest = latestTimestamp();
-      $('#footConnection').textContent = appState.focusedFiles.length ? `${appState.focusedFiles.length} focused file(s) loaded` : 'No data loaded';
-      $('#footTimestamp').textContent = latest || 'No data';
-      $('#footMachine').textContent = machine?.id || 'Pending';
-      $('#footSite').textContent = machine?.site || 'Pending';
-      $('#lastDataRange').textContent = latest ? `Last data range: ${latest}` : 'Last data range: No data';
-      $('#crumbMachine').textContent = machine?.id || 'Machine ID';
-      $('#sideMachine').textContent = machine?.id || 'Pending';
-      $('#sideState').textContent = currentState();
-    }
-    function selectedSystemEvidence() {
-      const system = appState.selectedSystem || appState.selectedFinding?.system || 'BSS';
-      return appState.evidence.filter(row => row.system === system);
-    }
-    function componentStatus(name, evidence) {
-      if (name === 'Component mapping pending') return 'neutral';
-      const re = COMPONENT_KEYWORDS[name];
-      if (!re) return 'neutral';
-      if (!evidence.some(row => re.test(`${row.message} ${row.raw}`))) return 'neutral';
-      return evidence.some(row => /error|fatal|failed|fault|alarm|alert/i.test(row.raw)) ? 'issue' : 'inferred';
-    }
-    function renderMap() {
-      const system = appState.selectedSystem || appState.selectedFinding?.system || 'BSS';
-      const components = COMPONENT_SETS[system] || ['Component mapping pending'];
-      const evidence = selectedSystemEvidence();
-      const positions = [
-        [8, 10], [40, 10], [70, 10], [18, 40], [55, 40], [8, 70], [40, 70], [70, 70]
-      ];
-      const inferredCount = components.filter(component => componentStatus(component, evidence) !== 'neutral').length;
-      $('#mapSubtitle').textContent = inferredCount ? `${inferredCount} component(s) inferred from log text` : 'Component mapping pending';
-      $('#systemMap').innerHTML = `<svg class="connectorSvg" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M18 20 L50 20 L80 20 M50 20 L28 50 M50 20 L65 50 M28 50 L18 80 M65 50 L50 80 M65 50 L80 80" stroke="rgba(65,223,255,.22)" stroke-width=".45" fill="none"/></svg>${components.map((component, index) => {
-        const [left, top] = positions[index] || [12 + (index % 3) * 30, 16 + Math.floor(index / 3) * 30];
-        const cls = componentStatus(component, evidence);
-        const note = cls === 'issue' ? 'Preliminary issue text' : cls === 'inferred' ? 'Inferred from log text' : 'Component mapping pending';
-        return `<div class="componentCard ${cls}" style="left:${left}%; top:${top}%"><b>${escapeHtml(component)}</b><span>${escapeHtml(note)}</span></div>`;
-      }).join('')}`;
-    }
-    function sparkline(signals) {
-      const values = signals.map(signal => signal.value).filter(Number.isFinite);
-      if (!values.length) return 'No numeric signal detected yet.';
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-      const range = max - min || 1;
-      const points = values.map((value, index) => {
-        const x = values.length === 1 ? 50 : (index / (values.length - 1)) * 100;
-        const y = 86 - ((value - min) / range) * 70;
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      }).join(' ');
-      return `<svg class="sparkSvg" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points="${points}" fill="none" stroke="#41dfff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><line x1="0" y1="86" x2="100" y2="86" stroke="rgba(255,255,255,.12)"/></svg><div class="muted">${values.length} parsed numeric value(s). Latest: <b style="color:var(--white)">${escapeHtml(values[values.length - 1])}${escapeHtml(signals[signals.length - 1]?.unit || '')}</b></div>`;
-    }
-    function renderDrillDown() {
-      const system = appState.selectedSystem || appState.selectedFinding?.system || 'BSS';
-      appState.selectedSystem = system;
-      const evidence = selectedSystemEvidence();
-      const signals = appState.numericSignals.filter(signal => signal.system === system);
-      $('#crumbSystem').textContent = system;
-      $('#sideSystem').textContent = system;
-      $('#sourceLogList').innerHTML = appState.focusedFiles.length ? appState.focusedFiles.slice(0, 10).map(file => `<li><b>${escapeHtml(file.source)}</b><br><span class="muted">${escapeHtml(file.path)}</span></li>`).join('') : '<li>No focused logs loaded</li>';
-      $('#focusedFindingList').innerHTML = evidence.length ? evidence.slice(0, 8).map(row => `<li><b>${escapeHtml(row.system)}</b> · ${escapeHtml(row.type)}<br><span class="muted">${escapeHtml(row.message)}</span></li>`).join('') : '<li>No focused findings parsed</li>';
-      renderMap();
-      $('#signalCount').textContent = `${signals.length} value${signals.length === 1 ? '' : 's'}`;
-      $('#keySignal').innerHTML = signals.length ? sparkline(signals.slice(-28)) : 'No numeric signal detected yet.';
-      $('#drillStateContext').innerHTML = appState.machineStates.length ? appState.machineStates.slice(-5).map(state => `<div class="segment ${escapeHtml(state.state.toLowerCase())}"><b>${escapeHtml(state.state)}</b><span>${escapeHtml(state.timestamp || 'No timestamp')}</span></div>`).join('') : 'No MachineStates parsed';
-      $('#evidenceSummary').innerHTML = `<div class="field"><label>Focused entries parsed</label><b>${evidence.length}</b></div><div class="field"><label>Repeated messages</label><span>${repeatedMessageCount(evidence)} repeated pattern(s) detected</span></div><div class="field"><label>Numeric values</label><span>${signals.length ? `${signals.length} detected` : 'No numeric signal detected yet'}</span></div>`;
-      const why = evidence.length ? [
-        `${evidence.length} focused log entr${evidence.length === 1 ? 'y was' : 'ies were'} parsed for ${system}.`,
-        repeatedMessageCount(evidence) ? 'Repeated message patterns are present in the selected focused evidence.' : 'No repeated message pattern has been confirmed yet.',
-        signals.length ? `${signals.length} numeric value(s) were detected in selected system evidence.` : 'No numeric signal detected yet.',
-        appState.machineStates.length ? 'MachineStates context is available for manual review.' : 'State context is missing because no MachineStates log was parsed.'
-      ] : ['No selected-system focused evidence has been parsed yet.', 'Rules pending; no real alert is generated.'];
-      $('#whyList').innerHTML = why.map(item => `<li>${escapeHtml(item)}</li>`).join('');
-    }
-    function repeatedMessageCount(evidence) {
-      const counts = new Map();
-      evidence.forEach(row => counts.set(row.message, (counts.get(row.message) || 0) + 1));
-      return Array.from(counts.values()).filter(count => count > 1).length;
-    }
-    function render() {
-      renderKpis();
-      renderMachine();
-      renderIssue();
-      renderTimeline();
-      renderEvidence();
-      renderActions();
-      renderFooter();
-      renderDrillDown();
-    }
-    function showView(view) {
-      const drill = view === 'drill';
-      $('#serviceRadarView').classList.toggle('hidden', drill);
-      $('#drillDownView').classList.toggle('hidden', !drill);
-      $$('.navBtn[data-view]').forEach(btn => btn.classList.toggle('active', btn.dataset.view === view || (!drill && btn.dataset.view === 'radar')));
-      if (drill) renderDrillDown();
-    }
+    function slug(v) { return String(v || '').replace(/[^A-Za-z0-9]+/g, '').slice(0, 24) || 'NA'; }
 
-    $('#fileInput').addEventListener('change', event => handleFiles(event.target.files));
-    $('#zipInput').addEventListener('change', event => handleFiles(event.target.files));
-    $('#openInvestigation').addEventListener('click', () => showView('drill'));
-    $$('.navBtn[data-view]').forEach(btn => btn.addEventListener('click', () => showView(btn.dataset.view)));
-    $$('.hotspotCard').forEach(card => card.addEventListener('click', () => {
-      selectSystem(card.dataset.system);
-      if (['BSS', 'IPS', 'FEC'].includes(card.dataset.system)) showView('drill');
-    }));
-    document.addEventListener('click', event => {
-      const toggle = event.target.closest('.detailsToggle');
-      if (toggle) {
-        const row = toggle.closest('tr');
-        row.classList.toggle('expanded');
-        toggle.textContent = row.classList.contains('expanded') ? 'Hide raw' : 'Show raw';
-      }
-    });
-    render();
+    function analyze() { setStage(STAGES[6], 76); appState.mode = appState.focusedFiles.length && appState.rules.length ? 'Evaluating' : appState.focusedFiles.length ? 'Discovery Mode' : appState.rules.length ? 'Rules Loaded' : 'Idle'; attachStateContext(); buildSignalDiscovery(); matchRulesToEvidence(); setStage(STAGES[7], 92); buildDashboardModel(); appState.mode = appState.focusedFiles.length && appState.rules.length ? 'Alert Mode' : appState.focusedFiles.length ? 'Discovery Mode' : appState.rules.length ? 'Rules Loaded' : 'Idle'; completeStage(); renderDashboard(); }
+    function attachStateContext() { appState.evidence.forEach(ev => { const ctx = getStateContext(ev.machineId, ev.timestamp); ev.state = ctx.state; ev.timeSinceTransition = ctx.timeSinceTransition; }); }
+    function getStateContext(machineId, timestamp) { if (!timestamp) return { state: null, timeSinceTransition: null }; const t = new Date(timestamp); const states = appState.machineStates.filter(s => s.machineId === machineId || s.machineId === 'UNKNOWN' || machineId === 'UNKNOWN').sort((a,b) => new Date(a.startTime) - new Date(b.startTime)); let found = null; for (const s of states) { const start = new Date(s.startTime); const end = s.endTime ? new Date(s.endTime) : null; if (t >= start && (!end || t < end)) found = s; } return found ? { state: found.state, timeSinceTransition: Math.max(0, (t - new Date(found.startTime)) / 1000) } : { state: null, timeSinceTransition: null }; }
+    function buildSignalDiscovery() {
+      const map = new Map(); appState.evidence.forEach(ev => { const signal = bestSignal(ev); const key = `${ev.system}|${ev.sourceType}|${normText(signal)}`; const value = ev.numericValues[0]?.value; if (!map.has(key)) map.set(key, { signal, system: ev.system, source: ev.sourceType, count: 0, values: [], first: ev.timestamp, last: ev.timestamp, exampleRawLine: ev.rawLine, mappingStatus: 'unmapped' }); const p = map.get(key); p.count++; if (Number.isFinite(value)) p.values.push(value); if (ev.timestamp && (!p.first || ev.timestamp < p.first)) p.first = ev.timestamp; if (ev.timestamp && (!p.last || ev.timestamp > p.last)) p.last = ev.timestamp; });
+      appState.signalProfiles = Array.from(map.values()).map(p => { const min = p.values.length ? Math.min(...p.values) : null, max = p.values.length ? Math.max(...p.values) : null, avg = p.values.length ? p.values.reduce((a,b)=>a+b,0)/p.values.length : null; const mapped = appState.rules.some(r => signalMatches(r.logSignalName, p.signal)); return { ...p, min, max, avg, mappingStatus: mapped ? 'mapped to rule' : 'unmapped' }; });
+    }
+    function bestSignal(ev) { return ev.possibleSignals.find(s => s.length < 90) || ev.component || ev.severityHint || 'Unclassified signal'; }
+    function signalMatches(ruleSignal, candidate) { const r = normText(ruleSignal), c = normText(candidate); if (!r || !c) return false; if (r.length < 4 || c.length < 4) return r === c; if (r.includes(c) || c.includes(r)) return true; const rt = r.split(' ').filter(x => x.length > 2), ct = c.split(' ').filter(x => x.length > 2); const common = rt.filter(x => ct.includes(x)).length; return rt.length >= 3 && common >= Math.min(3, Math.ceil(rt.length * .65)); }
+    function matchRulesToEvidence() {
+      appState.ruleMatches = []; appState.alerts = []; appState.needsValidation = [];
+      for (const rule of appState.rules) for (const ev of appState.evidence) { if (!sourceCompatible(rule, ev)) continue; if (!signalMatches(rule.logSignalName, ev.rawLine) && !ev.possibleSignals.some(s => signalMatches(rule.logSignalName, s))) continue; const actual = pickActualValue(rule, ev); if (actual === null) continue; const match = evaluateRuleMatch(rule, ev, actual); appState.ruleMatches.push(match); if (match.result === 'Critical' || match.result === 'Warning') appState.alerts.push(toAlert(match, rule, ev)); if (match.result === 'Needs duration validation' || match.result === 'Needs state context' || match.result === 'Not evaluable') appState.needsValidation.push(match); }
+    }
+    function pickActualValue(rule, ev) { if (!ev.numericValues.length) return null; const metric = normText(rule.valueMetric); if (!metric) return ev.numericValues[0].value; const byUnit = ev.numericValues.find(v => metric.includes(normText(v.unit)) || normText(v.text).includes(metric)); return (byUnit || ev.numericValues[0]).value; }
+    function evaluateRuleMatch(rule, ev, actualValue) {
+      let state = ev.state || null; const usesState = Object.values(rule.expectedByState || {}).some(v => String(v).trim() !== ''); let expectedValue = state ? parseNumber(rule.expectedByState[normalizeState(state)]) : null; if (usesState && !state) return makeMatch(rule, ev, actualValue, null, null, 'Needs state context', '', 'unknown', 'state timeline unavailable');
+      const range = buildRange(rule, expectedValue); if (!rule.evaluatorSupported) return makeMatch(rule, ev, actualValue, expectedValue, null, 'Not evaluable', '', 'not required', 'recognized / evaluator pending'); if (!range) return makeMatch(rule, ev, actualValue, expectedValue, null, 'Not evaluable', '', 'not required', 'expected range / threshold unavailable');
+      const grace = checkGrace(rule, ev); if (grace.status === 'ignored') return makeMatch(rule, ev, actualValue, expectedValue, range, 'OK', '', grace.label, 'ignored by transition grace');
+      if (grace.status === 'unknown') return makeMatch(rule, ev, actualValue, expectedValue, range, 'Needs duration validation', '', grace.label, 'Rule match requiring transition grace validation');
+      let severity = '', result = 'OK'; const check = normText(rule.checkType); const violatesCritical = violates(check, actualValue, range.criticalLow, range.criticalHigh); const violatesWarning = violates(check, actualValue, range.warningLow, range.warningHigh);
+      if (violatesCritical) { severity = String(rule.criticalSeverity || 'Critical'); result = 'Critical'; } else if (violatesWarning) { severity = String(rule.warningSeverity || 'Warning'); result = 'Warning'; }
+      const durationNeeded = result === 'Critical' ? rule.criticalDurationSec : result === 'Warning' ? rule.warningDurationSec : null; if (durationNeeded) return makeMatch(rule, ev, actualValue, expectedValue, range, 'Needs duration validation', severity, grace.label, `Rule match requiring duration validation (${durationNeeded}s required)`);
+      return makeMatch(rule, ev, actualValue, expectedValue, range, result, severity, grace.label, result === 'OK' ? 'Within allowed threshold' : 'Confirmed alert validation complete');
+    }
+    function buildRange(rule, expectedValue) {
+      const explicit = { warningLow: parseNumber(rule.warningLow), warningHigh: parseNumber(rule.warningHigh), criticalLow: parseNumber(rule.criticalLow), criticalHigh: parseNumber(rule.criticalHigh) };
+      if (Object.values(explicit).some(v => v !== null)) return explicit;
+      const tol = parseTolerance(rule.specTolerance, expectedValue); if (expectedValue !== null && tol) return { warningLow: expectedValue - tol, warningHigh: expectedValue + tol, criticalLow: expectedValue - tol, criticalHigh: expectedValue + tol };
+      return null;
+    }
+    function parseTolerance(raw, expected) { if (!raw && raw !== 0) return null; const s = String(raw).trim(); const n = parseNumber(s); if (n === null) return null; return s.includes('%') && expected !== null ? Math.abs(expected) * n / 100 : n; }
+    function violates(check, value, low, high) { if (check === 'above threshold') return high !== null ? value > high : false; if (check === 'below threshold') return low !== null ? value < low : false; const lowBad = low !== null && value < low, highBad = high !== null && value > high; return lowBad || highBad; }
+    function checkGrace(rule, ev) { if (!rule.transitionGraceSec) return { status: 'not required', label: 'No grace required' }; if (ev.timeSinceTransition === null || ev.timeSinceTransition === undefined) return { status: 'unknown', label: 'Grace cannot be proven' }; if (ev.timeSinceTransition < rule.transitionGraceSec) return { status: 'ignored', label: `Ignored: ${Math.round(ev.timeSinceTransition)}s after transition (< ${rule.transitionGraceSec}s)` }; return { status: 'respected', label: `Respected: ${Math.round(ev.timeSinceTransition)}s after transition` }; }
+    function rangeLabel(r) { if (!r) return 'No range'; const parts = []; if (r.warningLow !== null || r.warningHigh !== null) parts.push(`Warning ${r.warningLow ?? '−∞'}–${r.warningHigh ?? '+∞'}`); if (r.criticalLow !== null || r.criticalHigh !== null) parts.push(`Critical ${r.criticalLow ?? '−∞'}–${r.criticalHigh ?? '+∞'}`); return parts.join(' / '); }
+    function makeMatch(rule, ev, actualValue, expectedValue, expectedRange, result, severity, graceStatus, message) { return { id: `match-${appState.ruleMatches.length}-${rule.id}-${ev.id}`, ruleId: rule.id, ruleRow: rule.rowNumber, evidenceId: ev.id, machineId: ev.machineId, timestamp: ev.timestamp, state: ev.state, system: ev.system, subsystem: rule.subsystem || ev.subsystem, component: rule.component || ev.component, signal: rule.logSignalName, logSource: rule.logSource, actualValue, expectedValue, expectedRange, result, severity, durationStatus: result === 'Needs duration validation' ? 'Required duration not proven' : 'No duration proof required', graceStatus, message, recommendedAction: result === 'Critical' ? (rule.criticalAction || rule.warningAction || 'Review evidence and validate with service procedure') : result === 'Warning' || result === 'Needs duration validation' ? (rule.warningAction || 'Review evidence and validate with service procedure') : '', sourceFile: ev.sourceFile, rawLine: ev.rawLine } }
+    function toAlert(match, rule, ev) { return { id: `alert-${match.id}`, ruleMatchId: match.id, machineId: match.machineId, timestamp: match.timestamp, state: match.state, system: match.system, subsystem: match.subsystem, component: match.component, signal: match.signal, actualValue: match.actualValue, expectedRange: rangeLabel(match.expectedRange), severity: match.result, duration: match.durationStatus, sourceFile: ev.sourceFile, rawLine: ev.rawLine, ruleId: rule.id, recommendedAction: match.recommendedAction || 'Review evidence and validate with service procedure', status: 'Confirmed Alert' }; }
+
+    function buildDashboardModel() {
+      buildMachines(); const systems = {}; SYSTEMS.forEach(sys => { const evs = filteredEvidence().filter(e => e.system === sys); const matches = filteredMatches().filter(m => m.system === sys); const alerts = filteredAlerts().filter(a => a.system === sys); const needs = filteredNeeds().filter(n => n.system === sys); const top = topSignal(evs); let status = 'No data'; if (alerts.some(a => a.severity === 'Critical')) status = 'Critical'; else if (alerts.length || needs.length) status = 'Warning'; else if (evs.length && !appState.rules.length) status = 'Discovery only'; else if (evs.length && appState.rules.length) status = 'OK'; systems[sys] = { system: sys, status, evidenceCount: evs.length, rulesMatched: new Set(matches.map(m => m.ruleId)).size, alerts: alerts.length, needsValidation: needs.length, lastTimestamp: lastTimestamp(evs), strongestIssue: alerts[0]?.signal || needs[0]?.signal || (evs.length ? 'Log evidence discovered' : 'No related focused logs'), topSignal: top }; }); appState.dashboard.systems = systems; appState.dashboard.range = dataRange(); if (!appState.selectedMachineId) autoSelectMachine(); }
+    function buildMachines() { const machines = {}; const ensure = id => machines[id || 'UNKNOWN'] ||= { id: id || 'UNKNOWN', latestState: 'Unknown', focusedFilesCount: 0, alertCount: 0, warningCount: 0, lastTimestamp: null };
+      appState.focusedFiles.forEach(f => ensure(f.machineId).focusedFilesCount++); appState.evidence.forEach(e => { const m = ensure(e.machineId); if (e.timestamp && (!m.lastTimestamp || e.timestamp > m.lastTimestamp)) m.lastTimestamp = e.timestamp; }); appState.machineStates.forEach(s => { const m = ensure(s.machineId); if (s.timestamp && (!m.lastTimestamp || s.timestamp >= m.lastTimestamp)) { m.lastTimestamp = s.timestamp; m.latestState = s.state; } }); appState.alerts.forEach(a => { ensure(a.machineId).alertCount++; }); appState.needsValidation.forEach(n => { ensure(n.machineId).warningCount++; }); if (!Object.keys(machines).length && (appState.focusedFiles.length || appState.evidence.length)) ensure('UNKNOWN'); appState.machines = machines; }
+    function autoSelectMachine() { const ids = Object.keys(appState.machines); if (ids.length === 1) appState.selectedMachineId = ids[0]; }
+    function filteredEvidence() { return appState.selectedMachineId ? appState.evidence.filter(e => e.machineId === appState.selectedMachineId) : appState.evidence; }
+    function filteredMatches() { return appState.selectedMachineId ? appState.ruleMatches.filter(m => m.machineId === appState.selectedMachineId) : appState.ruleMatches; }
+    function filteredAlerts() { return appState.selectedMachineId ? appState.alerts.filter(a => a.machineId === appState.selectedMachineId) : appState.alerts; }
+    function filteredNeeds() { return appState.selectedMachineId ? appState.needsValidation.filter(n => n.machineId === appState.selectedMachineId) : appState.needsValidation; }
+    function topSignal(evs) { const counts = {}; evs.forEach(e => counts[bestSignal(e)] = (counts[bestSignal(e)] || 0) + 1); return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'No Data'; }
+    function lastTimestamp(items) { return items.map(i => i.timestamp).filter(Boolean).sort().pop() || null; }
+    function dataRange() { const all = [...appState.evidence.map(e=>e.timestamp), ...appState.machineStates.map(s=>s.timestamp)].filter(Boolean).sort(); return all.length ? `${fmtTime(all[0])} → ${fmtTime(all[all.length - 1])}` : 'No data'; }
+
+    function renderDashboard() { renderStatus(); renderKpis(); renderMachineSelector(); renderSystemHealth(); renderSelectedIssue(); renderTabs(); renderActions(); renderViews(); }
+    function renderStatus() { document.getElementById('modeText').textContent = appState.mode; document.getElementById('stageText').textContent = `/ ${appState.scanStage}`; document.getElementById('progressBar').style.width = `${appState.progress}%`; document.getElementById('countsText').textContent = `${appState.focusedFiles.length} focused files · ${appState.rules.length} rules · ${Object.keys(appState.machines).length} machines`; document.getElementById('dataRange').textContent = `Last data range: ${appState.dashboard.range || 'No data'}`; }
+    function renderNav() { const nav = document.getElementById('nav'); nav.innerHTML = ['Service Radar','Alerts','Analysis','Machines','Reports','Knowledge'].map(v => `<button class="${appState.view===v?'active':''}" data-view="${v}">${v}</button>`).join(''); nav.querySelectorAll('button').forEach(b => b.onclick = () => { appState.view = b.dataset.view; renderNav(); renderViews(); }); }
+    function renderKpis() { const noRules = !appState.rules.length; const items = [ ['Machines Scanned', Object.keys(appState.machines).length || 0, appState.focusedFiles.length ? 'Detected from paths or log text' : 'No data'], ['Focused Log Files Parsed', appState.focusedFiles.length, 'FEC, LLCI, MachineStates, AlertsMonitoring only'], ['Rules Loaded', appState.rules.length, appState.rules.length ? 'Parsed from PANDA Rules Template' : 'Pending'], ['Real Alerts', noRules ? 0 : appState.alerts.length, noRules ? 'No real alerts without Rules' : 'Confirmed only'], ['Warnings / Needs Validation', noRules ? 'Discovery Only' : appState.needsValidation.length, noRules ? 'Upload rules to evaluate' : 'Not confirmed alerts'] ]; document.getElementById('kpis').innerHTML = items.map(i => `<article class="card kpi"><label>${i[0]}</label><strong>${i[1]}</strong><small>${i[2]}</small></article>`).join(''); }
+    function renderMachineSelector() { const ids = Object.keys(appState.machines); document.getElementById('machineHint').textContent = ids.length ? `${ids.length} detected` : 'No data'; const list = document.getElementById('machineList'); if (!ids.length) { list.innerHTML = emptyInstructions(); return; } list.innerHTML = `<button class="machine ${!appState.selectedMachineId?'active':''}" data-id="">All Machines<div class="row"><span>Unfiltered dashboard</span><span>${appState.evidence.length} events</span></div></button>` + ids.map(id => { const m = appState.machines[id]; return `<button class="machine ${appState.selectedMachineId===id?'active':''}" data-id="${id}"><b>${id}</b><div class="row"><span>State</span><span>${m.latestState || 'Unknown'}</span></div><div class="row"><span>Focused files</span><span>${m.focusedFilesCount}</span></div><div class="row"><span>Alerts / validation</span><span>${m.alertCount} / ${m.warningCount}</span></div><div class="row"><span>Last timestamp</span><span>${fmtTime(m.lastTimestamp)}</span></div></button>`; }).join(''); list.querySelectorAll('.machine').forEach(btn => btn.onclick = () => { appState.selectedMachineId = btn.dataset.id || null; buildDashboardModel(); renderDashboard(); }); }
+    function renderSystemHealth() { const box = document.getElementById('systems'); box.innerHTML = SYSTEMS.map(sys => { const s = appState.dashboard.systems[sys] || {}; const cls = statusClass(s.status); return `<button class="systemCard ${appState.selectedSystem===sys?'active':''}" data-system="${sys}"><div class="sysTop"><b>${sys}</b><span class="badge ${cls}">${s.status || 'No data'}</span></div><div class="sysStats"><div class="stat"><label>Log entries</label><strong>${s.evidenceCount || 0}</strong></div><div class="stat"><label>Rules matched</label><strong>${s.rulesMatched || 0}</strong></div><div class="stat"><label>Real alerts</label><strong>${s.alerts || 0}</strong></div><div class="stat"><label>Needs validation</label><strong>${s.needsValidation || 0}</strong></div></div><p class="small"><b>Last:</b> ${fmtTime(s.lastTimestamp)}</p><p class="small"><b>Strongest issue:</b> ${s.strongestIssue || 'No Data'}</p><p class="small"><b>Top signal:</b> ${s.topSignal || 'No Data'}</p></button>`; }).join(''); box.querySelectorAll('.systemCard').forEach(btn => btn.onclick = () => { appState.selectedSystem = btn.dataset.system; appState.selectedIssue = null; renderSystemHealth(); renderSelectedIssue(); }); }
+    function statusClass(status) { return status === 'Critical' ? 'critical' : status === 'Warning' ? 'warning' : status === 'OK' ? 'ok' : status === 'Discovery only' ? 'discovery' : 'nodata'; }
+    function renderSelectedIssue() { const panel = document.getElementById('selectedIssue'); const selected = appState.selectedIssue; if (selected) { panel.innerHTML = issueHtml(selected); document.getElementById('detailHint').textContent = selected.result || selected.status || 'Selected'; return; } if (appState.selectedSystem) { const s = appState.dashboard.systems[appState.selectedSystem]; const item = filteredAlerts().find(a=>a.system===appState.selectedSystem) || filteredNeeds().find(n=>n.system===appState.selectedSystem); if (item) { panel.innerHTML = issueHtml(item); return; } panel.innerHTML = `<h3 class="issueTitle">${appState.selectedSystem}</h3><span class="badge ${statusClass(s.status)}">${s.status}</span><div class="fields" style="margin-top:12px"><div class="field"><label>Summary</label><span>${s.strongestIssue}</span></div><div class="field"><label>Top signal</label><span>${s.topSignal}</span></div><div class="field"><label>Real alerts</label><span>${s.alerts}</span></div><div class="field"><label>Needs validation</label><span>${s.needsValidation}</span></div></div>`; document.getElementById('detailHint').textContent = 'System selected'; return; } document.getElementById('detailHint').textContent = 'No selection'; panel.innerHTML = emptyInstructions(); }
+    function issueHtml(i) { const status = i.status || (i.result === 'Critical' || i.result === 'Warning' ? 'Confirmed Alert' : i.result || 'Discovery Only'); return `<h3 class="issueTitle">${i.signal || i.system || 'Selected evidence'}</h3><span class="badge ${statusClass(i.result || i.severity || status)}">${status}</span><div class="fields" style="margin-top:12px">${field('Machine ID', i.machineId)}${field('System', i.system)}${field('Subsystem', i.subsystem)}${field('Component', i.component)}${field('Signal', i.signal)}${field('Current state', i.state || 'No state context')}${field('Actual value', i.actualValue ?? 'No Data')}${field('Expected / range', i.expectedRange ? rangeLabel(i.expectedRange) : i.expectedRange || 'No Data')}${field('Duration', i.duration || i.durationStatus || 'No duration proof required')}${field('Transition grace', i.graceStatus || 'No grace required')}${field('Severity', i.severity || i.result || 'No Data')}${field('Source file', i.sourceFile)}${field('Rule ID / Excel row', `${i.ruleId || 'No rule'}${i.ruleRow ? ' / row ' + i.ruleRow : ''}`)}${field('Recommended action', i.recommendedAction || 'Review evidence and validate with service procedure')}${field('Raw log line preview', i.rawLine || 'No raw line')}</div>`; }
+    function field(label, value) { return `<div class="field"><label>${label}</label><span>${escapeHtml(value ?? 'No Data')}</span></div>`; }
+    function escapeHtml(v) { return String(v).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+    function emptyInstructions() { return `<div class="empty"><b>Start analysis</b><ol><li>Upload logs, folders, or ZIP archives.</li><li>Upload the Rules Excel/CSV file.</li><li>Click Analyze.</li></ol><p>No real alerts are created without matching rules and complete validation evidence.</p></div>`; }
+    function renderTabs() { const tabs = ['State Timeline','Evidence Log','Rule Matches','Signal Discovery','Rule Coverage']; const box = document.getElementById('tabBtns'); box.innerHTML = tabs.map(t => `<button class="${appState.activeTab===t?'active':''}" data-tab="${t}">${t}</button>`).join(''); box.querySelectorAll('button').forEach(b => b.onclick = () => { appState.activeTab = b.dataset.tab; renderTabs(); }); const p = document.getElementById('tabPanel'); if (appState.activeTab === 'State Timeline') p.innerHTML = renderStateTimeline(); if (appState.activeTab === 'Evidence Log') p.innerHTML = renderEvidenceLog(); if (appState.activeTab === 'Rule Matches') p.innerHTML = renderRuleMatches(); if (appState.activeTab === 'Signal Discovery') p.innerHTML = renderSignalDiscovery(); if (appState.activeTab === 'Rule Coverage') p.innerHTML = renderRuleCoverage(); p.querySelectorAll('[data-match]').forEach(row => row.onclick = () => { appState.selectedIssue = appState.ruleMatches.find(m => m.id === row.dataset.match); renderSelectedIssue(); }); }
+    function renderStateTimeline() { const states = appState.selectedMachineId ? appState.machineStates.filter(s=>s.machineId===appState.selectedMachineId) : appState.machineStates; if (!states.length) return '<div class="empty">No MachineStates parsed.</div>'; const max = Math.max(...states.map(s => s.duration || 1)); return `<div class="timeline">${states.slice(0,80).map(s => `<div class="segment"><div><b>${s.state}</b><div class="small">${s.machineId}</div></div><div class="rail"><div class="fill" style="width:${Math.max(5, ((s.duration || 1) / max) * 100)}%"></div></div><div class="small">${fmtTime(s.startTime)}<br>${s.endTime ? fmtTime(s.endTime) : 'Open'} · ${s.duration === null ? 'No Data' : Math.round(s.duration) + 's'}</div></div>`).join('')}</div>`; }
+    function table(headers, rows) { return `<div class="tableWrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.join('') : `<tr><td colspan="${headers.length}"><div class="empty">No data available.</div></td></tr>`}</tbody></table></div>`; }
+    function renderEvidenceLog() { const rows = filteredEvidence().slice(0,350).map(e => `<tr><td>${fmtTime(e.timestamp)}</td><td>${e.machineId}</td><td>${e.sourceType}</td><td>${e.system}</td><td>${e.state || 'No Data'}</td><td>${escapeHtml(bestSignal(e))}</td><td>${e.numericValues[0]?.text || 'No Data'}</td><td class="raw">${escapeHtml(e.message)}<details><summary>Raw</summary><p class="mono">${escapeHtml(e.rawLine)}</p></details></td></tr>`); return `<p class="small">${appState.rules.length ? 'Focused evidence used for rule evaluation.' : 'Discovery Evidence — No real alerts without Rules.'}</p>` + table(['Time','Machine','Source','System','State','Signal','Value','Message'], rows); }
+    function renderRuleMatches() { const rows = filteredMatches().slice(0,350).map(m => `<tr data-match="${m.id}"><td>${m.ruleRow || ''}</td><td>${m.ruleId}</td><td>${m.system}</td><td>${escapeHtml(m.component)}</td><td>${escapeHtml(m.signal)}</td><td>${escapeHtml(m.logSource || '')}</td><td>${m.state || 'No Data'}</td><td>${escapeHtml(m.expectedValue ?? rangeLabel(m.expectedRange))}</td><td>${m.actualValue}</td><td><span class="badge ${statusClass(m.result)}">${m.result}</span></td><td>${escapeHtml(m.message)}</td></tr>`); return table(['Rule Row','Rule ID','System','Component','Signal','Log Source','Current State','Expected','Actual','Result','Evidence'], rows); }
+    function renderSignalDiscovery() { const rows = appState.signalProfiles.slice(0,350).map(p => `<tr><td>${escapeHtml(p.signal)}</td><td>${p.system}</td><td>${p.source}</td><td>${p.count}</td><td>${p.min ?? 'No Data'}</td><td>${p.max ?? 'No Data'}</td><td>${p.avg === null ? 'No Data' : p.avg.toFixed(2)}</td><td>${fmtTime(p.first)}</td><td>${fmtTime(p.last)}</td><td>${p.mappingStatus}</td></tr>`); return table(['Signal','System','Source','Count','Min','Max','Avg','First','Last','Mapping Status'], rows); }
+    function renderRuleCoverage() { const bySystem = {}; appState.rules.forEach(r => { const sys = mapLogSourceToSystem(r.logSource || r.system); bySystem[sys] ||= { rules: 0, mapped: 0, missing: 0, evaluated: 0, not: 0 }; bySystem[sys].rules++; const matches = appState.ruleMatches.filter(m=>m.ruleId===r.id); if (matches.length) bySystem[sys].mapped++; else bySystem[sys].missing++; bySystem[sys].evaluated += matches.filter(m=>['OK','Warning','Critical'].includes(m.result)).length; bySystem[sys].not += matches.filter(m=>!['OK','Warning','Critical'].includes(m.result)).length; }); const rows = Object.entries(bySystem).map(([sys,c]) => `<tr><td>${sys}</td><td>${c.rules}</td><td>${c.mapped}</td><td>${c.missing}</td><td>${c.evaluated}</td><td>${c.not}</td><td>${c.missing ? 'Missing signals or evidence' : 'Mapped'}</td></tr>`); return table(['System','Rules','Mapped Logs','Missing Signals','Evaluated','Not Evaluable','Status'], rows); }
+    function renderActions() { const panel = document.getElementById('actionsPanel'); const actions = [...filteredAlerts().map(a=>a.recommendedAction), ...filteredNeeds().map(n=>n.recommendedAction)].filter(Boolean); if (actions.length) panel.innerHTML = `<ul>${[...new Set(actions)].slice(0,8).map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul>`; else if (!appState.rules.length) panel.innerHTML = '<ol><li>Review focused evidence.</li><li>Confirm state context.</li><li>Upload Rules Excel to enable real alert evaluation.</li><li>Do not make dispatch decisions without rules.</li></ol>'; else panel.innerHTML = '<p class="muted">No rule-based actions are currently available. Review evidence and validate with service procedure.</p>'; }
+    function renderViews() { document.querySelectorAll('.viewOnly').forEach(v => v.classList.remove('active')); document.getElementById(appState.view.replace(' ', '').toLowerCase().replace('serviceradar','service') + 'View')?.classList.add('active'); renderAlertsView(); renderAnalysisView(); renderMachinesView(); renderPlaceholders(); }
+    function renderAlertsView() { const p = document.getElementById('alertsPanel'); p.innerHTML = `<div class="filters"><select><option>All machines</option></select><select><option>All systems</option></select><select><option>All severities</option></select><select><option>All states</option></select></div>` + (appState.alerts.length ? table(['Time','Machine','System','Severity','State','Signal','Action'], appState.alerts.map(a=>`<tr><td>${fmtTime(a.timestamp)}</td><td>${a.machineId}</td><td>${a.system}</td><td>${a.severity}</td><td>${a.state||'No Data'}</td><td>${escapeHtml(a.signal)}</td><td>${escapeHtml(a.recommendedAction)}</td></tr>`)) : '<div class="empty">No confirmed alerts.</div>'); }
+    function renderAnalysisView() { document.getElementById('analysisPanel').innerHTML = `<h3>Rule Matches</h3>${renderRuleMatches()}<h3>Signal Discovery</h3>${renderSignalDiscovery()}<h3>Rule Coverage</h3>${renderRuleCoverage()}`; }
+    function renderMachinesView() { const rows = Object.values(appState.machines).map(m => `<tr><td>${m.id}</td><td>${m.latestState}</td><td>${m.focusedFilesCount}</td><td>${m.alertCount}</td><td>${m.warningCount}</td><td>${fmtTime(m.lastTimestamp)}</td></tr>`); document.getElementById('machinesPanel').innerHTML = table(['Machine ID','Latest State','Focused Files','Real Alerts','Warnings / Validation','Last Timestamp'], rows); }
+    function renderPlaceholders() { document.getElementById('reportsPanel').innerHTML = '<div class="empty">Reports are planned for future export. No report is generated unless real uploaded data exists.</div>'; document.getElementById('knowledgePanel').innerHTML = '<div class="empty">Knowledge articles are planned for future service guidance. Current recommendations come only from uploaded rules or honest generic review guidance.</div>'; }
+    window.addEventListener('DOMContentLoaded', initApp);
   </script>
 </body>
 </html>
