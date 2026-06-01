@@ -1,16 +1,531 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Landa PANDA Tool</title>
-  </head>
-  <body>
-    <div id="root">
-      <div style="padding:24px;font-family:Arial,sans-serif;color:#111">
-        Loading Landa PANDA Tool...
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Landa PANDA Tool</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071018;
+      --bg-soft: #0b1621;
+      --panel: rgba(15, 29, 42, 0.92);
+      --panel-strong: #111f2d;
+      --line: rgba(142, 166, 190, 0.18);
+      --line-strong: rgba(86, 214, 255, 0.38);
+      --text: #edf6ff;
+      --muted: #8ea2b5;
+      --cyan: #56d6ff;
+      --cyan-soft: rgba(86, 214, 255, 0.12);
+      --red: #ff5d73;
+      --red-soft: rgba(255, 93, 115, 0.14);
+      --amber: #f2c75c;
+      --green: #7ee787;
+      --shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+      --radius: 20px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(86, 214, 255, 0.16), transparent 34rem),
+        radial-gradient(circle at 80% 18%, rgba(255, 93, 115, 0.08), transparent 28rem),
+        linear-gradient(135deg, #061018 0%, #0a111a 50%, #05090e 100%);
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+
+    .app { min-height: 100vh; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto;
+      gap: 24px;
+      align-items: center;
+      padding: 22px 30px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(6, 16, 24, 0.88);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand h1 { margin: 0; font-size: clamp(24px, 3vw, 36px); letter-spacing: -0.04em; }
+    .brand p { margin: 4px 0 0; color: var(--muted); font-weight: 650; }
+
+    .top-nav { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+
+    .nav-button, .primary-button, .ghost-button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 14px;
+      color: var(--text);
+      background: rgba(255,255,255,0.04);
+      transition: border-color .18s ease, background .18s ease, transform .18s ease;
+    }
+
+    .nav-button:hover, .primary-button:hover, .ghost-button:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+    .nav-button.active { border-color: var(--cyan); background: var(--cyan-soft); color: #dff8ff; }
+    .primary-button { border-color: rgba(86, 214, 255, 0.52); background: linear-gradient(135deg, rgba(86,214,255,.2), rgba(86,214,255,.08)); font-weight: 800; }
+    .ghost-button { background: transparent; }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 22px;
+      padding: 24px;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 105px;
+      align-self: start;
+      display: grid;
+      gap: 18px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(12, 24, 36, 0.78);
+      box-shadow: var(--shadow);
+    }
+
+    .side-nav { display: grid; gap: 10px; }
+    .side-link { width: 100%; text-align: left; border-radius: 14px; padding: 12px 14px; }
+    .engine { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+    .engine h3 { margin: 0; font-size: 13px; color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+    .status-row { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 14px; }
+    .status-row strong { color: var(--green); }
+    .status-row.pending strong { color: var(--amber); }
+
+    main { display: grid; gap: 22px; }
+    .view { display: none; gap: 22px; }
+    .view.active { display: grid; }
+    .grid { display: grid; gap: 18px; }
+    .kpi-grid { grid-template-columns: repeat(5, minmax(150px, 1fr)); }
+    .two-column { grid-template-columns: minmax(0, 1.05fr) minmax(340px, .95fr); }
+    .three-column { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px;
+      background: var(--panel);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
+    }
+
+    .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .section-heading h2, .card h3 { margin: 0; letter-spacing: -0.03em; }
+    .eyebrow { margin: 0 0 5px; color: var(--cyan); font-size: 12px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
+    .muted { color: var(--muted); }
+    .badge, .severity {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 10px;
+      color: #cfe0ef;
+      background: rgba(255,255,255,.04);
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+    .severity { border-color: rgba(255,93,115,.55); background: var(--red-soft); color: #ffd6dc; }
+
+    .kpi-card { min-height: 132px; display: grid; align-content: space-between; }
+    .kpi-card span { color: var(--muted); font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+    .kpi-card strong { display: block; margin: 8px 0; font-size: 34px; letter-spacing: -0.05em; }
+    .kpi-card p { margin: 0; color: var(--muted); }
+
+    .drop-zone {
+      display: grid;
+      gap: 14px;
+      place-items: center;
+      min-height: 220px;
+      padding: 28px;
+      border: 1px dashed rgba(86, 214, 255, 0.45);
+      border-radius: 18px;
+      text-align: center;
+      background: linear-gradient(135deg, rgba(86,214,255,.08), rgba(255,255,255,.025));
+    }
+    .drop-zone.dragging { border-color: var(--cyan); background: rgba(86,214,255,.14); }
+    .drop-zone strong { font-size: 20px; }
+    .button-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+    .hidden-input { display: none; }
+    .format-box { margin-top: 16px; border: 1px solid var(--line); border-radius: 16px; padding: 16px; color: var(--muted); background: rgba(255,255,255,.025); }
+    .format-box code { display: block; margin-top: 8px; color: #d6e6f5; }
+
+    .inventory-list, .evidence-list, .action-list, .timeline, .findings-list { display: grid; gap: 10px; }
+    .inventory-item, .evidence-item, .action-list li, .timeline-item, .finding-item {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255,255,255,.03);
+    }
+    .inventory-item header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .system-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+    .system-tags span { border-radius: 999px; padding: 5px 8px; color: #dff8ff; background: rgba(86,214,255,.12); font-size: 12px; font-weight: 800; }
+    .file-list { max-height: 210px; overflow: auto; display: grid; gap: 8px; margin-top: 12px; }
+    .file-list code { color: #c9d8e7; overflow-wrap: anywhere; }
+    .empty-state { padding: 26px; border: 1px dashed var(--line); border-radius: 16px; color: var(--muted); text-align: center; background: rgba(255,255,255,.02); }
+
+    .topology { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)); gap: 14px; }
+    .node {
+      position: relative;
+      min-height: 108px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+      background: linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.02));
+    }
+    .node::after { content: ""; position: absolute; right: -15px; top: 50%; width: 15px; border-top: 1px solid rgba(86,214,255,.35); }
+    .node:nth-child(3)::after, .node:nth-child(6)::after { display: none; }
+    .node strong { display: block; font-size: 24px; letter-spacing: -0.04em; }
+    .node span { color: var(--muted); }
+    .node.alert { border-color: rgba(255,93,115,.72); box-shadow: inset 0 0 0 1px rgba(255,93,115,.2), 0 0 28px rgba(255,93,115,.12); }
+    .node.alert .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: var(--red); box-shadow: 0 0 18px var(--red); margin-right: 7px; }
+
+    .issue-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+    .issue-grid div { border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: rgba(255,255,255,.03); }
+    .issue-grid span { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .09em; }
+    .issue-grid strong { display: block; margin-top: 5px; }
+
+    table { width: 100%; border-collapse: collapse; min-width: 920px; }
+    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 16px; }
+    th, td { padding: 12px 13px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; background: rgba(255,255,255,.04); }
+    td { color: #dce8f2; }
+    td small { display: block; color: var(--muted); margin-top: 3px; }
+
+    .placeholder {
+      min-height: 220px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      border: 1px dashed rgba(86,214,255,.36);
+      border-radius: 18px;
+      background: linear-gradient(135deg, rgba(86,214,255,.07), rgba(255,255,255,.025));
+    }
+    .placeholder strong { display: block; font-size: 20px; margin-bottom: 8px; }
+
+    @media (max-width: 1180px) {
+      .shell, .two-column { grid-template-columns: 1fr; }
+      .sidebar { position: static; }
+      .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .topbar { grid-template-columns: 1fr; }
+      .top-nav { justify-content: flex-start; }
+    }
+    @media (max-width: 720px) {
+      .shell, .topbar { padding: 16px; }
+      .kpi-grid, .three-column, .issue-grid, .topology { grid-template-columns: 1fr; }
+      .node::after { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Landa PANDA Tool</h1>
+        <p>Proactive Analyzer Notification DA</p>
       </div>
+      <nav class="top-nav" aria-label="Primary navigation">
+        <button class="nav-button active" data-view-button="service">Service Radar</button>
+        <button class="nav-button" data-view-button="upload">Upload Logs</button>
+        <button class="nav-button" data-view-button="rules">Rules Catalog</button>
+        <button class="nav-button" data-view-button="machines">Machines</button>
+        <button class="nav-button" data-view-button="alerts">Alerts</button>
+        <button class="nav-button" data-view-button="settings">Settings</button>
+      </nav>
+    </header>
+
+    <div class="shell">
+      <aside class="sidebar">
+        <nav class="side-nav" aria-label="Workspace navigation">
+          <button class="nav-button side-link active" data-view-button="service">Service Radar</button>
+          <button class="nav-button side-link" data-view-button="upload">Upload Logs</button>
+          <button class="nav-button side-link" data-view-button="rules">Rules Catalog</button>
+          <button class="nav-button side-link" data-view-button="drilldown">BSS Drill-down</button>
+          <button class="nav-button side-link" data-view-button="settings">Settings</button>
+        </nav>
+        <section class="engine" aria-label="Engine Status">
+          <h3>Engine Status</h3>
+          <div class="status-row"><span>State-aware evaluator</span><strong>Ready</strong></div>
+          <div class="status-row"><span>Rule catalog loaded</span><strong>Ready</strong></div>
+          <div class="status-row pending"><span>Log mapping pending</span><strong>Pending</strong></div>
+        </section>
+      </aside>
+
+      <main>
+        <section id="service" class="view active" aria-label="Service Radar screen">
+          <div class="grid kpi-grid">
+            <article class="card kpi-card"><span>Systems Identified</span><strong id="kpi-systems">0</strong><p>BSS, IRD, IPS, FEC, ECC, LLCI, DPS, QCS path scan.</p></article>
+            <article class="card kpi-card"><span>Parameters Loaded</span><strong>8</strong><p>Initial converted parameter/rule signals.</p></article>
+            <article class="card kpi-card"><span>Enabled Rules</span><strong id="kpi-rules">7</strong><p>State-gated warning and critical ranges.</p></article>
+            <article class="card kpi-card"><span>Mock Alerts</span><strong>3</strong><p>Demonstration alerts until real parsing is connected.</p></article>
+            <article class="card kpi-card"><span>State Logic</span><strong>On</strong><p>Rules are evaluated by machine state and grace duration.</p></article>
+          </div>
+
+          <div class="grid two-column">
+            <section class="card">
+              <div class="section-heading"><div><p class="eyebrow">Upload panel</p><h2>Static inventory scanner</h2></div><span class="badge">Browser File API</span></div>
+              <div class="drop-zone" data-drop-zone>
+                <strong>Upload ZIP files or a machine folder</strong>
+                <span class="muted">This v0.1 baseline scans selected file paths and names only. ZIP contents are not parsed yet.</span>
+                <div class="button-row">
+                  <button class="primary-button" data-pick-folder>Upload folder</button>
+                  <button class="ghost-button" data-pick-files>Upload ZIP files</button>
+                </div>
+                <input class="hidden-input" id="folder-input" type="file" webkitdirectory multiple>
+                <input class="hidden-input" id="file-input" type="file" multiple>
+              </div>
+              <div class="format-box">
+                <strong>Supported format</strong>
+                <code>Root folder with machine folders:</code>
+                <code>S100100025/</code>
+                <code>D110100023/</code>
+                <code>Each may contain autocollect zip / opc.zip / logs</code>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="section-heading"><div><p class="eyebrow">Machine inventory</p><h2>Detected upload context</h2></div><span class="badge" id="scan-status">Awaiting upload</span></div>
+              <div class="grid three-column">
+                <article class="inventory-item"><span class="muted">Files selected</span><strong id="summary-files">0</strong></article>
+                <article class="inventory-item"><span class="muted">Detected machines</span><strong id="summary-machines">0</strong></article>
+                <article class="inventory-item"><span class="muted">Possible OPC archives</span><strong id="summary-opc">0</strong></article>
+              </div>
+              <div class="grid three-column" style="margin-top:10px">
+                <article class="inventory-item"><span class="muted">Possible logs</span><strong id="summary-logs">0</strong></article>
+                <article class="inventory-item"><span class="muted">Detected systems</span><strong id="summary-systems">0</strong></article>
+                <article class="inventory-item"><span class="muted">Scan mode</span><strong>Path-only</strong></article>
+              </div>
+              <div id="inventory-list" class="inventory-list" style="margin-top:16px"><div class="empty-state">Machine inventory appears after selecting files or a folder.</div></div>
+            </section>
+          </div>
+
+          <div class="grid two-column">
+            <section class="card">
+              <div class="section-heading"><div><p class="eyebrow">Machine Service Map</p><h2>System topology</h2></div><span class="severity"><span class="pulse"></span>BSS active alert</span></div>
+              <div class="topology">
+                <button class="node" data-system-node="IRD"><strong>IRD</strong><span>Imaging / drying path</span></button>
+                <button class="node" data-system-node="FEC"><strong>FEC</strong><span>Feeder control</span></button>
+                <button class="node" data-system-node="IPS"><strong>IPS</strong><span>Ink process</span></button>
+                <button class="node" data-system-node="ECC"><strong>ECC</strong><span>Engine control</span></button>
+                <button class="node" data-system-node="LLCI"><strong>LLCI</strong><span>Laydown interface</span></button>
+                <button class="node alert" data-view-button="drilldown"><strong><span class="pulse"></span>BSS</strong><span>Blanket system alert</span></button>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="section-heading"><div><p class="eyebrow">Active Issue</p><h2>BSS Blanket System</h2></div><button class="primary-button" data-view-button="drilldown">Open Drill-down</button></div>
+              <div class="issue-grid">
+                <div><span>State</span><strong>Printing</strong></div>
+                <div><span>Duration</span><strong>22m 14s</strong></div>
+                <div><span>Severity</span><strong>P1 High</strong></div>
+                <div><span>Rule mode</span><strong>State-aware</strong></div>
+              </div>
+              <p class="muted">Values are state-aware and not checked as absolute thresholds. The same blanket tension reading can be ignored during transition grace, normal during standby, or escalated during printing.</p>
+            </section>
+          </div>
+
+          <div class="grid three-column">
+            <section class="card"><div class="section-heading"><div><p class="eyebrow">Evidence Log</p><h2>Key evidence</h2></div></div><div class="evidence-list" id="evidence-log"></div></section>
+            <section class="card"><div class="section-heading"><div><p class="eyebrow">State Timeline</p><h2>Recent machine states</h2></div></div><div class="timeline"><div class="timeline-item"><strong>Standby</strong><p class="muted">09:12-09:25 — rules use standby thresholds.</p></div><div class="timeline-item"><strong>Ready</strong><p class="muted">09:25-09:31 — transition grace applied.</p></div><div class="timeline-item"><strong>Printing</strong><p class="muted">09:31-now — BSS duration exceeded.</p></div></div></section>
+            <section class="card"><div class="section-heading"><div><p class="eyebrow">Recommended Actions</p><h2>Service checklist</h2></div></div><ol class="action-list"><li>Confirm blanket tension calibration and dancer feedback.</li><li>Compare BSS readings only inside the Printing state window.</li><li>Inspect recent OPC and logs folders for matching machine ID.</li><li>Capture reference subsystem image before visual drill-down work.</li></ol></section>
+          </div>
+        </section>
+
+        <section id="upload" class="view" aria-label="Upload Logs screen">
+          <section class="card">
+            <div class="section-heading"><div><p class="eyebrow">Upload Logs</p><h2>Folder and file scan summary</h2></div><span class="badge">No network dependency</span></div>
+            <p class="muted">Use the upload controls on Service Radar. Results update here without a page reload.</p>
+            <div id="upload-results" class="inventory-list"><div class="empty-state">No files selected yet.</div></div>
+          </section>
+        </section>
+
+        <section id="rules" class="view" aria-label="Rules Catalog screen">
+          <section class="card">
+            <div class="section-heading"><div><p class="eyebrow">Rules Catalog</p><h2>Initial sample rules</h2></div><span class="badge">Static v0.1</span></div>
+            <div class="table-wrap"><table><thead><tr><th>System</th><th>Parameter</th><th>State</th><th>Target</th><th>Warning</th><th>Critical</th><th>Duration</th><th>Grace</th></tr></thead><tbody id="rules-body"></tbody></table></div>
+          </section>
+        </section>
+
+        <section id="machines" class="view" aria-label="Machines screen">
+          <section class="card"><div class="section-heading"><div><p class="eyebrow">Machines</p><h2>Detected machines and coverage</h2></div></div><div id="machines-view" class="inventory-list"><div class="empty-state">Machine records appear after upload scanning.</div></div></section>
+        </section>
+
+        <section id="alerts" class="view" aria-label="Alerts screen">
+          <section class="card"><div class="section-heading"><div><p class="eyebrow">Alerts</p><h2>Mock active alerts</h2></div><span class="severity">P1 High</span></div><div class="findings-list"><div class="finding-item"><strong>BSS Blanket System</strong><p class="muted">Printing state duration exceeded for blanket tension standby/ready envelope.</p></div><div class="finding-item"><strong>IPS Ink Pressure warning/error</strong><p class="muted">Rule is loaded and waiting for parsed readings.</p></div><div class="finding-item"><strong>NPD pressure watch</strong><p class="muted">High pressure, low pressure, and vacuum ranges available for future parser connection.</p></div></div></section>
+        </section>
+
+        <section id="settings" class="view" aria-label="Settings screen">
+          <section class="card"><div class="section-heading"><div><p class="eyebrow">Settings</p><h2>Static baseline configuration</h2></div><span class="badge">GitHub-only</span></div><p class="muted">This version has no build step, no runtime framework, no external scripts, and no server upload. All scanning runs locally in the browser against selected file names and paths.</p></section>
+        </section>
+
+        <section id="drilldown" class="view" aria-label="BSS Drill-down screen">
+          <section class="card">
+            <div class="section-heading"><div><p class="eyebrow">BSS Drill-down</p><h2>Blanket Support System</h2></div><button class="ghost-button" data-view-button="service">Back to Service Radar</button></div>
+            <div class="placeholder"><div><strong>Subsystem visual map pending reference image</strong><span class="muted">No fake subsystem image is included in this GitHub baseline.</span></div></div>
+          </section>
+          <div class="grid two-column">
+            <section class="card"><div class="section-heading"><div><p class="eyebrow">Selected system</p><h2>BSS</h2></div><span class="severity">State: Printing</span></div><p class="muted">Related rules are evaluated only when the machine state is applicable. Transition grace prevents false positives while the system is moving between states.</p><div id="bss-rules" class="findings-list"></div></section>
+            <section class="card"><div class="section-heading"><div><p class="eyebrow">Mock findings</p><h2>Evidence and actions</h2></div></div><div class="findings-list"><div class="finding-item"><strong>Finding</strong><p class="muted">Blanket tension remained outside expected state envelope for 22m 14s while Printing.</p></div><div class="finding-item"><strong>Evidence</strong><p class="muted">BSS path tokens and machine state windows are ready for future log parser mapping.</p></div><div class="finding-item"><strong>Action checklist</strong><p class="muted">Check dancer feedback, tension calibration, and recent BSS alarms before replacing components.</p></div></div></section>
+          </div>
+        </section>
+      </main>
     </div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+  </div>
+
+  <script>
+    const systemKeys = ['BSS', 'IRD', 'IPS', 'FEC', 'ECC', 'LLCI', 'DPS', 'QCS'];
+    const machinePattern = /[SD]\d{8,}/ig;
+    const rules = [
+      { system: 'PSS', parameter: 'Air Heating Target Temp', state: 'Ready / Printing', target: '56 °C', warning: '46-66 °C', critical: '40-72 °C', duration: '120s', grace: '60s' },
+      { system: 'IRD', parameter: 'IRD PID', state: 'Ready', target: '130 %', warning: '100-140 %', critical: '90-150 %', duration: '90s', grace: '90s' },
+      { system: 'BSS', parameter: 'BSS Blanket tension / standby', state: 'Standby / Ready', target: '400 N', warning: '360-440 N', critical: '320-480 N', duration: '180s', grace: '180s' },
+      { system: 'IPS', parameter: 'IPS Ink Pressure warning/error', state: 'Ready / Printing', target: '-75 mbar', warning: '-95 to -55 mbar', critical: '-110 to -45 mbar', duration: '45s', grace: '45s' },
+      { system: 'NPD', parameter: 'NPD High pressure', state: 'Ready / Printing', target: '6.0 bar', warning: '5.9-6.1 bar', critical: '5.7-6.3 bar', duration: '30s', grace: '30s' },
+      { system: 'NPD', parameter: 'NPD Low pressure', state: 'Ready / Printing', target: '2.4 bar', warning: '2.2-2.6 bar', critical: '2.0-2.8 bar', duration: '30s', grace: '30s' },
+      { system: 'NPD', parameter: 'NPD Vacuum', state: 'Printing', target: '-55 kPa', warning: '-65 to -45 kPa', critical: '-75 to -35 kPa', duration: '60s', grace: '20s' }
+    ];
+
+    const state = {
+      files: [],
+      machines: new Map(),
+      systems: new Set(),
+      opcCount: 0,
+      logCount: 0
+    };
+
+    function normalizePath(path) { return String(path || '').replace(/\\/g, '/'); }
+    function unique(values) { return [...new Set(values)].sort(); }
+
+    function detectMachines(path) {
+      return unique((normalizePath(path).match(machinePattern) || []).map((id) => id.toUpperCase()));
+    }
+
+    function detectSystems(path) {
+      const upper = normalizePath(path).toUpperCase();
+      return systemKeys.filter((system) => upper.includes(system));
+    }
+
+    function isPossibleLog(path) {
+      const lower = normalizePath(path).toLowerCase();
+      return lower.includes('logs') || /\.(log|txt|csv|json|xml|dat|trace|evtx)$/i.test(lower);
+    }
+
+    function scanFiles(fileList) {
+      state.files = Array.from(fileList || []);
+      state.machines = new Map();
+      state.systems = new Set();
+      state.opcCount = 0;
+      state.logCount = 0;
+
+      state.files.forEach((file) => {
+        const path = normalizePath(file.webkitRelativePath || file.name);
+        const machines = detectMachines(path);
+        const systems = detectSystems(path);
+        const assigned = machines.length ? machines : ['UNASSIGNED'];
+        if (path.toLowerCase().includes('opc')) state.opcCount += 1;
+        if (isPossibleLog(path)) state.logCount += 1;
+        systems.forEach((system) => state.systems.add(system));
+        assigned.forEach((machineId) => {
+          if (!state.machines.has(machineId)) {
+            state.machines.set(machineId, { id: machineId, files: [], systems: new Set(), opc: 0, logs: 0 });
+          }
+          const machine = state.machines.get(machineId);
+          machine.files.push(path);
+          systems.forEach((system) => machine.systems.add(system));
+          if (path.toLowerCase().includes('opc')) machine.opc += 1;
+          if (isPossibleLog(path)) machine.logs += 1;
+        });
+      });
+
+      renderScan();
+      showView('upload');
+    }
+
+    function renderRules() {
+      document.getElementById('rules-body').innerHTML = rules.map((rule) => `
+        <tr><td>${rule.system}</td><td><strong>${rule.parameter}</strong></td><td>${rule.state}</td><td>${rule.target}</td><td>${rule.warning}</td><td>${rule.critical}</td><td>${rule.duration}</td><td>${rule.grace}</td></tr>
+      `).join('');
+      document.getElementById('bss-rules').innerHTML = rules.filter((rule) => rule.system === 'BSS').map((rule) => `
+        <div class="finding-item"><strong>${rule.parameter}</strong><p class="muted">State: ${rule.state}. Target ${rule.target}; warning ${rule.warning}; critical ${rule.critical}; duration ${rule.duration}; grace ${rule.grace}.</p></div>
+      `).join('');
+    }
+
+    function renderEvidence() {
+      document.getElementById('evidence-log').innerHTML = [
+        'Rule BSS blanket tension / standby is loaded and ready for parsed BSS log readings.',
+        'Printing state is active; transition grace is no longer suppressing checks.',
+        'Upload scan will infer machine IDs from S/D folder names before deep parsing is added.'
+      ].map((item) => `<div class="evidence-item">${item}</div>`).join('');
+    }
+
+    function renderScan() {
+      const machines = [...state.machines.values()].sort((a, b) => a.id.localeCompare(b.id));
+      document.getElementById('summary-files').textContent = state.files.length;
+      document.getElementById('summary-machines').textContent = machines.filter((m) => m.id !== 'UNASSIGNED').length;
+      document.getElementById('summary-opc').textContent = state.opcCount;
+      document.getElementById('summary-logs').textContent = state.logCount;
+      document.getElementById('summary-systems').textContent = state.systems.size;
+      document.getElementById('kpi-systems').textContent = state.systems.size;
+      document.getElementById('scan-status').textContent = state.files.length ? 'Scan complete' : 'Awaiting upload';
+
+      const inventoryMarkup = machines.length ? machines.map((machine) => {
+        const systems = [...machine.systems].sort();
+        const files = machine.files.slice(0, 8).map((path) => `<code>${path}</code>`).join('');
+        return `<article class="inventory-item"><header><strong>${machine.id}</strong><span class="badge">${machine.files.length} files</span></header><div class="muted">OPC matches: ${machine.opc} · Log matches: ${machine.logs}</div><div class="system-tags">${systems.length ? systems.map((s) => `<span>${s}</span>`).join('') : '<span>No system token yet</span>'}</div><div class="file-list">${files}</div></article>`;
+      }).join('') : '<div class="empty-state">Machine inventory appears after selecting files or a folder.</div>';
+
+      document.getElementById('inventory-list').innerHTML = inventoryMarkup;
+      document.getElementById('upload-results').innerHTML = inventoryMarkup;
+      document.getElementById('machines-view').innerHTML = inventoryMarkup;
+    }
+
+    function showView(viewId) {
+      document.querySelectorAll('.view').forEach((view) => view.classList.toggle('active', view.id === viewId));
+      document.querySelectorAll('[data-view-button]').forEach((button) => button.classList.toggle('active', button.dataset.viewButton === viewId));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    document.querySelectorAll('[data-view-button]').forEach((button) => {
+      button.addEventListener('click', () => showView(button.dataset.viewButton));
+    });
+
+    document.querySelectorAll('[data-system-node]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (button.dataset.systemNode === 'BSS') showView('drilldown');
+      });
+    });
+
+    const folderInput = document.getElementById('folder-input');
+    const fileInput = document.getElementById('file-input');
+    document.querySelector('[data-pick-folder]').addEventListener('click', () => folderInput.click());
+    document.querySelector('[data-pick-files]').addEventListener('click', () => fileInput.click());
+    folderInput.addEventListener('change', (event) => scanFiles(event.target.files));
+    fileInput.addEventListener('change', (event) => scanFiles(event.target.files));
+
+    const dropZone = document.querySelector('[data-drop-zone]');
+    dropZone.addEventListener('dragover', (event) => { event.preventDefault(); dropZone.classList.add('dragging'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
+    dropZone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      dropZone.classList.remove('dragging');
+      scanFiles(event.dataTransfer.files);
+    });
+
+    renderRules();
+    renderEvidence();
+    renderScan();
+  </script>
+</body>
 </html>
