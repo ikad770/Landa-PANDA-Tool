@@ -1,293 +1,1140 @@
-<!doctype html>
+
+cat > /mnt/user-data/outputs/panda_tool.html << 'HTMLEOF'
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Landa PANDA Tool — Service Command Center</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <style>
-    :root {
-      --bg: #03070b; --panel: #09121c; --panel2: #0d1824; --panel3: #122130;
-      --line: rgba(135, 229, 255, .16); --line2: rgba(72, 219, 255, .38);
-      --cyan: #42dcff; --cyan2: rgba(66, 220, 255, .12);
-      --red: #ff475d; --red2: rgba(255, 71, 93, .16);
-      --amber: #ffb547; --amber2: rgba(255, 181, 71, .16);
-      --green: #62d99a; --green2: rgba(98, 217, 154, .13);
-      --text: #d6e6ef; --muted: #91a2af; --muted2: #657582; --white: #f7fcff;
-      --shadow: 0 24px 70px rgba(0,0,0,.44); --sans: Inter, "Segoe UI", Roboto, Arial, sans-serif;
-      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; background: var(--bg); }
-    body { color: var(--text); font: 15px/1.5 var(--sans); background:
-      radial-gradient(circle at 14% 0%, rgba(66,220,255,.14), transparent 34%),
-      radial-gradient(circle at 82% 9%, rgba(98,217,154,.06), transparent 30%),
-      linear-gradient(135deg, #020509 0%, #07111b 56%, #03070b 100%); }
-    button, input, select { font: inherit; } input[type=file] { display: none; }
-    button { cursor: pointer; } .hidden { display: none !important; }
-    .app { max-width: 1860px; margin: 0 auto; padding: 16px; }
-    .top { display: grid; grid-template-columns: minmax(285px, auto) 1fr minmax(430px, auto); gap: 18px; align-items: center;
-      padding: 12px 14px; border: 1px solid var(--line); border-radius: 20px; background: rgba(8,16,25,.92); box-shadow: var(--shadow); }
-    .brand { display: flex; align-items: center; gap: 14px; }
-    .logo { width: 92px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--white); font-weight: 900; letter-spacing: .15em; border: 1px solid rgba(255,255,255,.16); background: linear-gradient(135deg, rgba(255,255,255,.08), rgba(66,220,255,.09)); }
-    h1 { margin: 0; color: var(--white); font-size: 25px; line-height: 1; letter-spacing: -.04em; }
-    .subtitle { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
-    .nav { display: flex; justify-content: center; gap: 7px; flex-wrap: wrap; }
-    .nav button { border: 1px solid transparent; background: transparent; color: #9db0bd; border-radius: 999px; padding: 9px 12px; font-weight: 800; }
-    .nav button.active, .nav button:hover { color: var(--white); border-color: var(--line2); background: var(--cyan2); }
-    .tools { display: flex; justify-content: flex-end; align-items: center; gap: 9px; flex-wrap: wrap; }
-    .range, .toolBtn { min-height: 39px; border-radius: 999px; border: 1px solid var(--line); padding: 8px 13px; color: var(--text); background: rgba(255,255,255,.035); }
-    .toolBtn { display: inline-flex; align-items: center; gap: 8px; color: var(--white); font-weight: 850; border-color: rgba(66,220,255,.34); background: linear-gradient(180deg, rgba(66,220,255,.15), rgba(66,220,255,.04)); }
-    .analyze { border-color: rgba(98,217,154,.45); background: linear-gradient(180deg, rgba(98,217,154,.16), rgba(98,217,154,.05)); }
-    .strip { margin: 12px 0; display: grid; grid-template-columns: minmax(265px, auto) 1fr auto; gap: 13px; align-items: center; padding: 11px 14px; border: 1px solid rgba(135,229,255,.13); border-radius: 16px; background: rgba(6,13,21,.82); }
-    .mode { color: var(--white); font-weight: 900; } .stage { color: var(--muted); font-weight: 750; }
-    .progress { height: 9px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
-    .bar { width: 0%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #119dbd, var(--cyan)); transition: width .18s ease; }
-    .counts { color: var(--muted); font-size: 13px; white-space: nowrap; }
-    .card { border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(180deg, rgba(13,24,36,.96), rgba(5,10,16,.97)); box-shadow: inset 0 1px 0 rgba(255,255,255,.035); overflow: hidden; }
-    .head { min-height: 55px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid rgba(135,229,255,.11); }
-    .head h2, .head h3 { margin: 0; color: var(--white); font-size: 17px; letter-spacing: -.01em; } .head span { color: var(--muted); font-size: 13px; }
-    .body { padding: 16px; } .muted { color: var(--muted); } .small { font-size: 13px; color: var(--muted); }
-    .empty { padding: 16px; border: 1px dashed rgba(135,229,255,.21); border-radius: 14px; background: rgba(255,255,255,.025); color: var(--muted); }
-    .empty ol { margin: 9px 0 0 22px; padding: 0; }
-    .kpis { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 12px; margin-bottom: 12px; }
-    .kpi { padding: 17px; min-height: 118px; } .kpi label { display: block; color: #a7bac6; font-weight: 850; margin-bottom: 10px; }
-    .kpi strong { display: block; color: var(--white); font-size: clamp(24px,2.3vw,38px); line-height: 1.05; letter-spacing: -.045em; }
-    .kpi small { display: block; color: var(--muted); margin-top: 9px; }
-    .mainGrid { display: grid; grid-template-columns: minmax(250px, 1.05fr) minmax(430px, 2.1fr) minmax(330px, 1.25fr); gap: 12px; align-items: start; }
-    .machineList { display: grid; gap: 10px; } .machine { width: 100%; text-align: left; border: 1px solid rgba(135,229,255,.13); border-radius: 15px; background: rgba(255,255,255,.025); padding: 13px; color: var(--text); }
-    .machine.active { border-color: var(--line2); background: var(--cyan2); } .machine b { color: var(--white); font-size: 17px; } .machine .row { display: flex; justify-content: space-between; margin-top: 6px; color: var(--muted); font-size: 13px; gap: 10px; }
-    .systems { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
-    .systemCard { min-height: 188px; padding: 16px; text-align: left; border-radius: 18px; border: 1px solid rgba(135,229,255,.15); background: rgba(255,255,255,.025); color: var(--text); }
-    .systemCard:hover, .systemCard.active { border-color: var(--line2); background: rgba(66,220,255,.08); }
-    .sysTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; } .sysTop b { color: var(--white); font-size: 24px; letter-spacing: -.03em; }
-    .badge { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font-size: 12px; color: #c7d7df; font-weight: 900; white-space: nowrap; }
-    .critical { border-color: rgba(255,71,93,.55)!important; background: var(--red2)!important; color: #ffdce2!important; } .warning { border-color: rgba(255,181,71,.58)!important; background: var(--amber2)!important; color: #ffe4b7!important; }
-    .ok { border-color: rgba(98,217,154,.5)!important; background: var(--green2)!important; color: #cff6df!important; } .discovery { border-color: rgba(66,220,255,.52)!important; background: var(--cyan2)!important; color: #d7f8ff!important; }
-    .nodata { border-color: rgba(145,162,175,.22)!important; background: rgba(145,162,175,.07)!important; color: #adb9c1!important; }
-    .sysStats { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin: 12px 0; }
-    .stat { border: 1px solid rgba(135,229,255,.1); border-radius: 12px; padding: 9px; background: rgba(0,0,0,.12); } .stat label { display: block; color: var(--muted); font-size: 12px; } .stat strong { color: var(--white); font-size: 16px; }
-    .issueTitle { margin: 0 0 11px; color: var(--white); font-size: 20px; line-height: 1.2; } .fields { display: grid; gap: 10px; }
-    .field { border: 1px solid rgba(135,229,255,.12); border-radius: 13px; padding: 11px 12px; background: rgba(255,255,255,.025); } .field label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; } .field span { color: #d7e6ee; overflow-wrap: anywhere; }
-    .tabs { margin-top: 12px; } .tabBtns { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px; border-bottom: 1px solid rgba(135,229,255,.11); }
-    .tabBtns button { border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.025); color: #aebfc9; padding: 8px 12px; font-weight: 850; } .tabBtns button.active { color: var(--white); border-color: var(--line2); background: var(--cyan2); }
-    .panel { padding: 14px; } table { width: 100%; border-collapse: collapse; } th, td { padding: 11px 10px; border-bottom: 1px solid rgba(135,229,255,.09); text-align: left; vertical-align: top; } th { color: #acc0cb; font-size: 12px; letter-spacing: .03em; text-transform: uppercase; } td { color: #d0dee7; } tr:hover td { background: rgba(66,220,255,.035); }
-    .tableWrap { overflow: auto; max-height: 520px; } .raw { max-width: 420px; color: #aab8c1; } .mono { font-family: var(--mono); font-size: 12px; }
-    .timeline { display: grid; gap: 10px; } .segment { display: grid; grid-template-columns: 170px 1fr 170px; gap: 12px; align-items: center; } .rail { height: 28px; border-radius: 999px; background: rgba(255,255,255,.07); overflow: hidden; } .fill { height: 100%; min-width: 5%; border-radius: inherit; background: linear-gradient(90deg, var(--cyan), var(--green)); }
-    .actions { margin-top: 12px; } .actions ul { margin: 0; padding-left: 20px; } .actions li { margin: 8px 0; }
-    .viewOnly { display: none; } .viewOnly.active { display: block; }
-    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; } select { border: 1px solid var(--line); border-radius: 999px; background: #09131d; color: var(--text); padding: 8px 11px; }
-    @media (max-width: 1250px) { .top, .strip, .mainGrid { grid-template-columns: 1fr; } .tools { justify-content: flex-start; } .kpis { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-    @media (max-width: 720px) { .app { padding: 10px; } .systems, .kpis { grid-template-columns: 1fr; } .segment { grid-template-columns: 1fr; } }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PANDA Tool – Proactive Analyzer Notification DA</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg0:#070b14;--bg1:#0c1220;--bg2:#111827;--bg3:#162032;--bg4:#1c2a3e;
+  --border:#1e2d4a;--border2:#253550;
+  --text1:#e8edf5;--text2:#94a3b8;--text3:#4b6180;
+  --blue:#3b82f6;--blue2:#1d4ed8;--blue-dim:#1e3a5f;
+  --green:#22c55e;--green-dim:#0f2d1b;
+  --red:#ef4444;--red-dim:#2d1b1b;--red-glow:rgba(239,68,68,0.3);
+  --orange:#f97316;--orange-dim:#2d1d0e;
+  --yellow:#eab308;--yellow-dim:#2d2600;
+  --teal:#2dd4bf;--purple:#a78bfa;
+  --font:'IBM Plex Sans',sans-serif;
+  --mono:'IBM Plex Mono',monospace;
+}
+html,body{height:100%;background:var(--bg0);color:var(--text1);font-family:var(--font);font-size:13px;overflow:hidden;}
+
+/* ── TOPBAR ── */
+#topbar{
+  height:48px;background:var(--bg1);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 16px;gap:16px;position:relative;z-index:10;
+}
+.logo-mark{display:flex;align-items:center;gap:8px;margin-right:8px;}
+.logo-mark svg{width:24px;height:24px;}
+.logo-text{font-size:15px;font-weight:600;color:var(--text1);letter-spacing:0.3px;}
+.logo-sub{font-size:10px;color:var(--text3);font-weight:400;margin-top:1px;}
+.top-nav{display:flex;gap:2px;margin-left:8px;}
+.top-nav button{
+  background:none;border:none;color:var(--text2);padding:6px 12px;
+  border-radius:6px;cursor:pointer;font-size:12px;font-family:var(--font);
+  transition:all 0.15s;
+}
+.top-nav button:hover{background:var(--bg4);color:var(--text1);}
+.top-nav button.active{color:var(--blue);border-bottom:2px solid var(--blue);border-radius:0;}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2);}
+.date-pill{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:11px;display:flex;align-items:center;gap:6px;}
+.notif-btn{position:relative;background:var(--bg3);border:1px solid var(--border);border-radius:6px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.notif-dot{position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;border:1px solid var(--bg1);}
+.avatar{width:30px;height:30px;background:var(--blue2);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;cursor:pointer;}
+
+/* ── BREADCRUMB ── */
+#breadcrumb{
+  height:36px;background:var(--bg1);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 16px;gap:6px;font-size:12px;color:var(--text2);
+}
+#breadcrumb span.sep{color:var(--text3);}
+#breadcrumb span.active{color:var(--text1);}
+.online-badge{display:flex;align-items:center;gap:5px;margin-left:8px;font-size:11px;color:var(--green);}
+.online-dot{width:6px;height:6px;background:var(--green);border-radius:50%;box-shadow:0 0 6px var(--green);}
+#breadcrumb .bc-actions{margin-left:auto;display:flex;gap:6px;}
+.bc-btn{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:4px 10px;font-size:11px;color:var(--text2);cursor:pointer;font-family:var(--font);}
+.bc-btn:hover{border-color:var(--blue);color:var(--blue);}
+.actions-btn{background:var(--blue2);border:none;border-radius:6px;padding:4px 12px;font-size:11px;color:#fff;cursor:pointer;font-family:var(--font);}
+
+/* ── MAIN LAYOUT ── */
+#app{display:flex;height:calc(100vh - 84px);}
+
+/* ── LEFT SIDEBAR ── */
+#sidebar{
+  width:220px;min-width:220px;background:var(--bg1);border-right:1px solid var(--border);
+  overflow-y:auto;display:flex;flex-direction:column;
+}
+.sidebar-machine{padding:12px;}
+.sidebar-title{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);margin-bottom:8px;font-weight:500;}
+.machine-context-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;}
+.mc-name{font-weight:600;font-size:13px;margin-bottom:3px;}
+.mc-status{font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px;}
+.machine-img{width:100%;height:70px;background:linear-gradient(135deg,#0c1a2e,#162032);border-radius:6px;margin:8px 0;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;}
+.machine-img svg{opacity:0.6;}
+.view-machine-btn{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:5px;font-size:11px;color:var(--text2);cursor:pointer;font-family:var(--font);}
+
+.active-issue-card{background:var(--red-dim);border:1px solid #7f1d1d;border-radius:8px;padding:10px;margin-bottom:10px;}
+.ai-header{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.ai-header span{font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:0.5px;}
+.p1-badge{background:#7f1d1d;color:var(--red);font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600;margin-left:auto;}
+.ai-system{font-weight:600;font-size:13px;}
+.ai-desc{font-size:11px;color:var(--text2);margin-top:2px;}
+.ai-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;}
+.ai-meta-item label{font-size:10px;color:var(--text3);display:block;}
+.ai-meta-item span{font-size:12px;font-weight:500;}
+
+.subsys-nav{padding:0 12px 12px;}
+.subsys-item{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;transition:background 0.1s;}
+.subsys-item:hover{background:var(--bg3);}
+.subsys-item.active{background:var(--bg4);color:var(--text1);}
+.subsys-item .subsys-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.subsys-child{padding-left:20px;}
+.subsys-child .subsys-item{font-size:11px;color:var(--text2);}
+
+/* ── CENTER PANEL ── */
+#center{flex:1;overflow-y:auto;background:var(--bg0);}
+
+/* Page: Service Radar */
+#page-radar{display:block;}
+/* Page: Component Analysis */
+#page-analysis{display:none;}
+
+/* ── STAT CARDS ROW ── */
+#stat-row{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border-bottom:1px solid var(--border);}
+.stat-card{background:var(--bg1);padding:14px 16px;}
+.stat-card .sc-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:6px;}
+.stat-card .sc-val{font-size:22px;font-weight:600;line-height:1;}
+.stat-card .sc-label{font-size:10px;color:var(--text2);margin-top:3px;line-height:1.4;}
+.stat-card .sc-sub{font-size:10px;color:var(--text3);margin-top:2px;}
+.sc-icon-risk{background:rgba(239,68,68,0.15);}
+.sc-icon-alert{background:rgba(239,68,68,0.15);}
+.sc-icon-conf{background:rgba(59,130,246,0.15);}
+.sc-icon-action{background:rgba(249,115,22,0.15);}
+.sc-icon-time{background:rgba(34,197,94,0.15);}
+
+/* ── MACHINE OVERVIEW ── */
+#machine-overview-section{display:grid;grid-template-columns:1fr 340px;gap:0;border-bottom:1px solid var(--border);}
+#machine-3d{position:relative;background:radial-gradient(ellipse at 50% 60%,#0d1f38,#070b14);min-height:380px;padding:20px;}
+#machine-3d .machine-label{font-size:14px;font-weight:600;margin-bottom:4px;}
+#machine-3d .machine-sub{font-size:11px;color:var(--text2);}
+.machine-view-controls{position:absolute;bottom:16px;left:16px;display:flex;gap:6px;}
+.mvc-btn{background:rgba(12,18,32,0.8);border:1px solid var(--border2);border-radius:6px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);}
+.mvc-btn:hover{border-color:var(--blue);color:var(--blue);}
+
+/* machine SVG diagram */
+.machine-svg-wrap{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:560px;}
+.hotspot{cursor:pointer;}
+.hotspot circle{transition:all 0.2s;}
+.hotspot:hover circle.outer{opacity:0.4;}
+.hotspot-label{pointer-events:none;}
+
+/* issue popup */
+#issue-popup{
+  background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:14px;
+  position:absolute;top:20px;right:20px;width:320px;
+}
+.ip-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.ip-title{font-weight:600;font-size:13px;}
+.ip-close{background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;}
+.ip-issue-name{font-size:15px;font-weight:600;color:var(--red);margin-bottom:2px;}
+.ip-issue-sub{font-size:11px;color:var(--text2);margin-bottom:10px;}
+.ip-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
+.ip-grid-item label{font-size:10px;color:var(--text3);}
+.ip-grid-item span{font-size:12px;font-weight:500;}
+.ip-chart-wrap{height:80px;position:relative;margin-bottom:10px;}
+.ip-chart-label{font-size:10px;color:var(--text2);margin-bottom:4px;}
+.drill-btn{width:100%;background:var(--blue);border:none;border-radius:8px;padding:8px;color:#fff;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font);transition:background 0.15s;}
+.drill-btn:hover{background:var(--blue2);}
+
+/* bottom panels */
+#bottom-panels{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--border);}
+.bp{border-right:1px solid var(--border);}
+.bp:last-child{border-right:none;}
+.bp-header{padding:10px 14px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center;}
+.bp-header a{color:var(--blue);font-size:10px;cursor:pointer;text-transform:none;font-weight:400;letter-spacing:0;}
+.state-timeline{padding:10px 14px;}
+.tl-track{display:flex;height:24px;border-radius:4px;overflow:hidden;gap:1px;}
+.tl-seg{display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;cursor:pointer;transition:opacity 0.15s;white-space:nowrap;overflow:hidden;}
+.tl-seg:hover{opacity:0.8;}
+.tl-legend{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;}
+.tl-legend-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text2);}
+.tl-dot{width:8px;height:8px;border-radius:2px;}
+.tl-marker{position:absolute;top:-8px;display:flex;flex-direction:column;align-items:center;}
+.tl-marker-line{width:1px;height:32px;background:var(--red);}
+.tl-marker-label{background:var(--red);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;}
+
+.log-table{width:100%;padding:0 14px;}
+.log-row{display:grid;grid-template-columns:60px 110px 1fr;gap:8px;padding:5px 0;border-bottom:1px solid rgba(30,45,74,0.5);font-size:11px;align-items:center;}
+.log-time{font-family:var(--mono);color:var(--text3);font-size:10px;}
+.log-src{font-size:10px;font-weight:500;padding:2px 6px;border-radius:4px;}
+.src-sm{background:#1e1b4b;color:#818cf8;}
+.src-fec{background:#1c1917;color:#d97706;}
+.src-rules{background:#162032;color:var(--blue);}
+.src-corr{background:#042f2e;color:var(--teal);}
+.log-msg{color:var(--text2);line-height:1.3;}
+
+.rec-table{padding:0 14px;}
+.rec-row{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid rgba(30,45,74,0.5);align-items:flex-start;}
+.rec-num{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;}
+.rn-high{background:var(--red-dim);color:var(--red);border:1px solid #7f1d1d;}
+.rn-med{background:var(--orange-dim);color:var(--orange);border:1px solid #7c2d12;}
+.rn-low{background:var(--green-dim);color:var(--green);border:1px solid #14532d;}
+.rec-text{flex:1;font-size:11px;color:var(--text1);line-height:1.4;}
+.rec-impact{font-size:10px;white-space:nowrap;margin-left:auto;}
+.ri-high{color:var(--red);}
+.ri-med{color:var(--orange);}
+.ri-low{color:var(--green);}
+.rec-arrow{color:var(--text3);margin-left:4px;cursor:pointer;}
+
+/* ── COMPONENT ANALYSIS PAGE ── */
+#page-analysis{flex:1;overflow-y:auto;}
+#ca-layout{display:grid;grid-template-columns:1fr 340px;gap:0;height:100%;}
+#ca-main{overflow-y:auto;}
+#ca-right{background:var(--bg1);border-left:1px solid var(--border);overflow-y:auto;}
+
+.ca-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.ca-title{font-size:15px;font-weight:600;}
+.ca-sub{font-size:11px;color:var(--text2);margin-top:2px;}
+.live-badge{background:#0f2d1b;color:var(--green);font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid #14532d;}
+.rotation-btn{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;font-size:11px;color:var(--text2);cursor:pointer;font-family:var(--font);}
+
+/* cutaway view */
+#cutaway-wrap{position:relative;background:radial-gradient(ellipse at 50% 60%,#0d1f38,#070b14);min-height:340px;display:flex;align-items:center;justify-content:center;}
+.legend-dots{position:absolute;top:12px;right:12px;display:flex;gap:12px;}
+.ld-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);}
+.ld-dot{width:8px;height:8px;border-radius:50%;}
+
+/* component health table */
+.comp-health-section{padding:14px 16px;}
+.ch-title{font-size:12px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.ch-sub{font-size:10px;color:var(--text3);font-weight:400;}
+.comp-table{width:100%;border-collapse:collapse;}
+.comp-table th{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);padding:5px 8px;text-align:left;border-bottom:1px solid var(--border);font-weight:500;}
+.comp-table td{padding:7px 8px;border-bottom:1px solid rgba(30,45,74,0.5);font-size:12px;}
+.comp-table tr:hover td{background:rgba(22,32,50,0.5);}
+.prob-bar-wrap{background:var(--bg4);border-radius:3px;height:5px;width:80px;overflow:hidden;}
+.prob-bar{height:100%;border-radius:3px;}
+
+/* why PANDA section */
+.why-section{padding:14px 16px;border-top:1px solid var(--border);}
+.why-title{font-size:12px;font-weight:600;margin-bottom:10px;}
+.why-item{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid rgba(30,45,74,0.4);align-items:flex-start;}
+.why-check{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+.wc-ok{background:var(--green-dim);color:var(--green);}
+.why-main{font-size:12px;font-weight:500;color:var(--text1);}
+.why-sub{font-size:11px;color:var(--text2);margin-top:1px;}
+
+/* right side key signal */
+.ks-section{padding:14px;}
+.ks-title{font-size:12px;font-weight:600;margin-bottom:2px;}
+.ks-sub{font-size:10px;color:var(--text2);margin-bottom:10px;}
+.ks-legend{display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;}
+.ks-li{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text2);}
+.ks-line{width:20px;height:2px;}
+.ks-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px;}
+.ks-meta-item label{font-size:9px;color:var(--text3);}
+.ks-meta-item span{font-size:12px;font-weight:600;}
+.state-timeline-mini{padding:8px 0;margin-top:10px;}
+.stml-label{font-size:10px;color:var(--text3);margin-bottom:5px;}
+
+/* recommended actions right */
+.ra-section{padding:14px;border-top:1px solid var(--border);}
+.ra-title{font-size:12px;font-weight:600;margin-bottom:10px;}
+.ra-item{display:flex;gap:8px;padding:7px 0;border-bottom:1px solid rgba(30,45,74,0.4);align-items:flex-start;}
+.ra-num{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;}
+.ra-text{flex:1;font-size:12px;color:var(--text1);line-height:1.4;}
+.ra-impact{font-size:10px;white-space:nowrap;}
+
+/* confidence overall */
+.conf-section{padding:10px 14px;border-top:1px solid var(--border);}
+.conf-row{display:flex;align-items:center;gap:8px;margin-top:6px;}
+.conf-bar-wrap{flex:1;background:var(--bg4);border-radius:3px;height:6px;overflow:hidden;}
+.conf-bar-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:3px;}
+.conf-val{font-size:14px;font-weight:600;color:var(--green);}
+
+.service-report-btn{width:calc(100% - 28px);margin:10px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:9px;font-size:12px;color:var(--text1);cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;}
+.service-report-btn:hover{border-color:var(--blue);color:var(--blue);}
+
+/* bottom sections CA */
+.ca-bottom{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--border);}
+
+/* related rules */
+.rule-table{width:100%;border-collapse:collapse;}
+.rule-table th{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);padding:5px 8px;text-align:left;border-bottom:1px solid var(--border);font-weight:500;}
+.rule-table td{padding:6px 8px;border-bottom:1px solid rgba(30,45,74,0.4);font-size:11px;}
+.rule-triggered{color:var(--red);font-size:10px;}
+.rule-not{color:var(--text3);font-size:10px;}
+
+/* scroll */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:var(--bg0);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+::-webkit-scrollbar-thumb:hover{background:var(--border2);}
+
+/* pulse animation */
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.6;transform:scale(1.3);}}
+.pulse{animation:pulse 2s infinite;}
+
+/* severity badges */
+.sev-p1{background:#7f1d1d;color:var(--red);font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600;border:1px solid #991b1b;}
+.sev-p2{background:#7c2d12;color:var(--orange);font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600;border:1px solid #9a3412;}
+.sev-p3{background:#713f12;color:var(--yellow);font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600;border:1px solid #92400e;}
+
+/* status bar */
+#statusbar{background:var(--bg1);border-top:1px solid var(--border);padding:4px 16px;display:flex;gap:16px;font-size:10px;color:var(--text3);align-items:center;position:fixed;bottom:0;left:0;right:0;}
+.sb-item{display:flex;align-items:center;gap:4px;}
+.sb-dot{width:5px;height:5px;border-radius:50%;}
+
+/* tabs in center panel */
+.center-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--bg1);padding:0 16px;}
+.ctab{padding:8px 14px;border:none;background:none;color:var(--text2);font-size:12px;font-family:var(--font);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;display:flex;align-items:center;gap:5px;}
+.ctab:hover{color:var(--text1);}
+.ctab.active{color:var(--blue);border-bottom-color:var(--blue);}
+
+.recent-occ-table{width:100%;border-collapse:collapse;}
+.rot th{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--text3);padding:5px 8px;border-bottom:1px solid var(--border);font-weight:500;text-align:left;}
+.rot td{padding:7px 8px;border-bottom:1px solid rgba(30,45,74,0.4);font-size:11px;}
+</style>
 </head>
 <body>
-  <div class="app">
-    <header class="top">
-      <div class="brand"><div class="logo">LANDA</div><div><h1>PANDA Tool</h1><p class="subtitle">Proactive Analyzer Notification DA</p></div></div>
-      <nav class="nav" id="nav"></nav>
-      <div class="tools">
-        <span class="range" id="dataRange">Last data range: No data</span>
-        <label class="toolBtn">Upload Logs<input id="logInput" type="file" multiple webkitdirectory /></label>
-        <label class="toolBtn">Upload ZIP / Files<input id="logZipInput" type="file" multiple /></label>
-        <label class="toolBtn">Upload Rules<input id="rulesInput" type="file" accept=".xlsx,.xls,.csv" /></label>
-        <button class="toolBtn analyze" id="analyzeBtn">Analyze</button>
-      </div>
-    </header>
 
-    <section class="strip">
-      <div><span class="mode" id="modeText">Idle</span> <span class="stage" id="stageText">/ Idle / waiting for files</span></div>
-      <div class="progress"><div class="bar" id="progressBar"></div></div>
-      <div class="counts" id="countsText">0 focused files · 0 rules · 0 machines</div>
-    </section>
+<!-- TOPBAR -->
+<div id="topbar">
+  <div class="logo-mark">
+    <svg viewBox="0 0 24 24" fill="none">
+      <rect x="2" y="2" width="9" height="9" rx="2" fill="#3b82f6" opacity="0.9"/>
+      <rect x="13" y="2" width="9" height="9" rx="2" fill="#3b82f6" opacity="0.5"/>
+      <rect x="2" y="13" width="9" height="9" rx="2" fill="#3b82f6" opacity="0.5"/>
+      <rect x="13" y="13" width="9" height="9" rx="2" fill="#ef4444" opacity="0.9"/>
+    </svg>
+    <div><div class="logo-text">PANDA Tool</div><div class="logo-sub">Proactive Analyzer Notification DA</div></div>
+  </div>
+  <nav class="top-nav">
+    <button class="active" onclick="showPage('radar')">Service Radar</button>
+    <button onclick="showPage('radar')">Alerts</button>
+    <button onclick="showPage('analysis')">Analysis</button>
+    <button>Machines</button>
+    <button>Reports</button>
+    <button>Knowledge</button>
+  </nav>
+  <div class="top-right">
+    <div class="date-pill">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      May 27, 2025 &nbsp;11:10 – 14:10 ▾
+    </div>
+    <div class="notif-btn"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><div class="notif-dot"></div></div>
+    <div class="avatar">JD</div>
+  </div>
+</div>
 
-    <main>
-      <section id="serviceView" class="viewOnly active">
-        <div class="kpis" id="kpis"></div>
-        <div class="mainGrid">
-          <section class="card"><div class="head"><h2>Machine Selector</h2><span id="machineHint">No data</span></div><div class="body"><div id="machineList" class="machineList"></div></div></section>
-          <section class="card"><div class="head"><h2>System Health</h2><span>Evidence-backed status only</span></div><div class="body"><div id="systems" class="systems"></div></div></section>
-          <aside class="card"><div class="head"><h2>Selected Issue Details</h2><span id="detailHint">No selection</span></div><div class="body" id="selectedIssue"></div></aside>
+<!-- BREADCRUMB -->
+<div id="breadcrumb">
+  <span style="color:var(--text2);cursor:pointer;" onclick="showPage('radar')">Machine Overview</span>
+  <span class="sep">›</span>
+  <span style="color:var(--text2);cursor:pointer;" onclick="showPage('radar')">Landa S11-1P</span>
+  <span class="sep">›</span>
+  <span style="color:var(--text2);cursor:pointer;" onclick="showPage('radar')">BSS Blanket System</span>
+  <span class="sep" id="breadcrumb-extra-sep" style="display:none;">›</span>
+  <span class="active" id="breadcrumb-last">Machine Overview</span>
+  <div class="online-badge"><div class="online-dot pulse"></div>ONLINE</div>
+  <div class="bc-actions">
+    <button class="bc-btn">⤢ Share</button>
+    <button class="bc-btn">↓ Export</button>
+    <button class="actions-btn">Actions ▾</button>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div class="sidebar-machine">
+      <div class="sidebar-title">Machine Context</div>
+      <div class="machine-context-card">
+        <div class="mc-name">Landa S11-1P</div>
+        <div class="mc-status"><div class="online-dot pulse" style="width:5px;height:5px;"></div>ONLINE</div>
+        <div class="machine-img">
+          <svg width="180" height="60" viewBox="0 0 180 60" fill="none">
+            <rect x="5" y="20" width="170" height="30" rx="4" fill="#1e3a5f" stroke="#2563eb" stroke-width="0.5"/>
+            <rect x="10" y="25" width="40" height="20" rx="3" fill="#0c1f38"/>
+            <rect x="55" y="15" width="70" height="35" rx="4" fill="#162032" stroke="#253550" stroke-width="0.5"/>
+            <circle cx="130" cy="35" r="12" fill="#0c1f38" stroke="#1e3a5f" stroke-width="1"/>
+            <circle cx="130" cy="35" r="6" fill="#0d1a2e"/>
+            <rect x="145" y="22" width="25" height="26" rx="3" fill="#0c1f38" stroke="#1e2d4a" stroke-width="0.5"/>
+            <circle cx="157" cy="50" r="5" fill="#0c1220" stroke="#253550"/>
+            <circle cx="20" cy="50" r="5" fill="#0c1220" stroke="#253550"/>
+          </svg>
         </div>
-        <section class="card tabs"><div class="tabBtns" id="tabBtns"></div><div class="panel" id="tabPanel"></div></section>
-        <section class="card actions"><div class="head"><h2>Recommended Actions</h2><span>Rules first, discovery second</span></div><div class="body" id="actionsPanel"></div></section>
-      </section>
+        <button class="view-machine-btn" onclick="showPage('radar')">View Machine Overview</button>
+      </div>
 
-      <section id="alertsView" class="viewOnly card"><div class="head"><h2>Alerts</h2><span>Confirmed alerts only</span></div><div class="body" id="alertsPanel"></div></section>
-      <section id="analysisView" class="viewOnly card"><div class="head"><h2>Analysis</h2><span>Rule matches, signal discovery, coverage</span></div><div class="body" id="analysisPanel"></div></section>
-      <section id="machinesView" class="viewOnly card"><div class="head"><h2>Machines</h2><span>Detected machine summary</span></div><div class="body" id="machinesPanel"></div></section>
-      <section id="reportsView" class="viewOnly card"><div class="head"><h2>Reports</h2><span>Future export workspace</span></div><div class="body" id="reportsPanel"></div></section>
-      <section id="knowledgeView" class="viewOnly card"><div class="head"><h2>Knowledge</h2><span>Future service knowledge articles</span></div><div class="body" id="knowledgePanel"></div></section>
-    </main>
+      <div class="active-issue-card">
+        <div class="ai-header">
+          <svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#ef4444" opacity="0.8"/></svg>
+          <span>Active Issue</span>
+          <span class="p1-badge">P1</span>
+        </div>
+        <div class="ai-system">BSS &nbsp;<span style="font-weight:400;color:var(--text2);">Blanket System</span></div>
+        <div class="ai-desc">Blanket Pressure Deviation</div>
+        <div class="ai-meta">
+          <div class="ai-meta-item"><label>State at Detection</label><span><span class="online-dot" style="width:5px;height:5px;background:var(--green);"></span> Printing</span></div>
+          <div class="ai-meta-item"><label>Since 13:47</label><span>22m 14s</span></div>
+          <div class="ai-meta-item"><label>Confidence</label><span>96%</span></div>
+          <div class="ai-meta-item"><label>Severity</label><span style="color:var(--red);">● P1 High</span></div>
+        </div>
+      </div>
+
+      <div class="sidebar-title">Subsystem Navigation</div>
+    </div>
+    <div class="subsys-nav">
+      <div class="subsys-item active" onclick="showPage('analysis')">
+        <div class="subsys-dot" style="background:var(--red);box-shadow:0 0 5px var(--red);"></div>
+        <span>BSS Blanket System</span>
+      </div>
+      <div class="subsys-item subsys-child">
+        <div class="subsys-dot" style="background:var(--orange);"></div>
+        <span>Blanket Cylinder</span>
+      </div>
+      <div class="subsys-item subsys-child">
+        <div class="subsys-dot" style="background:var(--yellow);"></div>
+        <span>Pressure Sensor (B-PS-01)</span>
+      </div>
+      <div class="subsys-item subsys-child">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span>Regulator (B-REG-01)</span>
+      </div>
+      <div class="subsys-item subsys-child">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span>Valve Block (B-VB-01)</span>
+      </div>
+      <div class="subsys-item subsys-child">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span>Air Supply (B-AIR)</span>
+      </div>
+      <div class="subsys-item subsys-child">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span>Drive Motor (B-MTR-01)</span>
+      </div>
+      <div class="subsys-item subsys-child">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span>Cooling Loop (B-CL-01)</span>
+      </div>
+      <div class="subsys-item subsys-child">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span>Feedback Sensor (B-FB-01)</span>
+      </div>
+      <div class="subsys-item" style="margin-top:4px;">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span style="color:var(--text2);">BCU Blanket Control</span>
+      </div>
+      <div class="subsys-item">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span style="color:var(--text2);">IPS Ink Process</span>
+      </div>
+      <div class="subsys-item">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span style="color:var(--text2);">FEC Feeder</span>
+      </div>
+      <div class="subsys-item">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span style="color:var(--text2);">ECC Engine Control</span>
+      </div>
+      <div class="subsys-item">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span style="color:var(--text2);">IRD Imaging</span>
+      </div>
+      <div class="subsys-item">
+        <div class="subsys-dot" style="background:#4b6180;"></div>
+        <span style="color:var(--text2);">LLCI Laydown</span>
+      </div>
+    </div>
   </div>
 
-  <script>
-    const FOCUSED_LOGS = ['FECNotification', 'LLCINotification', 'MachineStates', 'AlertsMonitoring', 'AletrsMonitoring'];
-    const SYSTEMS = ['FEC', 'LLCI', 'BSS', 'IPS', 'AlertsMonitoring'];
-    const STAGES = ['Idle / waiting for files', 'Opening archive', 'Finding focused logs', 'Parsing MachineStates', 'Parsing Notifications', 'Loading Rules', 'Evaluating Rules', 'Building Dashboard', 'Complete'];
-    const STATE_NAMES = ['Standby','Ready','Prepare2Print','Printing','PrintEnd','Recovery','Error','ON','Offline','Unknown'];
-    const SUPPORTED_CHECKS = ['range', 'above threshold', 'below threshold'];
-    const appState = {
-      mode: 'Idle', scanStage: STAGES[0], progress: 0, focusedFiles: [], machines: {}, machineStates: [], evidence: [], signalProfiles: [], rules: [], ruleMatches: [], alerts: [], needsValidation: [], selectedMachineId: null, selectedSystem: null, selectedIssue: null,
-      visitedZips: new Set(), parsedPaths: new Set(), view: 'Service Radar', activeTab: 'State Timeline', dashboard: { systems: {}, range: null }
-    };
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PAGE: SERVICE RADAR                                     -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="page-radar" style="flex:1;overflow-y:auto;display:block;">
 
-    function initApp() {
-      renderNav(); document.getElementById('logInput').addEventListener('change', handleLogUpload); document.getElementById('logZipInput').addEventListener('change', handleLogUpload); document.getElementById('rulesInput').addEventListener('change', handleRulesUpload); document.getElementById('analyzeBtn').addEventListener('click', analyze); renderDashboard();
-    }
+    <!-- Stat row -->
+    <div id="stat-row">
+      <div class="stat-card">
+        <div class="sc-icon sc-icon-risk"><svg width="18" height="18" fill="none" stroke="#ef4444" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <div class="sc-val" style="color:var(--red);">3<span style="font-size:15px;color:var(--text3);">/18</span></div>
+        <div class="sc-label">Machines at risk</div>
+        <div class="sc-sub">With active anomalies</div>
+      </div>
+      <div class="stat-card">
+        <div class="sc-icon sc-icon-alert"><svg width="18" height="18" fill="none" stroke="#ef4444" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+        <div class="sc-val" style="color:var(--red);">2</div>
+        <div class="sc-label">P1 Alerts</div>
+        <div class="sc-sub">Requiring immediate attention</div>
+      </div>
+      <div class="stat-card">
+        <div class="sc-icon sc-icon-conf"><svg width="18" height="18" fill="none" stroke="#3b82f6" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div>
+        <div class="sc-val" style="color:var(--blue);">92%</div>
+        <div class="sc-label">Detection Confidence</div>
+        <div class="sc-sub">Average across all machines</div>
+      </div>
+      <div class="stat-card">
+        <div class="sc-icon sc-icon-action"><svg width="18" height="18" fill="none" stroke="#f97316" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></div>
+        <div class="sc-val" style="color:var(--orange);">7</div>
+        <div class="sc-label">Open Preventive Actions</div>
+        <div class="sc-sub">Across 4 machines</div>
+      </div>
+      <div class="stat-card">
+        <div class="sc-icon sc-icon-time"><svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <div class="sc-val" style="color:var(--green);">18 min</div>
+        <div class="sc-label">Mean Time to Detect</div>
+        <div class="sc-sub" style="color:var(--green);">↓ 22% vs last 30 days</div>
+      </div>
+    </div>
 
-    function setStage(stage, progress) { appState.scanStage = stage; appState.progress = Math.max(appState.progress || 0, Math.min(100, progress)); renderStatus(); }
-    function completeStage() { appState.progress = 100; appState.scanStage = STAGES[8]; renderStatus(); }
-    function normalizePath(path) { return String(path || '').replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, ''); }
-    function isFocusedPath(path) { return FOCUSED_LOGS.some(key => normalizePath(path).toLowerCase().includes(key.toLowerCase())); }
-    function isZipPath(path) { return /\.zip$/i.test(path || ''); }
-    function sourceTypeFromPath(path) { const hit = FOCUSED_LOGS.find(key => String(path).toLowerCase().includes(key.toLowerCase())); return hit === 'AletrsMonitoring' ? 'AlertsMonitoring' : (hit || 'Other'); }
-    function detectMachineId(text) { const match = String(text || '').match(/\b[SD]\d{8,12}\b/i); return match ? match[0].toUpperCase() : 'UNKNOWN'; }
-    function parseNumber(value) { if (value === null || value === undefined || value === '') return null; const clean = String(value).replace(/[,%]/g, '').match(/[-+]?\d*\.?\d+/); return clean ? Number(clean[0]) : null; }
-    function parseDate(text) { const s = String(text || ''); const iso = s.match(/\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?/); const euro = s.match(/\d{2}[-/]\d{2}[-/]\d{4}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?/); let raw = iso ? iso[0] : euro ? euro[0] : ''; if (!raw) return null; raw = raw.replace(',', '.'); if (euro) { const [d,m,yRest] = raw.split(/[/-]/); raw = `${yRest.slice(0,4)}-${m}-${d}${yRest.slice(4)}`; } const d = new Date(raw.replace(' ', 'T')); return Number.isNaN(d.getTime()) ? null : d.toISOString(); }
-    function fmtTime(ts) { if (!ts) return 'No Data'; const d = new Date(ts); return Number.isNaN(d.getTime()) ? String(ts) : d.toLocaleString(); }
-    function normText(v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' '); }
-    function normalizeState(v) { const n = normText(v); if (!n) return 'Unknown'; if (['prepare2print','prepare 2 print','prepare to print','preparetoprint'].includes(n.replace(/\s/g,'')) || n.includes('prepare')) return 'Prepare2Print'; if (n === 'printend' || n === 'print end' || n.includes('print end')) return 'PrintEnd'; if (n === 'err' || n.includes('error')) return 'Error'; if (n.includes('standby')) return 'Standby'; if (n.includes('ready')) return 'Ready'; if (n.includes('printing')) return 'Printing'; if (n.includes('recovery')) return 'Recovery'; if (n === 'on' || n.includes(' online')) return 'ON'; if (n.includes('offline')) return 'Offline'; return STATE_NAMES.find(s => normText(s) === n) || 'Unknown'; }
+    <!-- Machine overview + issue popup -->
+    <div id="machine-overview-section">
+      <div id="machine-3d">
+        <div class="machine-label">Machine Overview</div>
+        <div class="machine-sub">Landa S11-1P &nbsp;<span class="online-badge" style="display:inline-flex;"><div class="online-dot pulse"></div>ONLINE</span></div>
 
-    async function handleLogUpload(event) {
-      resetLogs(); appState.mode = appState.rules.length ? 'Rules Loaded' : 'Idle'; appState.progress = 0; setStage(STAGES[1], 5);
-      await scanFiles(Array.from(event.target.files || []));
-      setStage(STAGES[7], 92); buildSignalDiscovery(); buildDashboardModel(); appState.mode = appState.rules.length ? 'Rules Loaded' : 'Discovery Mode'; if (appState.focusedFiles.length && !appState.rules.length) appState.mode = 'Discovery Mode'; completeStage(); renderDashboard();
-    }
-    function resetLogs() { appState.focusedFiles = []; appState.machines = {}; appState.machineStates = []; appState.evidence = []; appState.signalProfiles = []; appState.ruleMatches = []; appState.alerts = []; appState.needsValidation = []; appState.visitedZips = new Set(); appState.parsedPaths = new Set(); appState.selectedIssue = null; appState.selectedSystem = null; }
+        <!-- Machine SVG with hotspots -->
+        <div class="machine-svg-wrap">
+          <svg viewBox="0 0 560 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Machine body -->
+            <rect x="30" y="60" width="500" height="130" rx="8" fill="#0d1f38" stroke="#1e3a5f" stroke-width="1"/>
+            <!-- Screen/display panel -->
+            <rect x="35" y="65" width="120" height="80" rx="5" fill="#0a1525" stroke="#1e2d4a" stroke-width="0.5"/>
+            <rect x="40" y="70" width="110" height="65" rx="3" fill="#070f1f"/>
+            <!-- prints on screen -->
+            <image href="" x="40" y="70" width="110" height="65"/>
+            <rect x="42" y="72" width="50" height="30" rx="2" fill="#1e3a5f" opacity="0.5"/>
+            <rect x="96" y="72" width="50" height="30" rx="2" fill="#1e3a5f" opacity="0.3"/>
+            <rect x="42" y="105" width="104" height="25" rx="2" fill="#1e3a5f" opacity="0.2"/>
+            <!-- Center cylinder section -->
+            <rect x="160" y="50" width="230" height="148" rx="6" fill="#0c1a2e" stroke="#1e2d4a" stroke-width="0.5"/>
+            <!-- Main roller/cylinder -->
+            <ellipse cx="280" cy="130" rx="65" ry="55" fill="#162032" stroke="#1e3a5f" stroke-width="1"/>
+            <ellipse cx="280" cy="130" rx="50" ry="42" fill="#0d1a2e" stroke="#1e2d4a" stroke-width="0.5"/>
+            <ellipse cx="280" cy="130" rx="30" ry="26" fill="#0a1220" stroke="#162032" stroke-width="0.5"/>
+            <!-- Pipes/connections -->
+            <path d="M200 90 Q220 80 240 85" stroke="#1e3a5f" stroke-width="2"/>
+            <path d="M320 85 Q340 80 360 90" stroke="#1e3a5f" stroke-width="2"/>
+            <path d="M245 170 Q265 180 280 178" stroke="#1e3a5f" stroke-width="2"/>
+            <path d="M315 170 Q330 180 350 175" stroke="#1e3a5f" stroke-width="1.5"/>
+            <!-- Right section -->
+            <rect x="395" y="65" width="130" height="120" rx="5" fill="#0c1a2e" stroke="#1e2d4a" stroke-width="0.5"/>
+            <!-- Wheels/base -->
+            <ellipse cx="80" cy="195" rx="12" ry="6" fill="#0a1220" stroke="#1e2d4a"/>
+            <ellipse cx="200" cy="195" rx="12" ry="6" fill="#0a1220" stroke="#1e2d4a"/>
+            <ellipse cx="360" cy="195" rx="12" ry="6" fill="#0a1220" stroke="#1e2d4a"/>
+            <ellipse cx="480" cy="195" rx="12" ry="6" fill="#0a1220" stroke="#1e2d4a"/>
 
-    async function scanFiles(files) {
-      setStage(STAGES[2], 12); const focused = [], zips = [];
-      for (const file of files) { const path = normalizePath(file.webkitRelativePath || file.name); if (isZipPath(path)) zips.push({ file, path }); else if (isFocusedPath(path)) focused.push({ file, path }); }
-      for (const z of zips) await scanZip(await z.file.arrayBuffer(), z.path);
-      for (const item of focused) await readFocusedFile(item.file, item.path);
-      setStage(STAGES[3], 45); parseFocusedLogsByType('MachineStates'); setStage(STAGES[4], 62); parseFocusedLogsByType('Notifications'); attachStateContext();
-    }
+            <!-- HOTSPOTS -->
+            <!-- IRD -->
+            <g class="hotspot" onclick="selectHotspot('IRD')">
+              <circle cx="90" cy="55" r="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5" opacity="0.9"/>
+              <circle cx="90" cy="55" r="14" class="outer" fill="#3b82f6" opacity="0.15"/>
+              <text x="90" y="58" text-anchor="middle" font-size="8" fill="#60a5fa" font-family="IBM Plex Sans">●</text>
+            </g>
+            <text x="90" y="42" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="IBM Plex Sans">IRD</text>
+            <text x="90" y="32" text-anchor="middle" font-size="9" fill="#4b6180" font-family="IBM Plex Sans">Imaging</text>
 
-    async function scanZip(arrayBuffer, zipPath) {
-      const normalizedZip = normalizePath(zipPath); if (appState.visitedZips.has(normalizedZip)) return; appState.visitedZips.add(normalizedZip); setStage(STAGES[1], Math.min(25, appState.progress + 4));
-      const zip = await JSZip.loadAsync(arrayBuffer); const entries = Object.values(zip.files).filter(e => !e.dir); setStage(STAGES[2], Math.min(36, appState.progress + 6));
-      for (const entry of entries) { const nestedPath = normalizePath(`${normalizedZip}/${entry.name}`); if (isZipPath(entry.name) && !appState.visitedZips.has(nestedPath)) { await scanZip(await entry.async('arraybuffer'), nestedPath); } }
-      for (const entry of entries) { const nestedPath = normalizePath(`${normalizedZip}/${entry.name}`); if (isFocusedPath(nestedPath) && !isZipPath(entry.name)) await readFocusedText(await entry.async('text'), nestedPath); }
-    }
-    async function readFocusedFile(file, path) { await readFocusedText(await file.text(), path); }
-    async function readFocusedText(text, path) { const normalized = normalizePath(path); if (appState.parsedPaths.has(normalized)) return; appState.parsedPaths.add(normalized); appState.focusedFiles.push({ path: normalized, sourceType: sourceTypeFromPath(normalized), text, machineId: detectMachineId(`${normalized}\n${text.slice(0, 2000)}`) }); }
-    function parseFocusedLogsByType(kind) { appState.focusedFiles.filter(f => kind === 'MachineStates' ? f.sourceType === 'MachineStates' : f.sourceType !== 'MachineStates').forEach(parseFocusedLog); }
+            <!-- FEC -->
+            <g class="hotspot" onclick="selectHotspot('FEC')">
+              <circle cx="190" cy="45" r="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5" opacity="0.9"/>
+              <circle cx="190" cy="45" r="14" class="outer" fill="#3b82f6" opacity="0.15"/>
+            </g>
+            <text x="190" y="32" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="IBM Plex Sans">FEC</text>
+            <text x="190" y="22" text-anchor="middle" font-size="9" fill="#4b6180" font-family="IBM Plex Sans">Feeder</text>
 
-    function parseFocusedLog(file) { if (file.sourceType === 'MachineStates') return parseMachineStates(file); const lines = file.text.split(/\r?\n/).filter(Boolean); for (const [idx, line] of lines.entries()) { const ev = parseNotificationLine(line, file, idx); if (ev) appState.evidence.push(ev); } }
-    function parseMachineStates(file) {
-      const records = []; file.text.split(/\r?\n/).forEach((line, idx) => { const ts = parseDate(line); const state = extractState(line); if (!ts || !state) return; records.push({ id: `state-${appState.machineStates.length}-${idx}`, machineId: detectMachineId(`${file.machineId} ${line}`), timestamp: ts, state, sourceFile: file.path, rawLine: line }); });
-      records.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
-      records.forEach((r, i) => { const next = records[i+1]; r.startTime = r.timestamp; r.endTime = next ? next.timestamp : null; r.duration = next ? Math.max(0, (new Date(next.timestamp) - new Date(r.timestamp)) / 1000) : null; r.transitionIndex = i; appState.machineStates.push(r); });
-    }
-    function extractState(line) { const n = normText(line); for (const state of STATE_NAMES) if (n.includes(normText(state))) return normalizeState(state); const key = line.match(/(?:state|machine state)\s*[:=]\s*([A-Za-z0-9 ]+)/i); return key ? normalizeState(key[1]) : null; }
-    function parseNotificationLine(line, file, idx) {
-      const timestamp = parseDate(line); const numericValues = extractNumericValues(line); const sourceType = file.sourceType; const system = mapLogSourceToSystem(sourceType, line); const possibleSignals = extractPossibleSignals(line, numericValues); const severityHint = extractSeverityHint(line);
-      return { id: `ev-${appState.evidence.length}-${idx}`, timestamp, machineId: detectMachineId(`${file.machineId} ${line}`), sourceFile: file.path, sourceType, system, subsystem: inferSubsystem(line, system), component: inferComponent(line), state: null, message: cleanupMessage(line), rawLine: line, numericValues, possibleSignals, severityHint };
-    }
-    function extractNumericValues(line) { const values = []; const re = /([-+]?\d*\.?\d+)\s*(psi|bar|mbar|°c|c|%|mm|sec|ms|counts?)?\b/ig; let m; while ((m = re.exec(line)) !== null) values.push({ value: Number(m[1]), unit: m[2] || '', text: m[0] }); return values; }
-    function extractPossibleSignals(line, values) { let clean = String(line).replace(/\d{4}[-/]\d{2}[-/]\d{2}[^\s]*/g, '').replace(/\d{2}[-/]\d{2}[-/]\d{4}[^\s]*/g, ''); values.forEach(v => clean = clean.replace(v.text, ' ')); const parts = clean.split(/[|,;\[\](){}]+/).map(s => s.trim()).filter(s => s.length > 2 && !/^\d+$/.test(s)); return [...new Set(parts.slice(-4))]; }
-    function extractSeverityHint(line) { const hit = String(line).match(/\b(error|warning|critical|fault|failed|fail|deviation|low|high|timeout|disconnected|pressure|vacuum|temperature)\b/i); return hit ? hit[1].toLowerCase() : ''; }
-    function cleanupMessage(line) { return String(line).replace(/^\s*\[?\d{2,4}[-/][^\]]+\]?\s*/, '').trim(); }
-    function inferSubsystem(line, system) { const n = normText(line); if (system === 'BSS') return 'Blanket Supply System'; if (system === 'IPS') return 'Ink Process System'; if (n.includes('cooling')) return 'Cooling'; if (n.includes('filter')) return 'Filter'; return ''; }
-    function inferComponent(line) { const m = String(line).match(/\b(BCU|Tub|Tank|Fill|Drain|Filter|Cooling|Pressure|Vacuum|Temperature|Ink|Blanket|FEC)\b/i); return m ? m[1] : ''; }
-    function mapLogSourceToSystem(source, line = '') { const s = normText(source); const l = normText(line); if (s.includes('fec')) return 'FEC'; if (s.includes('machine') || s.includes('state')) return 'MachineStates'; if (s.includes('alert')) return 'AlertsMonitoring'; if (s.includes('bss') || /\b(blanket|bcu|tub|tank|fill|drain|filter|cooling)\b/.test(l)) return 'BSS'; if (s.includes('ips') || /\b(ips|ink|ink process)\b/.test(l)) return 'IPS'; if (s.includes('llci') || s.includes('bssnotification')) return 'LLCI'; return 'LLCI'; }
-    function sourceCompatible(rule, evidence) { const src = normText(rule.logSource); const ev = normText(evidence.sourceType); if (!src) return rule.system ? normText(rule.system) === normText(evidence.system) : true; if (src.includes('bss')) return evidence.sourceType === 'LLCINotification' && evidence.system === 'BSS'; if (src.includes('ips')) return evidence.sourceType === 'LLCINotification' && evidence.system === 'IPS'; if (src.includes('fec')) return evidence.sourceType === 'FECNotification'; if (src.includes('state')) return evidence.sourceType === 'MachineStates'; if (src.includes('alert')) return evidence.sourceType === 'AlertsMonitoring'; if (src.includes('opc')) return ev.includes('notification') || ev.includes('alert'); if (src.includes('other')) return true; return ev.includes(src) || src.includes(ev) || normText(rule.system) === normText(evidence.system); }
+            <!-- IPS -->
+            <g class="hotspot" onclick="selectHotspot('IPS')">
+              <circle cx="310" cy="42" r="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5" opacity="0.9"/>
+              <circle cx="310" cy="42" r="14" class="outer" fill="#3b82f6" opacity="0.15"/>
+            </g>
+            <text x="310" y="30" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="IBM Plex Sans">IPS</text>
+            <text x="310" y="20" text-anchor="middle" font-size="9" fill="#4b6180" font-family="IBM Plex Sans">Ink Process</text>
 
-    async function handleRulesUpload(event) { const file = event.target.files && event.target.files[0]; if (!file) return; appState.progress = 0; appState.mode = appState.focusedFiles.length ? 'Evaluating' : 'Rules Loaded'; setStage(STAGES[5], 68); const data = await file.arrayBuffer(); parseRulesWorkbook(data, file.name); setStage(STAGES[7], 90); if (appState.evidence.length) analyze(); else { buildDashboardModel(); completeStage(); renderDashboard(); } }
-    function parseRulesWorkbook(data, fileName) {
-      const workbook = XLSX.read(data, { type: 'array' }); const sheetName = workbook.SheetNames.includes('PANDA Rules Template') ? 'PANDA Rules Template' : workbook.SheetNames[0]; const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '' }); const headerIndex = detectRulesHeader(rows); appState.rules = [];
-      if (headerIndex < 0) return; const headers = rows[headerIndex].map(h => String(h).trim());
-      for (let r = headerIndex + 1; r < rows.length; r++) { const row = rows[r]; if (!row || row.every(c => String(c).trim() === '')) break; const raw = {}; headers.forEach((h, i) => raw[h] = row[i]); const rule = normalizeRule(raw, r + 1); if (rule) appState.rules.push(rule); }
-    }
-    function detectRulesHeader(rows) { const required = ['system','subsystem','component','log signal name','log source']; return rows.findIndex(row => { const names = row.map(c => normText(c)); return required.every(req => names.includes(req)); }); }
-    function getCol(raw, names) { const key = Object.keys(raw).find(k => names.some(n => normText(k) === normText(n))); return key ? raw[key] : ''; }
-    function normalizeRule(raw, rowNumber) {
-      const system = String(getCol(raw, ['System'])).trim(); const component = String(getCol(raw, ['Component'])).trim(); const logSignalName = String(getCol(raw, ['Log Signal Name'])).trim(); if (!system && !component && !logSignalName) return null;
-      const id = String(getCol(raw, ['Rule ID','RuleId','ID'])).trim() || `RULE-${rowNumber}-${slug(system || 'System')}-${slug(component || logSignalName || 'Signal')}`;
-      const expectedByState = {}; ['ON','Standby','Ready','Prepare2Print','Printing','PrintEnd','Recovery','Error'].forEach(st => expectedByState[st] = getCol(raw, [`Expected ${st}`]));
-      const checkType = String(getCol(raw, ['Check Type'])).trim() || 'Range'; const evaluatorSupported = SUPPORTED_CHECKS.includes(normText(checkType));
-      return { id, rowNumber, system, subsystem: getCol(raw, ['Subsystem']), component, parameterName: getCol(raw, ['Parameter Name']), logSignalName, logSource: getCol(raw, ['Log Source']), valueMetric: getCol(raw, ['Value Metric']), checkType, expectedByState, specTolerance: getCol(raw, ['Spec Tolerance']), warningLow: getCol(raw, ['Warning Low']), warningHigh: getCol(raw, ['Warning High']), criticalLow: getCol(raw, ['Critical Low']), criticalHigh: getCol(raw, ['Critical High']), warningDurationSec: parseNumber(getCol(raw, ['Warning Duration Sec'])), criticalDurationSec: parseNumber(getCol(raw, ['Critical Duration Sec'])), transitionGraceSec: parseNumber(getCol(raw, ['Transition Grace Sec'])), warningSeverity: getCol(raw, ['Warning Severity']), criticalSeverity: getCol(raw, ['Critical Severity']), warningAction: getCol(raw, ['Warning Action']), criticalAction: getCol(raw, ['Critical Action']), notes: getCol(raw, ['Notes']), evaluatorSupported };
-    }
-    function slug(v) { return String(v || '').replace(/[^A-Za-z0-9]+/g, '').slice(0, 24) || 'NA'; }
+            <!-- ECC -->
+            <g class="hotspot" onclick="selectHotspot('ECC')">
+              <circle cx="430" cy="45" r="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5" opacity="0.9"/>
+              <circle cx="430" cy="45" r="14" class="outer" fill="#3b82f6" opacity="0.15"/>
+            </g>
+            <text x="430" y="32" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="IBM Plex Sans">ECC</text>
+            <text x="430" y="22" text-anchor="middle" font-size="9" fill="#4b6180" font-family="IBM Plex Sans">Engine Control</text>
 
-    function analyze() { setStage(STAGES[6], 76); appState.mode = appState.focusedFiles.length && appState.rules.length ? 'Evaluating' : appState.focusedFiles.length ? 'Discovery Mode' : appState.rules.length ? 'Rules Loaded' : 'Idle'; attachStateContext(); buildSignalDiscovery(); matchRulesToEvidence(); setStage(STAGES[7], 92); buildDashboardModel(); appState.mode = appState.focusedFiles.length && appState.rules.length ? 'Alert Mode' : appState.focusedFiles.length ? 'Discovery Mode' : appState.rules.length ? 'Rules Loaded' : 'Idle'; completeStage(); renderDashboard(); }
-    function attachStateContext() { appState.evidence.forEach(ev => { const ctx = getStateContext(ev.machineId, ev.timestamp); ev.state = ctx.state; ev.timeSinceTransition = ctx.timeSinceTransition; }); }
-    function getStateContext(machineId, timestamp) { if (!timestamp) return { state: null, timeSinceTransition: null }; const t = new Date(timestamp); const states = appState.machineStates.filter(s => s.machineId === machineId || s.machineId === 'UNKNOWN' || machineId === 'UNKNOWN').sort((a,b) => new Date(a.startTime) - new Date(b.startTime)); let found = null; for (const s of states) { const start = new Date(s.startTime); const end = s.endTime ? new Date(s.endTime) : null; if (t >= start && (!end || t < end)) found = s; } return found ? { state: found.state, timeSinceTransition: Math.max(0, (t - new Date(found.startTime)) / 1000) } : { state: null, timeSinceTransition: null }; }
-    function buildSignalDiscovery() {
-      const map = new Map(); appState.evidence.forEach(ev => { const signal = bestSignal(ev); const key = `${ev.system}|${ev.sourceType}|${normText(signal)}`; const value = ev.numericValues[0]?.value; if (!map.has(key)) map.set(key, { signal, system: ev.system, source: ev.sourceType, count: 0, values: [], first: ev.timestamp, last: ev.timestamp, exampleRawLine: ev.rawLine, mappingStatus: 'unmapped' }); const p = map.get(key); p.count++; if (Number.isFinite(value)) p.values.push(value); if (ev.timestamp && (!p.first || ev.timestamp < p.first)) p.first = ev.timestamp; if (ev.timestamp && (!p.last || ev.timestamp > p.last)) p.last = ev.timestamp; });
-      appState.signalProfiles = Array.from(map.values()).map(p => { const min = p.values.length ? Math.min(...p.values) : null, max = p.values.length ? Math.max(...p.values) : null, avg = p.values.length ? p.values.reduce((a,b)=>a+b,0)/p.values.length : null; const mapped = appState.rules.some(r => signalMatches(r.logSignalName, p.signal)); return { ...p, min, max, avg, mappingStatus: mapped ? 'mapped to rule' : 'unmapped' }; });
-    }
-    function bestSignal(ev) { return ev.possibleSignals.find(s => s.length < 90) || ev.component || ev.severityHint || 'Unclassified signal'; }
-    function signalMatches(ruleSignal, candidate) { const r = normText(ruleSignal), c = normText(candidate); if (!r || !c) return false; if (r.length < 4 || c.length < 4) return r === c; if (r.includes(c) || c.includes(r)) return true; const rt = r.split(' ').filter(x => x.length > 2), ct = c.split(' ').filter(x => x.length > 2); const common = rt.filter(x => ct.includes(x)).length; return rt.length >= 3 && common >= Math.min(3, Math.ceil(rt.length * .65)); }
-    function matchRulesToEvidence() {
-      appState.ruleMatches = []; appState.alerts = []; appState.needsValidation = [];
-      for (const rule of appState.rules) for (const ev of appState.evidence) { if (!sourceCompatible(rule, ev)) continue; if (!signalMatches(rule.logSignalName, ev.rawLine) && !ev.possibleSignals.some(s => signalMatches(rule.logSignalName, s))) continue; const actual = pickActualValue(rule, ev); if (actual === null) continue; const match = evaluateRuleMatch(rule, ev, actual); appState.ruleMatches.push(match); if (match.result === 'Critical' || match.result === 'Warning') appState.alerts.push(toAlert(match, rule, ev)); if (match.result === 'Needs duration validation' || match.result === 'Needs state context' || match.result === 'Not evaluable') appState.needsValidation.push(match); }
-    }
-    function pickActualValue(rule, ev) { if (!ev.numericValues.length) return null; const metric = normText(rule.valueMetric); if (!metric) return ev.numericValues[0].value; const byUnit = ev.numericValues.find(v => metric.includes(normText(v.unit)) || normText(v.text).includes(metric)); return (byUnit || ev.numericValues[0]).value; }
-    function evaluateRuleMatch(rule, ev, actualValue) {
-      let state = ev.state || null; const usesState = Object.values(rule.expectedByState || {}).some(v => String(v).trim() !== ''); let expectedValue = state ? parseNumber(rule.expectedByState[normalizeState(state)]) : null; if (usesState && !state) return makeMatch(rule, ev, actualValue, null, null, 'Needs state context', '', 'unknown', 'state timeline unavailable');
-      const range = buildRange(rule, expectedValue); if (!rule.evaluatorSupported) return makeMatch(rule, ev, actualValue, expectedValue, null, 'Not evaluable', '', 'not required', 'recognized / evaluator pending'); if (!range) return makeMatch(rule, ev, actualValue, expectedValue, null, 'Not evaluable', '', 'not required', 'expected range / threshold unavailable');
-      const grace = checkGrace(rule, ev); if (grace.status === 'ignored') return makeMatch(rule, ev, actualValue, expectedValue, range, 'OK', '', grace.label, 'ignored by transition grace');
-      if (grace.status === 'unknown') return makeMatch(rule, ev, actualValue, expectedValue, range, 'Needs duration validation', '', grace.label, 'Rule match requiring transition grace validation');
-      let severity = '', result = 'OK'; const check = normText(rule.checkType); const violatesCritical = violates(check, actualValue, range.criticalLow, range.criticalHigh); const violatesWarning = violates(check, actualValue, range.warningLow, range.warningHigh);
-      if (violatesCritical) { severity = String(rule.criticalSeverity || 'Critical'); result = 'Critical'; } else if (violatesWarning) { severity = String(rule.warningSeverity || 'Warning'); result = 'Warning'; }
-      const durationNeeded = result === 'Critical' ? rule.criticalDurationSec : result === 'Warning' ? rule.warningDurationSec : null; if (durationNeeded) return makeMatch(rule, ev, actualValue, expectedValue, range, 'Needs duration validation', severity, grace.label, `Rule match requiring duration validation (${durationNeeded}s required)`);
-      return makeMatch(rule, ev, actualValue, expectedValue, range, result, severity, grace.label, result === 'OK' ? 'Within allowed threshold' : 'Confirmed alert validation complete');
-    }
-    function buildRange(rule, expectedValue) {
-      const explicit = { warningLow: parseNumber(rule.warningLow), warningHigh: parseNumber(rule.warningHigh), criticalLow: parseNumber(rule.criticalLow), criticalHigh: parseNumber(rule.criticalHigh) };
-      if (Object.values(explicit).some(v => v !== null)) return explicit;
-      const tol = parseTolerance(rule.specTolerance, expectedValue); if (expectedValue !== null && tol) return { warningLow: expectedValue - tol, warningHigh: expectedValue + tol, criticalLow: expectedValue - tol, criticalHigh: expectedValue + tol };
-      return null;
-    }
-    function parseTolerance(raw, expected) { if (!raw && raw !== 0) return null; const s = String(raw).trim(); const n = parseNumber(s); if (n === null) return null; return s.includes('%') && expected !== null ? Math.abs(expected) * n / 100 : n; }
-    function violates(check, value, low, high) { if (check === 'above threshold') return high !== null ? value > high : false; if (check === 'below threshold') return low !== null ? value < low : false; const lowBad = low !== null && value < low, highBad = high !== null && value > high; return lowBad || highBad; }
-    function checkGrace(rule, ev) { if (!rule.transitionGraceSec) return { status: 'not required', label: 'No grace required' }; if (ev.timeSinceTransition === null || ev.timeSinceTransition === undefined) return { status: 'unknown', label: 'Grace cannot be proven' }; if (ev.timeSinceTransition < rule.transitionGraceSec) return { status: 'ignored', label: `Ignored: ${Math.round(ev.timeSinceTransition)}s after transition (< ${rule.transitionGraceSec}s)` }; return { status: 'respected', label: `Respected: ${Math.round(ev.timeSinceTransition)}s after transition` }; }
-    function rangeLabel(r) { if (!r) return 'No range'; const parts = []; if (r.warningLow !== null || r.warningHigh !== null) parts.push(`Warning ${r.warningLow ?? '−∞'}–${r.warningHigh ?? '+∞'}`); if (r.criticalLow !== null || r.criticalHigh !== null) parts.push(`Critical ${r.criticalLow ?? '−∞'}–${r.criticalHigh ?? '+∞'}`); return parts.join(' / '); }
-    function makeMatch(rule, ev, actualValue, expectedValue, expectedRange, result, severity, graceStatus, message) { return { id: `match-${appState.ruleMatches.length}-${rule.id}-${ev.id}`, ruleId: rule.id, ruleRow: rule.rowNumber, evidenceId: ev.id, machineId: ev.machineId, timestamp: ev.timestamp, state: ev.state, system: ev.system, subsystem: rule.subsystem || ev.subsystem, component: rule.component || ev.component, signal: rule.logSignalName, logSource: rule.logSource, actualValue, expectedValue, expectedRange, result, severity, durationStatus: result === 'Needs duration validation' ? 'Required duration not proven' : 'No duration proof required', graceStatus, message, recommendedAction: result === 'Critical' ? (rule.criticalAction || rule.warningAction || 'Review evidence and validate with service procedure') : result === 'Warning' || result === 'Needs duration validation' ? (rule.warningAction || 'Review evidence and validate with service procedure') : '', sourceFile: ev.sourceFile, rawLine: ev.rawLine } }
-    function toAlert(match, rule, ev) { return { id: `alert-${match.id}`, ruleMatchId: match.id, machineId: match.machineId, timestamp: match.timestamp, state: match.state, system: match.system, subsystem: match.subsystem, component: match.component, signal: match.signal, actualValue: match.actualValue, expectedRange: rangeLabel(match.expectedRange), severity: match.result, duration: match.durationStatus, sourceFile: ev.sourceFile, rawLine: ev.rawLine, ruleId: rule.id, recommendedAction: match.recommendedAction || 'Review evidence and validate with service procedure', status: 'Confirmed Alert' }; }
+            <!-- LLCI -->
+            <g class="hotspot" onclick="selectHotspot('LLCI')">
+              <circle cx="520" cy="55" r="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5" opacity="0.9"/>
+              <circle cx="520" cy="55" r="14" class="outer" fill="#3b82f6" opacity="0.15"/>
+            </g>
+            <text x="520" y="42" text-anchor="middle" font-size="10" fill="#94a3b8" font-family="IBM Plex Sans">LLCI</text>
+            <text x="520" y="32" text-anchor="middle" font-size="9" fill="#4b6180" font-family="IBM Plex Sans">Laydown</text>
 
-    function buildDashboardModel() {
-      buildMachines(); const systems = {}; SYSTEMS.forEach(sys => { const evs = filteredEvidence().filter(e => e.system === sys); const matches = filteredMatches().filter(m => m.system === sys); const alerts = filteredAlerts().filter(a => a.system === sys); const needs = filteredNeeds().filter(n => n.system === sys); const top = topSignal(evs); let status = 'No data'; if (alerts.some(a => a.severity === 'Critical')) status = 'Critical'; else if (alerts.length || needs.length) status = 'Warning'; else if (evs.length && !appState.rules.length) status = 'Discovery only'; else if (evs.length && appState.rules.length) status = 'OK'; systems[sys] = { system: sys, status, evidenceCount: evs.length, rulesMatched: new Set(matches.map(m => m.ruleId)).size, alerts: alerts.length, needsValidation: needs.length, lastTimestamp: lastTimestamp(evs), strongestIssue: alerts[0]?.signal || needs[0]?.signal || (evs.length ? 'Log evidence discovered' : 'No related focused logs'), topSignal: top }; }); appState.dashboard.systems = systems; appState.dashboard.range = dataRange(); if (!appState.selectedMachineId) autoSelectMachine(); }
-    function buildMachines() { const machines = {}; const ensure = id => machines[id || 'UNKNOWN'] ||= { id: id || 'UNKNOWN', latestState: 'Unknown', focusedFilesCount: 0, alertCount: 0, warningCount: 0, lastTimestamp: null };
-      appState.focusedFiles.forEach(f => ensure(f.machineId).focusedFilesCount++); appState.evidence.forEach(e => { const m = ensure(e.machineId); if (e.timestamp && (!m.lastTimestamp || e.timestamp > m.lastTimestamp)) m.lastTimestamp = e.timestamp; }); appState.machineStates.forEach(s => { const m = ensure(s.machineId); if (s.timestamp && (!m.lastTimestamp || s.timestamp >= m.lastTimestamp)) { m.lastTimestamp = s.timestamp; m.latestState = s.state; } }); appState.alerts.forEach(a => { ensure(a.machineId).alertCount++; }); appState.needsValidation.forEach(n => { ensure(n.machineId).warningCount++; }); if (!Object.keys(machines).length && (appState.focusedFiles.length || appState.evidence.length)) ensure('UNKNOWN'); appState.machines = machines; }
-    function autoSelectMachine() { const ids = Object.keys(appState.machines); if (ids.length === 1) appState.selectedMachineId = ids[0]; }
-    function filteredEvidence() { return appState.selectedMachineId ? appState.evidence.filter(e => e.machineId === appState.selectedMachineId) : appState.evidence; }
-    function filteredMatches() { return appState.selectedMachineId ? appState.ruleMatches.filter(m => m.machineId === appState.selectedMachineId) : appState.ruleMatches; }
-    function filteredAlerts() { return appState.selectedMachineId ? appState.alerts.filter(a => a.machineId === appState.selectedMachineId) : appState.alerts; }
-    function filteredNeeds() { return appState.selectedMachineId ? appState.needsValidation.filter(n => n.machineId === appState.selectedMachineId) : appState.needsValidation; }
-    function topSignal(evs) { const counts = {}; evs.forEach(e => counts[bestSignal(e)] = (counts[bestSignal(e)] || 0) + 1); return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || 'No Data'; }
-    function lastTimestamp(items) { return items.map(i => i.timestamp).filter(Boolean).sort().pop() || null; }
-    function dataRange() { const all = [...appState.evidence.map(e=>e.timestamp), ...appState.machineStates.map(s=>s.timestamp)].filter(Boolean).sort(); return all.length ? `${fmtTime(all[0])} → ${fmtTime(all[all.length - 1])}` : 'No data'; }
+            <!-- BSS - CRITICAL RED PULSING -->
+            <g class="hotspot" onclick="showPage('analysis')">
+              <circle cx="280" cy="170" r="12" fill="#7f1d1d" stroke="#ef4444" stroke-width="1.5">
+                <animate attributeName="r" values="12;16;12" dur="2s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="1;0.7;1" dur="2s" repeatCount="indefinite"/>
+              </circle>
+              <circle cx="280" cy="170" r="18" fill="#ef4444" opacity="0.1">
+                <animate attributeName="r" values="18;24;18" dur="2s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="0.1;0.0;0.1" dur="2s" repeatCount="indefinite"/>
+              </circle>
+              <text x="280" y="174" text-anchor="middle" font-size="9" fill="#ef4444" font-weight="bold" font-family="IBM Plex Sans">!</text>
+            </g>
+            <rect x="243" y="182" width="74" height="30" rx="5" fill="#0c1220" stroke="#253550" stroke-width="0.5"/>
+            <text x="280" y="197" text-anchor="middle" font-size="11" fill="#e8edf5" font-weight="600" font-family="IBM Plex Sans">BSS</text>
+            <text x="280" y="208" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="IBM Plex Sans">Blanket System</text>
+          </svg>
+        </div>
 
-    function renderDashboard() { renderStatus(); renderKpis(); renderMachineSelector(); renderSystemHealth(); renderSelectedIssue(); renderTabs(); renderActions(); renderViews(); }
-    function renderStatus() { document.getElementById('modeText').textContent = appState.mode; document.getElementById('stageText').textContent = `/ ${appState.scanStage}`; document.getElementById('progressBar').style.width = `${appState.progress}%`; document.getElementById('countsText').textContent = `${appState.focusedFiles.length} focused files · ${appState.rules.length} rules · ${Object.keys(appState.machines).length} machines`; document.getElementById('dataRange').textContent = `Last data range: ${appState.dashboard.range || 'No data'}`; }
-    function renderNav() { const nav = document.getElementById('nav'); nav.innerHTML = ['Service Radar','Alerts','Analysis','Machines','Reports','Knowledge'].map(v => `<button class="${appState.view===v?'active':''}" data-view="${v}">${v}</button>`).join(''); nav.querySelectorAll('button').forEach(b => b.onclick = () => { appState.view = b.dataset.view; renderNav(); renderViews(); }); }
-    function renderKpis() { const noRules = !appState.rules.length; const items = [ ['Machines Scanned', Object.keys(appState.machines).length || 0, appState.focusedFiles.length ? 'Detected from paths or log text' : 'No data'], ['Focused Log Files Parsed', appState.focusedFiles.length, 'FEC, LLCI, MachineStates, AlertsMonitoring only'], ['Rules Loaded', appState.rules.length, appState.rules.length ? 'Parsed from PANDA Rules Template' : 'Pending'], ['Real Alerts', noRules ? 0 : appState.alerts.length, noRules ? 'No real alerts without Rules' : 'Confirmed only'], ['Warnings / Needs Validation', noRules ? 'Discovery Only' : appState.needsValidation.length, noRules ? 'Upload rules to evaluate' : 'Not confirmed alerts'] ]; document.getElementById('kpis').innerHTML = items.map(i => `<article class="card kpi"><label>${i[0]}</label><strong>${i[1]}</strong><small>${i[2]}</small></article>`).join(''); }
-    function renderMachineSelector() { const ids = Object.keys(appState.machines); document.getElementById('machineHint').textContent = ids.length ? `${ids.length} detected` : 'No data'; const list = document.getElementById('machineList'); if (!ids.length) { list.innerHTML = emptyInstructions(); return; } list.innerHTML = `<button class="machine ${!appState.selectedMachineId?'active':''}" data-id="">All Machines<div class="row"><span>Unfiltered dashboard</span><span>${appState.evidence.length} events</span></div></button>` + ids.map(id => { const m = appState.machines[id]; return `<button class="machine ${appState.selectedMachineId===id?'active':''}" data-id="${id}"><b>${id}</b><div class="row"><span>State</span><span>${m.latestState || 'Unknown'}</span></div><div class="row"><span>Focused files</span><span>${m.focusedFilesCount}</span></div><div class="row"><span>Alerts / validation</span><span>${m.alertCount} / ${m.warningCount}</span></div><div class="row"><span>Last timestamp</span><span>${fmtTime(m.lastTimestamp)}</span></div></button>`; }).join(''); list.querySelectorAll('.machine').forEach(btn => btn.onclick = () => { appState.selectedMachineId = btn.dataset.id || null; buildDashboardModel(); renderDashboard(); }); }
-    function renderSystemHealth() { const box = document.getElementById('systems'); box.innerHTML = SYSTEMS.map(sys => { const s = appState.dashboard.systems[sys] || {}; const cls = statusClass(s.status); return `<button class="systemCard ${appState.selectedSystem===sys?'active':''}" data-system="${sys}"><div class="sysTop"><b>${sys}</b><span class="badge ${cls}">${s.status || 'No data'}</span></div><div class="sysStats"><div class="stat"><label>Log entries</label><strong>${s.evidenceCount || 0}</strong></div><div class="stat"><label>Rules matched</label><strong>${s.rulesMatched || 0}</strong></div><div class="stat"><label>Real alerts</label><strong>${s.alerts || 0}</strong></div><div class="stat"><label>Needs validation</label><strong>${s.needsValidation || 0}</strong></div></div><p class="small"><b>Last:</b> ${fmtTime(s.lastTimestamp)}</p><p class="small"><b>Strongest issue:</b> ${s.strongestIssue || 'No Data'}</p><p class="small"><b>Top signal:</b> ${s.topSignal || 'No Data'}</p></button>`; }).join(''); box.querySelectorAll('.systemCard').forEach(btn => btn.onclick = () => { appState.selectedSystem = btn.dataset.system; appState.selectedIssue = null; renderSystemHealth(); renderSelectedIssue(); }); }
-    function statusClass(status) { return status === 'Critical' ? 'critical' : status === 'Warning' ? 'warning' : status === 'OK' ? 'ok' : status === 'Discovery only' ? 'discovery' : 'nodata'; }
-    function renderSelectedIssue() { const panel = document.getElementById('selectedIssue'); const selected = appState.selectedIssue; if (selected) { panel.innerHTML = issueHtml(selected); document.getElementById('detailHint').textContent = selected.result || selected.status || 'Selected'; return; } if (appState.selectedSystem) { const s = appState.dashboard.systems[appState.selectedSystem]; const item = filteredAlerts().find(a=>a.system===appState.selectedSystem) || filteredNeeds().find(n=>n.system===appState.selectedSystem); if (item) { panel.innerHTML = issueHtml(item); return; } panel.innerHTML = `<h3 class="issueTitle">${appState.selectedSystem}</h3><span class="badge ${statusClass(s.status)}">${s.status}</span><div class="fields" style="margin-top:12px"><div class="field"><label>Summary</label><span>${s.strongestIssue}</span></div><div class="field"><label>Top signal</label><span>${s.topSignal}</span></div><div class="field"><label>Real alerts</label><span>${s.alerts}</span></div><div class="field"><label>Needs validation</label><span>${s.needsValidation}</span></div></div>`; document.getElementById('detailHint').textContent = 'System selected'; return; } document.getElementById('detailHint').textContent = 'No selection'; panel.innerHTML = emptyInstructions(); }
-    function issueHtml(i) { const status = i.status || (i.result === 'Critical' || i.result === 'Warning' ? 'Confirmed Alert' : i.result || 'Discovery Only'); return `<h3 class="issueTitle">${i.signal || i.system || 'Selected evidence'}</h3><span class="badge ${statusClass(i.result || i.severity || status)}">${status}</span><div class="fields" style="margin-top:12px">${field('Machine ID', i.machineId)}${field('System', i.system)}${field('Subsystem', i.subsystem)}${field('Component', i.component)}${field('Signal', i.signal)}${field('Current state', i.state || 'No state context')}${field('Actual value', i.actualValue ?? 'No Data')}${field('Expected / range', i.expectedRange ? rangeLabel(i.expectedRange) : i.expectedRange || 'No Data')}${field('Duration', i.duration || i.durationStatus || 'No duration proof required')}${field('Transition grace', i.graceStatus || 'No grace required')}${field('Severity', i.severity || i.result || 'No Data')}${field('Source file', i.sourceFile)}${field('Rule ID / Excel row', `${i.ruleId || 'No rule'}${i.ruleRow ? ' / row ' + i.ruleRow : ''}`)}${field('Recommended action', i.recommendedAction || 'Review evidence and validate with service procedure')}${field('Raw log line preview', i.rawLine || 'No raw line')}</div>`; }
-    function field(label, value) { return `<div class="field"><label>${label}</label><span>${escapeHtml(value ?? 'No Data')}</span></div>`; }
-    function escapeHtml(v) { return String(v).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-    function emptyInstructions() { return `<div class="empty"><b>Start analysis</b><ol><li>Upload logs, folders, or ZIP archives.</li><li>Upload the Rules Excel/CSV file.</li><li>Click Analyze.</li></ol><p>No real alerts are created without matching rules and complete validation evidence.</p></div>`; }
-    function renderTabs() { const tabs = ['State Timeline','Evidence Log','Rule Matches','Signal Discovery','Rule Coverage']; const box = document.getElementById('tabBtns'); box.innerHTML = tabs.map(t => `<button class="${appState.activeTab===t?'active':''}" data-tab="${t}">${t}</button>`).join(''); box.querySelectorAll('button').forEach(b => b.onclick = () => { appState.activeTab = b.dataset.tab; renderTabs(); }); const p = document.getElementById('tabPanel'); if (appState.activeTab === 'State Timeline') p.innerHTML = renderStateTimeline(); if (appState.activeTab === 'Evidence Log') p.innerHTML = renderEvidenceLog(); if (appState.activeTab === 'Rule Matches') p.innerHTML = renderRuleMatches(); if (appState.activeTab === 'Signal Discovery') p.innerHTML = renderSignalDiscovery(); if (appState.activeTab === 'Rule Coverage') p.innerHTML = renderRuleCoverage(); p.querySelectorAll('[data-match]').forEach(row => row.onclick = () => { appState.selectedIssue = appState.ruleMatches.find(m => m.id === row.dataset.match); renderSelectedIssue(); }); }
-    function renderStateTimeline() { const states = appState.selectedMachineId ? appState.machineStates.filter(s=>s.machineId===appState.selectedMachineId) : appState.machineStates; if (!states.length) return '<div class="empty">No MachineStates parsed.</div>'; const max = Math.max(...states.map(s => s.duration || 1)); return `<div class="timeline">${states.slice(0,80).map(s => `<div class="segment"><div><b>${s.state}</b><div class="small">${s.machineId}</div></div><div class="rail"><div class="fill" style="width:${Math.max(5, ((s.duration || 1) / max) * 100)}%"></div></div><div class="small">${fmtTime(s.startTime)}<br>${s.endTime ? fmtTime(s.endTime) : 'Open'} · ${s.duration === null ? 'No Data' : Math.round(s.duration) + 's'}</div></div>`).join('')}</div>`; }
-    function table(headers, rows) { return `<div class="tableWrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.length ? rows.join('') : `<tr><td colspan="${headers.length}"><div class="empty">No data available.</div></td></tr>`}</tbody></table></div>`; }
-    function renderEvidenceLog() { const rows = filteredEvidence().slice(0,350).map(e => `<tr><td>${fmtTime(e.timestamp)}</td><td>${e.machineId}</td><td>${e.sourceType}</td><td>${e.system}</td><td>${e.state || 'No Data'}</td><td>${escapeHtml(bestSignal(e))}</td><td>${e.numericValues[0]?.text || 'No Data'}</td><td class="raw">${escapeHtml(e.message)}<details><summary>Raw</summary><p class="mono">${escapeHtml(e.rawLine)}</p></details></td></tr>`); return `<p class="small">${appState.rules.length ? 'Focused evidence used for rule evaluation.' : 'Discovery Evidence — No real alerts without Rules.'}</p>` + table(['Time','Machine','Source','System','State','Signal','Value','Message'], rows); }
-    function renderRuleMatches() { const rows = filteredMatches().slice(0,350).map(m => `<tr data-match="${m.id}"><td>${m.ruleRow || ''}</td><td>${m.ruleId}</td><td>${m.system}</td><td>${escapeHtml(m.component)}</td><td>${escapeHtml(m.signal)}</td><td>${escapeHtml(m.logSource || '')}</td><td>${m.state || 'No Data'}</td><td>${escapeHtml(m.expectedValue ?? rangeLabel(m.expectedRange))}</td><td>${m.actualValue}</td><td><span class="badge ${statusClass(m.result)}">${m.result}</span></td><td>${escapeHtml(m.message)}</td></tr>`); return table(['Rule Row','Rule ID','System','Component','Signal','Log Source','Current State','Expected','Actual','Result','Evidence'], rows); }
-    function renderSignalDiscovery() { const rows = appState.signalProfiles.slice(0,350).map(p => `<tr><td>${escapeHtml(p.signal)}</td><td>${p.system}</td><td>${p.source}</td><td>${p.count}</td><td>${p.min ?? 'No Data'}</td><td>${p.max ?? 'No Data'}</td><td>${p.avg === null ? 'No Data' : p.avg.toFixed(2)}</td><td>${fmtTime(p.first)}</td><td>${fmtTime(p.last)}</td><td>${p.mappingStatus}</td></tr>`); return table(['Signal','System','Source','Count','Min','Max','Avg','First','Last','Mapping Status'], rows); }
-    function renderRuleCoverage() { const bySystem = {}; appState.rules.forEach(r => { const sys = mapLogSourceToSystem(r.logSource || r.system); bySystem[sys] ||= { rules: 0, mapped: 0, missing: 0, evaluated: 0, not: 0 }; bySystem[sys].rules++; const matches = appState.ruleMatches.filter(m=>m.ruleId===r.id); if (matches.length) bySystem[sys].mapped++; else bySystem[sys].missing++; bySystem[sys].evaluated += matches.filter(m=>['OK','Warning','Critical'].includes(m.result)).length; bySystem[sys].not += matches.filter(m=>!['OK','Warning','Critical'].includes(m.result)).length; }); const rows = Object.entries(bySystem).map(([sys,c]) => `<tr><td>${sys}</td><td>${c.rules}</td><td>${c.mapped}</td><td>${c.missing}</td><td>${c.evaluated}</td><td>${c.not}</td><td>${c.missing ? 'Missing signals or evidence' : 'Mapped'}</td></tr>`); return table(['System','Rules','Mapped Logs','Missing Signals','Evaluated','Not Evaluable','Status'], rows); }
-    function renderActions() { const panel = document.getElementById('actionsPanel'); const actions = [...filteredAlerts().map(a=>a.recommendedAction), ...filteredNeeds().map(n=>n.recommendedAction)].filter(Boolean); if (actions.length) panel.innerHTML = `<ul>${[...new Set(actions)].slice(0,8).map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul>`; else if (!appState.rules.length) panel.innerHTML = '<ol><li>Review focused evidence.</li><li>Confirm state context.</li><li>Upload Rules Excel to enable real alert evaluation.</li><li>Do not make dispatch decisions without rules.</li></ol>'; else panel.innerHTML = '<p class="muted">No rule-based actions are currently available. Review evidence and validate with service procedure.</p>'; }
-    function renderViews() { document.querySelectorAll('.viewOnly').forEach(v => v.classList.remove('active')); document.getElementById(appState.view.replace(' ', '').toLowerCase().replace('serviceradar','service') + 'View')?.classList.add('active'); renderAlertsView(); renderAnalysisView(); renderMachinesView(); renderPlaceholders(); }
-    function renderAlertsView() { const p = document.getElementById('alertsPanel'); p.innerHTML = `<div class="filters"><select><option>All machines</option></select><select><option>All systems</option></select><select><option>All severities</option></select><select><option>All states</option></select></div>` + (appState.alerts.length ? table(['Time','Machine','System','Severity','State','Signal','Action'], appState.alerts.map(a=>`<tr><td>${fmtTime(a.timestamp)}</td><td>${a.machineId}</td><td>${a.system}</td><td>${a.severity}</td><td>${a.state||'No Data'}</td><td>${escapeHtml(a.signal)}</td><td>${escapeHtml(a.recommendedAction)}</td></tr>`)) : '<div class="empty">No confirmed alerts.</div>'); }
-    function renderAnalysisView() { document.getElementById('analysisPanel').innerHTML = `<h3>Rule Matches</h3>${renderRuleMatches()}<h3>Signal Discovery</h3>${renderSignalDiscovery()}<h3>Rule Coverage</h3>${renderRuleCoverage()}`; }
-    function renderMachinesView() { const rows = Object.values(appState.machines).map(m => `<tr><td>${m.id}</td><td>${m.latestState}</td><td>${m.focusedFilesCount}</td><td>${m.alertCount}</td><td>${m.warningCount}</td><td>${fmtTime(m.lastTimestamp)}</td></tr>`); document.getElementById('machinesPanel').innerHTML = table(['Machine ID','Latest State','Focused Files','Real Alerts','Warnings / Validation','Last Timestamp'], rows); }
-    function renderPlaceholders() { document.getElementById('reportsPanel').innerHTML = '<div class="empty">Reports are planned for future export. No report is generated unless real uploaded data exists.</div>'; document.getElementById('knowledgePanel').innerHTML = '<div class="empty">Knowledge articles are planned for future service guidance. Current recommendations come only from uploaded rules or honest generic review guidance.</div>'; }
-    window.addEventListener('DOMContentLoaded', initApp);
-  </script>
+        <div class="machine-view-controls">
+          <div class="mvc-btn" title="3D view"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg></div>
+          <div class="mvc-btn" title="Refresh"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg></div>
+          <div class="mvc-btn" title="Zoom in"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>
+          <div class="mvc-btn" title="Fullscreen"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg></div>
+        </div>
+      </div>
+
+      <!-- Issue popup -->
+      <div id="issue-popup">
+        <div class="ip-header">
+          <div>
+            <div style="font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:0.5px;display:flex;align-items:center;gap:5px;">
+              <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="#ef4444"><animate attributeName="opacity" values="1;0.4;1" dur="1.5s" repeatCount="indefinite"/></circle></svg>
+              Active Issue &nbsp;<span class="sev-p1">P1</span>
+            </div>
+            <div style="font-size:15px;font-weight:600;margin-top:3px;">BSS &nbsp;<span style="font-weight:400;color:var(--text2);font-size:13px;">Blanket System</span></div>
+            <div style="font-size:12px;color:var(--text2);margin-top:2px;">Blanket Pressure Deviation</div>
+          </div>
+          <button class="ip-close" onclick="document.getElementById('issue-popup').style.display='none'">✕</button>
+        </div>
+
+        <div style="font-size:11px;color:var(--text2);background:var(--bg3);border-radius:6px;padding:8px;margin-bottom:10px;line-height:1.5;">
+          Blanket Cylinder Pressure is above expected band repeatedly during Printing state.
+        </div>
+
+        <div class="ip-grid">
+          <div class="ip-grid-item"><label>STATE CONTEXT</label><span><span style="color:var(--green);">●</span> Printing</span></div>
+          <div class="ip-grid-item"><label>DURATION</label><span>⏱ 22m 14s</span></div>
+          <div class="ip-grid-item"><label>CONFIDENCE</label><span style="color:var(--green);">96% High</span></div>
+          <div class="ip-grid-item"><label>SEVERITY</label><span style="color:var(--red);">▲ P1 High</span></div>
+        </div>
+
+        <div class="ip-chart-label">ACTUAL VS EXPECTED &nbsp;· Blanket Cylinder Pressure (psi)</div>
+        <div class="ip-chart-wrap">
+          <canvas id="popup-chart" style="width:100%;height:80px;"></canvas>
+        </div>
+
+        <button class="drill-btn" onclick="showPage('analysis')">Open Drill-Down &nbsp;→</button>
+      </div>
+    </div>
+
+    <!-- Bottom panels -->
+    <div id="bottom-panels">
+      <!-- State Machine Timeline -->
+      <div class="bp">
+        <div class="bp-header">
+          State Machine Timeline ⓘ
+          <span style="font-size:10px;color:var(--text2);font-weight:400;">Linked to selected issue</span>
+        </div>
+        <div class="state-timeline" style="position:relative;">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:6px;">13:47 ▼</div>
+          <div style="position:relative;">
+            <div class="tl-track" id="tl-track"></div>
+            <div style="position:absolute;top:0;left:62%;display:flex;flex-direction:column;align-items:center;">
+              <div style="background:var(--red);color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;white-space:nowrap;margin-bottom:2px;">13:47</div>
+              <div style="width:1px;height:26px;background:var(--red);"></div>
+            </div>
+          </div>
+          <div class="tl-legend">
+            <div class="tl-legend-item"><div class="tl-dot" style="background:#374151;"></div>Standby</div>
+            <div class="tl-legend-item"><div class="tl-dot" style="background:#166534;"></div>Ready</div>
+            <div class="tl-legend-item"><div class="tl-dot" style="background:#854d0e;"></div>Prepare2Print</div>
+            <div class="tl-legend-item"><div class="tl-dot" style="background:#991b1b;"></div>Printing</div>
+            <div class="tl-legend-item"><div class="tl-dot" style="background:#1e40af;"></div>PrintEnd</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Evidence Log -->
+      <div class="bp">
+        <div class="bp-header">Evidence Log (Latest) <a>View All Logs</a></div>
+        <div class="log-table" style="padding-top:6px;">
+          <div class="log-row"><span class="log-time">13:47:02</span><span class="log-src src-sm">StateMachine</span><span class="log-msg">State changed to: Printing</span></div>
+          <div class="log-row"><span class="log-time">13:47:05</span><span class="log-src src-fec">FECNotifications</span><span class="log-msg">BSS Blanket pressure high deviation detected</span></div>
+          <div class="log-row"><span class="log-time">13:47:06</span><span class="log-src src-rules">RulesEngine</span><span class="log-msg">Rule #: BSS-OUT triggered (severity: P1)</span></div>
+          <div class="log-row"><span class="log-time">13:47:06</span><span class="log-src src-corr">CoreRelation</span><span class="log-msg">Correlated with state: Printing (confidence: 0.96)</span></div>
+          <div class="log-row"><span class="log-time">13:47:07</span><span class="log-src src-fec">FECNotifications</span><span class="log-msg">Pressure spike count in last 5 min: 18</span></div>
+        </div>
+      </div>
+
+      <!-- Recommended Service Action -->
+      <div class="bp">
+        <div class="bp-header">Recommended Service Action</div>
+        <div class="rec-table" style="padding-top:6px;">
+          <div class="rec-row"><div class="rec-num rn-high">1</div><div class="rec-text">Check blanket cylinder pressure sensor calibration.</div></div>
+          <div class="rec-row"><div class="rec-num rn-high">2</div><div class="rec-text">Inspect air supply and regulator to blanket system.</div></div>
+          <div class="rec-row"><div class="rec-num rn-med">3</div><div class="rec-text">Verify blanket cylinder for mechanical friction / debris.</div></div>
+          <div class="rec-row"><div class="rec-num rn-low">4</div><div class="rec-text">Review recent maintenance and replacement history.</div></div>
+        </div>
+        <div style="padding:8px 14px;"><button style="background:none;border:1px solid var(--border2);color:var(--text2);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:var(--font);">View Knowledge Article ↗</button></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- PAGE: COMPONENT ANALYSIS                               -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="page-analysis" style="flex:1;overflow-y:auto;display:none;">
+    <div style="display:grid;grid-template-columns:1fr 340px;height:100%;">
+
+      <!-- Left/main -->
+      <div style="overflow-y:auto;border-right:1px solid var(--border);">
+
+        <!-- Center tabs -->
+        <div class="center-tabs">
+          <button class="ctab active">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+            Overview
+          </button>
+          <button class="ctab">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Signals
+          </button>
+          <button class="ctab">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            Components
+          </button>
+          <button class="ctab">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg>
+            Logs
+          </button>
+          <button class="ctab">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Rules
+          </button>
+          <button class="ctab">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+            Maintenance History
+          </button>
+        </div>
+
+        <!-- Cutaway view header -->
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:14px;font-weight:600;">BSS Blanket System – Cutaway View</div>
+            <div style="font-size:11px;color:var(--text2);margin-top:1px;">Live component status</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="display:flex;align-items:center;gap:10px;font-size:11px;">
+              <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block;"></span>Critical</span>
+              <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--orange);display:inline-block;"></span>Warning</span>
+              <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--blue);display:inline-block;"></span>Normal</span>
+            </div>
+            <button class="rotation-btn">⟳ 3D Rotation</button>
+          </div>
+        </div>
+
+        <!-- BSS Cutaway diagram -->
+        <div id="cutaway-wrap" style="height:310px;">
+          <svg viewBox="0 0 620 300" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
+            <!-- Background machinery -->
+            <rect x="10" y="20" width="600" height="260" rx="10" fill="#0a1525" stroke="#1e2d4a" stroke-width="0.5"/>
+
+            <!-- Main cylinder housing -->
+            <ellipse cx="250" cy="160" rx="100" ry="90" fill="#0d1f38" stroke="#1e3a5f" stroke-width="1"/>
+            <ellipse cx="250" cy="160" rx="80" ry="72" fill="#0a1525" stroke="#162032" stroke-width="0.5"/>
+            <!-- Critical red glow on cylinder -->
+            <ellipse cx="250" cy="160" rx="80" ry="72" fill="rgba(239,68,68,0.05)"/>
+            <ellipse cx="250" cy="160" rx="55" ry="50" fill="#0c1525" stroke="#991b1b" stroke-width="1"/>
+            <ellipse cx="250" cy="160" rx="35" ry="32" fill="#0a1220"/>
+
+            <!-- Pipes -->
+            <path d="M130 80 L200 100 Q220 105 230 120" stroke="#1e3a5f" stroke-width="4" stroke-linecap="round"/>
+            <path d="M130 80 L200 100" stroke="#253550" stroke-width="2"/>
+            <path d="M280 90 Q300 85 330 90 L400 95" stroke="#1e3a5f" stroke-width="3" stroke-linecap="round"/>
+            <path d="M350 160 Q400 155 440 150 L480 148" stroke="#1e3a5f" stroke-width="3"/>
+            <path d="M250 250 Q280 265 320 255 L380 245" stroke="#1e3a5f" stroke-width="2.5"/>
+            <path d="M130 240 Q170 248 200 240 L230 232" stroke="#1e3a5f" stroke-width="2.5"/>
+
+            <!-- Drive shaft -->
+            <rect x="100" y="148" width="130" height="24" rx="4" fill="#0c1a2e" stroke="#1e2d4a"/>
+            <rect x="100" y="153" width="130" height="14" rx="2" fill="#0a1525"/>
+
+            <!-- Right side components -->
+            <rect x="450" y="100" width="80" height="60" rx="5" fill="#0d1a2e" stroke="#1e2d4a"/>
+            <rect x="470" y="170" width="60" height="40" rx="4" fill="#0c1525" stroke="#162032"/>
+            <rect x="450" y="220" width="80" height="35" rx="4" fill="#0d1a2e" stroke="#1e2d4a"/>
+
+            <!-- Tubes/hoses -->
+            <path d="M350 130 Q420 120 450 128" stroke="#253550" stroke-width="2"/>
+            <path d="M350 190 Q390 195 450 190" stroke="#253550" stroke-width="2"/>
+
+            <!-- Click hint -->
+            <text x="310" y="292" text-anchor="middle" font-size="10" fill="#4b6180" font-family="IBM Plex Sans">● Click a component to drill down</text>
+
+            <!-- HOTSPOT: Blanket Cylinder - CRITICAL -->
+            <g style="cursor:pointer;">
+              <circle cx="250" cy="160" r="16" fill="#7f1d1d" stroke="#ef4444" stroke-width="2">
+                <animate attributeName="r" values="16;20;16" dur="2s" repeatCount="indefinite"/>
+              </circle>
+              <circle cx="250" cy="160" r="24" fill="#ef4444" opacity="0.1">
+                <animate attributeName="r" values="24;30;24" dur="2s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="0.1;0;0.1" dur="2s" repeatCount="indefinite"/>
+              </circle>
+              <text x="250" y="164" text-anchor="middle" font-size="9" fill="#ef4444" font-weight="bold" font-family="IBM Plex Sans">!</text>
+            </g>
+            <rect x="185" y="192" width="130" height="36" rx="5" fill="#0c1220" stroke="#7f1d1d" stroke-width="1"/>
+            <text x="250" y="207" text-anchor="middle" font-size="11" fill="#e8edf5" font-weight="600" font-family="IBM Plex Sans">Blanket Cylinder</text>
+            <text x="250" y="220" text-anchor="middle" font-size="9" fill="#94a3b8" font-family="IBM Plex Sans">B-CYL-01</text>
+            <rect x="218" y="221" width="64" height="14" rx="3" fill="#7f1d1d"/>
+            <text x="250" y="231" text-anchor="middle" font-size="9" fill="#ef4444" font-weight="600" font-family="IBM Plex Sans">Critical</text>
+
+            <!-- HOTSPOT: Cooling Loop - Normal -->
+            <circle cx="150" cy="55" r="9" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+            <rect x="106" y="62" width="90" height="30" rx="5" fill="#0c1220" stroke="#1e2d4a" stroke-width="0.5"/>
+            <text x="150" y="75" text-anchor="middle" font-size="10" fill="#e8edf5" font-weight="500" font-family="IBM Plex Sans">Cooling Loop</text>
+            <text x="150" y="86" text-anchor="middle" font-size="9" fill="#4b6180" font-family="IBM Plex Sans">Normal</text>
+
+            <!-- HOTSPOT: Pressure Sensor - WARNING -->
+            <circle cx="310" cy="72" r="9" fill="#2d1d0e" stroke="#f97316" stroke-width="1.5"/>
+            <rect x="263" y="40" width="112" height="30" rx="5" fill="#0c1220" stroke="#2d1d0e" stroke-width="1"/>
+            <text x="319" y="54" text-anchor="middle" font-size="10" fill="#e8edf5" font-weight="500" font-family="IBM Plex Sans">Pressure Sensor</text>
+            <text x="319" y="64" text-anchor="middle" font-size="9" fill="#f97316" font-family="IBM Plex Sans">B-PS-01 · Warning</text>
+
+            <!-- HOTSPOT: Regulator - Normal -->
+            <circle cx="445" cy="72" r="9" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+            <rect x="402" y="40" width="90" height="30" rx="5" fill="#0c1220" stroke="#1e2d4a" stroke-width="0.5"/>
+            <text x="447" y="54" text-anchor="middle" font-size="10" fill="#e8edf5" font-weight="500" font-family="IBM Plex Sans">Regulator</text>
+            <text x="447" y="64" text-anchor="middle" font-size="9" fill="#3b82f6" font-family="IBM Plex Sans">B-REG-01 · Normal</text>
+
+            <!-- HOTSPOT: Valve Block - Normal -->
+            <circle cx="510" cy="130" r="9" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+            <rect x="468" y="98" width="90" height="30" rx="5" fill="#0c1220" stroke="#1e2d4a" stroke-width="0.5"/>
+            <text x="513" y="112" text-anchor="middle" font-size="10" fill="#e8edf5" font-weight="500" font-family="IBM Plex Sans">Valve Block</text>
+            <text x="513" y="122" text-anchor="middle" font-size="9" fill="#3b82f6" font-family="IBM Plex Sans">B-VB-01 · Normal</text>
+
+            <!-- HOTSPOT: Air Supply - Normal -->
+            <circle cx="520" cy="237" r="9" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+            <rect x="476" y="218" width="90" height="28" rx="5" fill="#0c1220" stroke="#1e2d4a" stroke-width="0.5"/>
+            <text x="521" y="231" text-anchor="middle" font-size="10" fill="#e8edf5" font-weight="500" font-family="IBM Plex Sans">Air Supply</text>
+            <text x="521" y="241" text-anchor="middle" font-size="9" fill="#3b82f6" font-family="IBM Plex Sans">B-AIR · Normal</text>
+
+            <!-- HOTSPOT: Drive Motor - Normal -->
+            <circle cx="100" cy="170" r="9" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+            <rect x="22" y="180" width="90" height="28" rx="5" fill="#0c1220" stroke="#1e2d4a" stroke-width="0.5"/>
+            <text x="67" y="193" text-anchor="middle" font-size="10" fill="#e8edf5" font-weight="500" font-family="IBM Plex Sans">Drive Motor</text>
+            <text x="67" y="203" text-anchor="middle" font-size="9" fill="#3b82f6" font-family="IBM Plex Sans">B-MTR-01 · Normal</text>
+
+            <!-- HOTSPOT: Feedback Sensor - Normal -->
+            <circle cx="380" cy="230" r="9" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+            <rect x="330" y="240" width="105" height="28" rx="5" fill="#0c1220" stroke="#1e2d4a" stroke-width="0.5"/>
+            <text x="382" y="253" text-anchor="middle" font-size="10" fill="#e8edf5" font-weight="500" font-family="IBM Plex Sans">Feedback Sensor</text>
+            <text x="382" y="263" text-anchor="middle" font-size="9" fill="#3b82f6" font-family="IBM Plex Sans">B-FB-01 · Normal</text>
+          </svg>
+        </div>
+
+        <!-- Component Health Table -->
+        <div class="comp-health-section">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <!-- Left: Component health table -->
+            <div>
+              <div class="ch-title">Component Health – Likely Root Cause
+                <span style="background:var(--bg4);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;font-size:10px;color:var(--text2);">ⓘ</span>
+              </div>
+              <table class="comp-table">
+                <thead>
+                  <tr><th>#</th><th>Component</th><th>Health Score</th><th>Probability</th></tr>
+                </thead>
+                <tbody id="comp-health-tbody"></tbody>
+              </table>
+              <div style="font-size:10px;color:var(--text3);margin-top:6px;">Health score is based on multi-signal AI analysis.</div>
+            </div>
+            <!-- Right: Why PANDA suspects this -->
+            <div>
+              <div class="ch-title">Why PANDA suspects this</div>
+              <div class="why-item">
+                <div class="why-check wc-ok"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                <div><div class="why-main">State context valid</div><div class="why-sub">Deviation occurred during stable Printing state.</div></div>
+              </div>
+              <div class="why-item">
+                <div class="why-check wc-ok"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                <div><div class="why-main">Sustained deviation</div><div class="why-sub">Actual pressure below expected band for 22m 14s.</div></div>
+              </div>
+              <div class="why-item">
+                <div class="why-check wc-ok"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                <div><div class="why-main">Repeated occurrences</div><div class="why-sub">Similar deviations detected 4 times in last 7 days.</div></div>
+              </div>
+              <div class="why-item">
+                <div class="why-check wc-ok"><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+                <div><div class="why-main">Correlation with events</div><div class="why-sub">Pressure drop aligns with log events and state changes.</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom 3 panels -->
+        <div class="ca-bottom">
+          <!-- Evidence Log -->
+          <div class="bp">
+            <div class="bp-header">Evidence Log (Latest) <a>View All Logs</a></div>
+            <div class="log-table" style="padding-top:4px;">
+              <div class="log-row"><span class="log-time">13:47:02</span><span class="log-src src-sm">StateMachine</span><span class="log-msg">State changed to: Printing</span></div>
+              <div class="log-row"><span class="log-time">13:47:05</span><span class="log-src src-fec">FECActions</span><span class="log-msg">BSS Blanket pressure high deviation detected</span></div>
+              <div class="log-row"><span class="log-time">13:47:06</span><span class="log-src src-rules">RulesEngine</span><span class="log-msg">Rule #: BSS-OUT triggered (severity: P1)</span></div>
+              <div class="log-row"><span class="log-time">13:47:06</span><span class="log-src src-corr">CoreRelation</span><span class="log-msg">Correlated with state: Printing (confidence: 0.96)</span></div>
+              <div class="log-row"><span class="log-time">13:47:07</span><span class="log-src src-fec">FECActions</span><span class="log-msg">Pressure spike count in last 5 min: 18</span></div>
+            </div>
+          </div>
+
+          <!-- Recent Occurrences -->
+          <div class="bp">
+            <div class="bp-header">Recent Occurrences</div>
+            <div style="padding:6px 14px;">
+              <table class="recent-occ-table rot">
+                <thead><tr><th>Date / Time</th><th>Duration</th><th>Max Dev.</th><th>State</th></tr></thead>
+                <tbody>
+                  <tr><td>May 27, 13:47</td><td>22m 14s</td><td style="color:var(--red);">-96 psi</td><td><span class="sev-p1">P1</span></td></tr>
+                  <tr><td>May 26, 09:12</td><td>8m 03s</td><td style="color:var(--orange);">-72 psi</td><td><span class="sev-p2">P2</span></td></tr>
+                  <tr><td>May 24, 14:33</td><td>6m 21s</td><td style="color:var(--orange);">-68 psi</td><td><span class="sev-p2">P2</span></td></tr>
+                  <tr><td>May 22, 10:05</td><td>5m 11s</td><td style="color:var(--yellow);">-65 psi</td><td><span class="sev-p3">P3</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Related Rules -->
+          <div class="bp">
+            <div class="bp-header">Related Rules</div>
+            <div style="padding:6px 14px;">
+              <table class="rule-table">
+                <thead><tr><th>Rule ID</th><th>Description</th><th>Sev.</th><th>Status</th></tr></thead>
+                <tbody>
+                  <tr><td style="font-family:var(--mono);font-size:10px;">BSS-OUT</td><td>BSS Blanket pressure out of band</td><td><span class="sev-p1">P1</span></td><td class="rule-triggered">Triggered</td></tr>
+                  <tr><td style="font-family:var(--mono);font-size:10px;">BSS-DROP</td><td>BSS Pressure drop rate high</td><td><span class="sev-p2">P2</span></td><td class="rule-not">Not Triggered</td></tr>
+                  <tr><td style="font-family:var(--mono);font-size:10px;">BSS-SPIKE</td><td>BSS Pressure spike detected</td><td><span class="sev-p2">P2</span></td><td class="rule-triggered">Triggered</td></tr>
+                  <tr><td style="font-family:var(--mono);font-size:10px;">BSS-RECOV</td><td>BSS Pressure failed to recover</td><td><span class="sev-p3">P3</span></td><td class="rule-not">Not Triggered</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right panel: Key Signal + Recommended Actions -->
+      <div style="overflow-y:auto;background:var(--bg1);">
+        <div class="ks-section">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+            <div class="ks-title">Key Signal – Blanket Cylinder Pressure</div>
+            <button style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:3px 8px;font-size:10px;color:var(--text2);cursor:pointer;font-family:var(--font);">50 min ▾</button>
+          </div>
+          <div class="ks-sub">13:20 – 14:10 (50 min)</div>
+          <div class="ks-legend">
+            <div class="ks-li"><div class="ks-line" style="background:#3b82f6;height:2px;"></div>Actual Pressure (psi)</div>
+            <div class="ks-li"><div class="ks-line" style="background:#475569;height:1px;border-top:1px dashed #475569;height:0;width:20px;display:inline-block;border:none;border-top:1px dashed #475569;"></div>Expected Band (Min/Max)</div>
+            <div class="ks-li"><div class="ks-line" style="background:#6b7280;height:1px;"></div>Expected Avg</div>
+          </div>
+          <div style="position:relative;height:140px;">
+            <canvas id="ks-chart" style="width:100%;height:140px;"></canvas>
+            <div style="position:absolute;top:8px;right:8px;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:3px 6px;font-size:9px;color:var(--text2);">
+              <div>State: <span style="color:var(--green);">Printing</span></div>
+              <div style="margin-top:2px;color:var(--red);">Deviation Start 13:47</div>
+            </div>
+          </div>
+          <div class="ks-meta">
+            <div class="ks-meta-item"><label>MAX</label><span>568</span></div>
+            <div class="ks-meta-item"><label>AVG</label><span style="color:var(--orange);">420</span></div>
+            <div class="ks-meta-item"><label>MIN</label><span>320</span></div>
+          </div>
+        </div>
+
+        <!-- State Machine Timeline mini -->
+        <div style="padding:0 14px 10px;border-top:1px solid var(--border);">
+          <div style="font-size:10px;color:var(--text3);margin:8px 0 5px;">Machine State Timeline</div>
+          <div class="tl-track" id="tl-track-mini" style="height:18px;"></div>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-top:3px;">
+            <span>13:20</span><span>13:30</span><span>13:40</span><span>13:50</span><span>14:00</span><span>14:10</span>
+          </div>
+        </div>
+
+        <!-- Recommended Actions -->
+        <div class="ra-section">
+          <div class="ra-title">Recommended Actions</div>
+          <div class="ra-item">
+            <div class="ra-num rn-high">1</div>
+            <div class="ra-text">Inspect Blanket Cylinder for mechanical friction / debris.</div>
+            <span class="ra-impact ri-high">High Impact</span>
+          </div>
+          <div class="ra-item">
+            <div class="ra-num rn-high">2</div>
+            <div class="ra-text">Check cylinder pressure sensor calibration.</div>
+            <span class="ra-impact ri-high">High Impact</span>
+          </div>
+          <div class="ra-item">
+            <div class="ra-num rn-med">3</div>
+            <div class="ra-text">Verify air supply pressure and regulator output.</div>
+            <span class="ra-impact ri-med">Medium</span>
+          </div>
+          <div class="ra-item">
+            <div class="ra-num rn-med">4</div>
+            <div class="ra-text">Inspect valve block for leakage or slow response.</div>
+            <span class="ra-impact ri-med">Medium</span>
+          </div>
+          <div class="ra-item">
+            <div class="ra-num rn-low">5</div>
+            <div class="ra-text">Review maintenance history and replace seals if due.</div>
+            <span class="ra-impact ri-low">Low</span>
+          </div>
+        </div>
+
+        <!-- Overall Confidence -->
+        <div class="conf-section">
+          <div style="font-size:11px;font-weight:600;color:var(--text2);">Overall Confidence</div>
+          <div class="conf-row">
+            <div class="conf-bar-wrap"><div class="conf-bar-fill" style="width:96%;"></div></div>
+            <span class="conf-val">96%</span>
+          </div>
+        </div>
+
+        <button class="service-report-btn">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Create Service Report
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div id="statusbar">
+  <div class="sb-item"><div class="sb-dot" style="background:var(--green);"></div>Data Connection</div>
+  <div class="sb-item"><div class="sb-dot" style="background:var(--green);"></div>PANDA Engine</div>
+  <div class="sb-item"><div class="sb-dot" style="background:var(--green);"></div>Last Data: 14:10:15</div>
+  <div style="margin-left:auto;">Machine: Landa S11-1P &nbsp;|&nbsp; Site: Customer A &nbsp;|&nbsp; Service User: John D.</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// ── Page navigation
+function showPage(page) {
+  document.getElementById('page-radar').style.display = page==='radar'?'block':'none';
+  document.getElementById('page-analysis').style.display = page==='analysis'?'block':'none';
+  var tabs = document.querySelectorAll('.top-nav button');
+  if(page==='radar'){tabs[0].classList.add('active');tabs[2].classList.remove('active');}
+  else{tabs[2].classList.add('active');tabs[0].classList.remove('active');}
+  var sep=document.getElementById('breadcrumb-extra-sep');
+  var last=document.getElementById('breadcrumb-last');
+  if(page==='analysis'){sep.style.display='';last.textContent='Component Analysis';}
+  else{sep.style.display='none';last.textContent='Machine Overview';}
+}
+
+// ── Timeline segments
+var TIMELINE=[
+  {label:'Standby',color:'#374151',w:6},{label:'Ready',color:'#166534',w:6},
+  {label:'Prepare2Print',color:'#854d0e',w:9},{label:'Printing',color:'#991b1b',w:15},
+  {label:'PrintEnd',color:'#1e40af',w:5},{label:'Ready',color:'#166534',w:6},
+  {label:'Prepare2Print',color:'#854d0e',w:8},{label:'Printing',color:'#991b1b',w:14},
+  {label:'PrintEnd',color:'#1e40af',w:5},{label:'Ready',color:'#166534',w:5},
+  {label:'Standby',color:'#374151',w:6},{label:'Standby',color:'#374151',w:5},
+];
+
+function buildTimeline(id){
+  var el=document.getElementById(id);
+  if(!el) return;
+  el.innerHTML=TIMELINE.map(function(s){
+    return '<div class="tl-seg" style="flex:'+s.w+';background:'+s.color+';font-size:9px;color:rgba(255,255,255,0.7);padding:0 3px;overflow:hidden;white-space:nowrap;">'+s.label+'</div>';
+  }).join('');
+}
+buildTimeline('tl-track');
+buildTimeline('tl-track-mini');
+
+// ── Component health table
+var COMPS=[
+  {n:'Blanket Cylinder (B-CYL-01)',score:18,prob:72,c:'#ef4444'},{n:'Pressure Sensor (B-PS-01)',score:42,prob:18,c:'#f97316'},
+  {n:'Regulator (B-REG-01)',score:78,prob:6,c:'#3b82f6'},{n:'Valve Block (B-VB-01)',score:85,prob:3,c:'#3b82f6'},
+  {n:'Air Supply (B-AIR)',score:88,prob:1,c:'#3b82f6'},{n:'Drive Motor (B-MTR-01)',score:90,prob:0,c:'#22c55e'},
+  {n:'Cooling Loop (B-CL-01)',score:92,prob:0,c:'#22c55e'},{n:'Feedback Sensor (B-FB-01)',score:93,prob:0,c:'#22c55e'},
+];
+var tbody=document.getElementById('comp-health-tbody');
+if(tbody){
+  tbody.innerHTML=COMPS.map(function(c,i){
+    var bc=c.score<40?'#ef4444':c.score<65?'#f97316':'#22c55e';
+    return '<tr><td style="color:'+bc+';font-weight:600;">'+(i+1)+'</td><td>'+c.n+'</td>'+
+    '<td><div style="display:flex;align-items:center;gap:6px;"><div class="prob-bar-wrap"><div class="prob-bar" style="width:'+c.score+'%;background:'+bc+';"></div></div><span style="color:'+bc+';">'+c.score+'</span></div></td>'+
+    '<td><div style="display:flex;align-items:center;gap:6px;"><div class="prob-bar-wrap"><div class="prob-bar" style="width:'+c.prob+'%;background:'+bc+';"></div></div><span style="color:'+bc+';">'+c.prob+'%</span></div></td></tr>';
+  }).join('');
+}
+
+// ── Charts
+function makeNoise(base,amp,n){
+  var a=[];for(var i=0;i<n;i++) a.push(base+(Math.random()-0.5)*amp);return a;
+}
+function buildPopupChart(){
+  var canvas=document.getElementById('popup-chart');
+  if(!canvas||!window.Chart) return;
+  var n=20;
+  var actual=[]; var exp=[];
+  for(var i=0;i<n;i++){actual.push(410+(Math.random()-0.3)*30+(i>12?i*4:0));exp.push(420+(Math.random()-0.5)*5);}
+  new Chart(canvas,{
+    type:'line',
+    data:{
+      labels:Array.from({length:n},function(_,i){return ''}),
+      datasets:[
+        {data:actual,borderColor:'#ef4444',borderWidth:1.5,pointRadius:0,tension:0.3,fill:false},
+        {data:exp,borderColor:'#3b82f6',borderWidth:1,borderDash:[4,4],pointRadius:0,tension:0.3,fill:false},
+        {data:exp.map(function(v){return v+60;}),borderColor:'rgba(59,130,246,0.2)',borderWidth:1,borderDash:[2,4],pointRadius:0,fill:false},
+        {data:exp.map(function(v){return v-60;}),borderColor:'rgba(59,130,246,0.2)',borderWidth:1,borderDash:[2,4],pointRadius:0,fill:false},
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false}}}
+  });
+}
+
+function buildKSChart(){
+  var canvas=document.getElementById('ks-chart');
+  if(!canvas||!window.Chart) return;
+  var n=50;
+  var labels=[];
+  for(var i=0;i<n;i++){
+    var m=Math.floor(20+i*50/n);
+    labels.push('13:'+String(m).padStart(2,'0'));
+  }
+  var actual=[]; var expAvg=[]; var expHi=[]; var expLo=[];
+  for(var i=0;i<n;i++){
+    var base=i>35?420+(i-35)*5:420;
+    actual.push(base+(Math.random()-0.4)*25);
+    expAvg.push(420+(Math.random()-0.5)*3);
+    expHi.push(480);expLo.push(360);
+  }
+  new Chart(canvas,{
+    type:'line',
+    data:{
+      labels:labels,
+      datasets:[
+        {data:expHi,borderColor:'rgba(59,130,246,0.2)',borderWidth:1,borderDash:[3,3],pointRadius:0,fill:false},
+        {data:expLo,borderColor:'rgba(59,130,246,0.2)',borderWidth:1,borderDash:[3,3],pointRadius:0,fill:'+1',backgroundColor:'rgba(59,130,246,0.06)'},
+        {data:expAvg,borderColor:'rgba(100,116,139,0.6)',borderWidth:1,borderDash:[4,4],pointRadius:0,tension:0.3,fill:false},
+        {data:actual,borderColor:'#ef4444',borderWidth:1.5,pointRadius:0,tension:0.3,fill:false},
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{
+        x:{display:true,ticks:{color:'#4b6180',font:{size:9},maxTicksLimit:6},grid:{color:'rgba(30,45,74,0.5)'}},
+        y:{display:true,ticks:{color:'#4b6180',font:{size:9},maxTicksLimit:5},grid:{color:'rgba(30,45,74,0.5)'},min:200,max:650}
+      }
+    }
+  });
+}
+
+setTimeout(function(){buildPopupChart();buildKSChart();},300);
+</script>
 </body>
 </html>
+HTMLEOF
+echo "Done"
