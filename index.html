@@ -3,105 +3,819 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Landa PANDA Tool — Service Radar Baseline</title>
+  <title>PANDA Service Radar — Landa Digital Printing</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
-    :root{--bg:#06090f;--panel:#0b111b;--panel2:#0f1826;--glass:rgba(15,24,38,.72);--line:rgba(120,220,255,.18);--cyan:#30d9ff;--red:#ff4b5f;--amber:#ffbd4a;--green:#41f28a;--text:#eef7ff;--muted:#7d8ea3;--white:#fff;--shadow:0 20px 70px rgba(0,0,0,.45)}
-    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at 20% 0%,rgba(48,217,255,.16),transparent 34%),radial-gradient(circle at 80% 10%,rgba(255,75,95,.11),transparent 26%),var(--bg);color:var(--text);font:14px/1.45 Inter,Segoe UI,Roboto,Arial,sans-serif;overflow-x:hidden}
-    .app{display:grid;grid-template-columns:310px 1fr;min-height:100vh}.side{border-right:1px solid var(--line);background:linear-gradient(180deg,rgba(8,13,21,.96),rgba(8,13,21,.78));padding:22px;position:sticky;top:0;height:100vh;overflow:auto}.brand{display:flex;gap:12px;align-items:center;margin-bottom:22px}.logo{width:46px;height:46px;border:1px solid var(--line);border-radius:16px;display:grid;place-items:center;background:linear-gradient(135deg,rgba(48,217,255,.18),rgba(255,255,255,.04));box-shadow:0 0 26px rgba(48,217,255,.13);font-size:25px}.brand h1{font-size:18px;margin:0;letter-spacing:.08em}.brand p{margin:2px 0 0;color:var(--muted);font-size:12px}.upload{border:1px dashed rgba(48,217,255,.45);border-radius:22px;background:rgba(48,217,255,.05);padding:18px;margin-bottom:16px}.upload label{display:block}.btn{appearance:none;border:1px solid rgba(48,217,255,.32);background:linear-gradient(180deg,rgba(48,217,255,.18),rgba(48,217,255,.07));color:var(--text);border-radius:14px;padding:10px 12px;font-weight:700;cursor:pointer;width:100%;text-align:center}.btn:hover{border-color:var(--cyan)} input[type=file]{display:none}.hint{color:var(--muted);font-size:12px;margin-top:10px}.pill{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:5px 8px;color:var(--muted);background:rgba(255,255,255,.03);font-size:12px;margin:4px 4px 0 0}.dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}.dot.ok{background:var(--green)}.dot.warn{background:var(--amber)}.dot.hot{background:var(--red)}.main{padding:22px 26px 60px}.topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}.title h2{font-size:30px;margin:0;letter-spacing:-.04em}.title p{margin:5px 0 0;color:var(--muted)}.status{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}.grid{display:grid;gap:14px}.kpis{grid-template-columns:repeat(5,minmax(140px,1fr));margin-bottom:16px}.card{border:1px solid var(--line);background:linear-gradient(180deg,rgba(15,24,38,.78),rgba(9,15,24,.72));border-radius:22px;box-shadow:var(--shadow);backdrop-filter:blur(18px);overflow:hidden}.card.pad{padding:16px}.kpi .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}.kpi .value{font-size:29px;font-weight:800;margin-top:6px}.kpi .sub{color:var(--muted);font-size:12px;margin-top:3px}.layout{grid-template-columns:1.1fr .9fr}.sectionHead{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:14px 16px}.sectionHead h3{margin:0;font-size:14px;text-transform:uppercase;letter-spacing:.1em}.sectionHead span{color:var(--muted);font-size:12px}.tableWrap{overflow:auto;max-height:360px}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:10px 12px;border-bottom:1px solid rgba(120,220,255,.09);text-align:left;vertical-align:top}.table th{color:#9eb5ca;font-size:11px;text-transform:uppercase;letter-spacing:.08em;background:rgba(255,255,255,.02);position:sticky;top:0}.table td{color:#dceaf6;font-size:12px}.raw{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#b8c8d8;white-space:nowrap;max-width:360px;overflow:hidden;text-overflow:ellipsis}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.tab{border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--muted);border-radius:999px;padding:8px 12px;cursor:pointer}.tab.active{color:var(--white);border-color:rgba(48,217,255,.65);background:rgba(48,217,255,.12)}.empty{padding:30px;text-align:center;color:var(--muted)}.timeline{padding:15px;display:flex;gap:8px;align-items:center;overflow:auto;min-height:92px}.seg{min-width:80px;height:42px;border:1px solid var(--line);border-radius:12px;background:rgba(48,217,255,.06);position:relative;padding:6px 8px}.seg b{display:block;font-size:11px}.seg span{font-size:10px;color:var(--muted)}.sysGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:14px}.sys{padding:14px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.03);cursor:pointer}.sys:hover,.sys.active{border-color:rgba(48,217,255,.7);box-shadow:0 0 22px rgba(48,217,255,.08)}.sys b{font-size:18px}.sys div{color:var(--muted);font-size:12px}.progress{height:7px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden;margin-top:12px}.bar{height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--green));transition:.2s}.notice{border:1px solid rgba(255,189,74,.26);background:rgba(255,189,74,.08);color:#ffe2a6;border-radius:16px;padding:12px;margin:12px 0}.split{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.footerNote{margin-top:16px;color:var(--muted);font-size:12px}.small{font-size:12px;color:var(--muted)}@media(max-width:1050px){.app{grid-template-columns:1fr}.side{height:auto;position:relative}.kpis,.layout,.split{grid-template-columns:1fr}.topbar{display:block}.status{justify-content:flex-start;margin-top:12px}}
+    :root {
+      --bg: #03060a;
+      --bg-2: #070b10;
+      --panel: rgba(10, 17, 25, 0.78);
+      --panel-strong: rgba(12, 22, 31, 0.92);
+      --panel-soft: rgba(255, 255, 255, 0.035);
+      --line: rgba(118, 229, 255, 0.18);
+      --line-strong: rgba(65, 219, 255, 0.42);
+      --cyan: #2edcff;
+      --cyan-soft: rgba(46, 220, 255, 0.14);
+      --red: #ff465d;
+      --red-soft: rgba(255, 70, 93, 0.15);
+      --white: #f4fbff;
+      --text: #dceaf4;
+      --muted: #7d8c99;
+      --muted-2: #53616d;
+      --shadow: 0 24px 90px rgba(0, 0, 0, 0.48);
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --sans: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--bg); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font: 13px/1.45 var(--sans);
+      overflow-x: hidden;
+      background:
+        linear-gradient(rgba(46, 220, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(46, 220, 255, 0.02) 1px, transparent 1px),
+        radial-gradient(circle at 10% 0%, rgba(46, 220, 255, 0.15), transparent 28%),
+        radial-gradient(circle at 88% 18%, rgba(255, 70, 93, 0.10), transparent 22%),
+        linear-gradient(135deg, #020407 0%, #071017 52%, #03060a 100%);
+      background-size: 42px 42px, 42px 42px, auto, auto, auto;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, transparent 0 48%, rgba(46, 220, 255, 0.04) 50%, transparent 52% 100%),
+        radial-gradient(circle at center, transparent 0 52%, rgba(46, 220, 255, 0.05) 53%, transparent 54% 100%);
+      opacity: 0.55;
+      mix-blend-mode: screen;
+    }
+
+    .app { min-height: 100vh; padding: 22px; }
+    .shell { max-width: 1680px; margin: 0 auto; position: relative; }
+    .watermark {
+      position: fixed;
+      right: 28px;
+      bottom: 18px;
+      color: rgba(244, 251, 255, 0.035);
+      font: 800 84px/1 var(--sans);
+      letter-spacing: 0.14em;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: stretch;
+      margin-bottom: 16px;
+    }
+
+    .masthead,
+    .uploadDock,
+    .card {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, var(--panel), rgba(6, 10, 15, 0.70));
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(18px);
+    }
+
+    .masthead {
+      position: relative;
+      min-height: 104px;
+      padding: 20px 22px;
+      border-radius: 24px;
+      overflow: hidden;
+    }
+
+    .masthead::after,
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      background: linear-gradient(115deg, rgba(46, 220, 255, 0.12), transparent 22%, transparent 78%, rgba(255, 255, 255, 0.03));
+      opacity: 0.35;
+    }
+
+    .eyebrow {
+      color: var(--cyan);
+      font: 700 11px/1 var(--mono);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+    h1 {
+      margin: 8px 0 4px;
+      color: var(--white);
+      font-size: clamp(30px, 4vw, 54px);
+      line-height: 0.95;
+      letter-spacing: -0.055em;
+    }
+
+    .subtitle { margin: 0; color: var(--muted); font-size: 14px; }
+    .modeStrip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 28px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.035);
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-2); box-shadow: 0 0 12px currentColor; }
+    .dot.cyan { background: var(--cyan); color: var(--cyan); }
+    .dot.red { background: var(--red); color: var(--red); }
+    .dot.white { background: var(--white); color: var(--white); }
+
+    .uploadDock {
+      width: min(420px, 35vw);
+      border-radius: 24px;
+      padding: 14px;
+    }
+
+    .uploadControls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    input[type="file"] { display: none; }
+    .btn {
+      display: grid;
+      place-items: center;
+      min-height: 44px;
+      padding: 10px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 15px;
+      background: linear-gradient(180deg, rgba(46, 220, 255, 0.15), rgba(46, 220, 255, 0.04));
+      color: var(--white);
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      text-align: center;
+    }
+    .btn:hover { box-shadow: 0 0 28px rgba(46, 220, 255, 0.14); }
+    .hint { color: var(--muted); font-size: 12px; margin: 11px 2px 0; }
+    .progressMeta { display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; color: var(--muted); font: 11px/1.2 var(--mono); }
+    .progress { height: 7px; margin-top: 8px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.07); }
+    .bar { width: 0%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--cyan), var(--white)); box-shadow: 0 0 18px rgba(46, 220, 255, 0.55); transition: width 180ms ease; }
+
+    .hero { display: grid; grid-template-columns: minmax(420px, 0.95fr) 1.05fr; gap: 16px; margin-bottom: 16px; }
+    .card { position: relative; border-radius: 24px; overflow: hidden; }
+    .cardHeader {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      padding: 15px 18px;
+      border-bottom: 1px solid rgba(118, 229, 255, 0.12);
+      background: rgba(255, 255, 255, 0.018);
+    }
+    .cardHeader h2, .cardHeader h3 {
+      margin: 0;
+      color: var(--white);
+      font-size: 13px;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+    .cardHeader span { color: var(--muted); font: 11px/1.2 var(--mono); }
+    .cardBody { position: relative; z-index: 1; padding: 18px; }
+
+    .riskPanel { min-height: 344px; }
+    .riskReadout { display: grid; grid-template-columns: 140px 1fr; gap: 18px; align-items: center; }
+    .dial {
+      width: 140px;
+      height: 140px;
+      border: 1px solid var(--line-strong);
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle, rgba(46, 220, 255, 0.13) 0 18%, transparent 19% 100%),
+        conic-gradient(from 210deg, rgba(46, 220, 255, 0.55), rgba(255, 255, 255, 0.12), rgba(255, 70, 93, 0.35), rgba(46, 220, 255, 0.55));
+      box-shadow: inset 0 0 34px rgba(0, 0, 0, 0.72), 0 0 36px rgba(46, 220, 255, 0.12);
+      position: relative;
+    }
+    .dial::before { content: ""; position: absolute; inset: 12px; border-radius: 50%; background: rgba(3, 6, 10, 0.88); border: 1px solid rgba(255, 255, 255, 0.06); }
+    .dialText { position: relative; text-align: center; }
+    .dialText strong { display: block; color: var(--white); font-size: 22px; letter-spacing: -0.04em; }
+    .dialText span { color: var(--muted); font: 10px/1.2 var(--mono); text-transform: uppercase; }
+    .riskTitle { margin: 0 0 6px; color: var(--white); font-size: clamp(24px, 3vw, 40px); letter-spacing: -0.04em; }
+    .riskCopy { margin: 0 0 16px; color: var(--muted); }
+    .metricGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .metric {
+      padding: 12px;
+      border: 1px solid rgba(118, 229, 255, 0.13);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .metric label { display: block; color: var(--muted); font: 10px/1.1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
+    .metric b { display: block; margin-top: 6px; color: var(--white); font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rulesLock { margin-top: 14px; padding: 13px 14px; border: 1px solid rgba(255, 70, 93, 0.28); border-radius: 17px; background: var(--red-soft); color: #ffd6dc; }
+
+    .radarPanel { min-height: 344px; }
+    .radarGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .systemCard {
+      min-height: 128px;
+      padding: 13px;
+      border: 1px solid rgba(118, 229, 255, 0.16);
+      border-radius: 18px;
+      background:
+        linear-gradient(135deg, rgba(46, 220, 255, 0.055), transparent),
+        rgba(255, 255, 255, 0.026);
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+    }
+    .systemCard:hover, .systemCard.active { transform: translateY(-1px); border-color: rgba(46, 220, 255, 0.62); box-shadow: 0 0 28px rgba(46, 220, 255, 0.12); }
+    .systemTop { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+    .systemName { color: var(--white); font: 900 20px/1 var(--sans); letter-spacing: -0.03em; }
+    .severity { width: 9px; height: 9px; margin-top: 3px; border-radius: 50%; background: var(--muted-2); box-shadow: 0 0 16px rgba(83, 97, 109, 0.6); }
+    .severity.discovered { background: var(--cyan); box-shadow: 0 0 16px rgba(46, 220, 255, 0.65); }
+    .severity.hot { background: var(--red); box-shadow: 0 0 16px rgba(255, 70, 93, 0.70); }
+    .systemStatus { margin-top: 8px; color: var(--muted); font: 11px/1.2 var(--mono); text-transform: uppercase; }
+    .systemStats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .systemStats div { color: var(--muted); font-size: 11px; }
+    .systemStats b { display: block; color: var(--white); font-size: 14px; }
+    .underLabel { margin-top: 8px; color: var(--cyan); font: 10px/1.2 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+
+    .mainGrid { display: grid; grid-template-columns: 320px 1fr 390px; gap: 16px; align-items: start; }
+    .sourceList { display: grid; gap: 10px; }
+    .sourceItem { padding: 12px; border: 1px solid rgba(118, 229, 255, 0.13); border-radius: 16px; background: rgba(255, 255, 255, 0.025); }
+    .sourceItem b { color: var(--white); }
+    .sourceItem p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+    .sourceCount { float: right; color: var(--cyan); font-family: var(--mono); }
+
+    .timeline { display: flex; align-items: stretch; gap: 8px; min-height: 112px; overflow-x: auto; padding-bottom: 4px; }
+    .seg { min-width: 150px; padding: 11px; border: 1px solid rgba(118, 229, 255, 0.17); border-radius: 16px; background: rgba(46, 220, 255, 0.055); }
+    .seg b { display: block; color: var(--white); margin-bottom: 6px; }
+    .seg span { display: block; color: var(--muted); font: 11px/1.35 var(--mono); }
+    .transitionArrow { align-self: center; color: var(--muted-2); font-family: var(--mono); }
+
+    .stack { display: grid; gap: 16px; }
+    .tableWrap { overflow: auto; max-height: 520px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 11px; border-bottom: 1px solid rgba(118, 229, 255, 0.095); text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; z-index: 2; color: #9eb2bf; background: rgba(7, 12, 18, 0.96); font: 10px/1.2 var(--mono); letter-spacing: 0.11em; text-transform: uppercase; }
+    td { color: #dceaf4; font-size: 12px; }
+    .raw { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); color: #aebdca; }
+    .empty { padding: 28px; color: var(--muted); text-align: center; border: 1px dashed rgba(118, 229, 255, 0.14); border-radius: 16px; background: rgba(255, 255, 255, 0.018); }
+
+    .detailPanel { position: sticky; top: 18px; }
+    .detailSection { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(118, 229, 255, 0.11); }
+    .detailSection h4 { margin: 0 0 8px; color: var(--white); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+    .small { color: var(--muted); font-size: 12px; }
+    .mono { font-family: var(--mono); }
+
+    @media (max-width: 1260px) {
+      .hero, .mainGrid { grid-template-columns: 1fr; }
+      .detailPanel { position: static; }
+      .uploadDock { width: auto; }
+    }
+    @media (max-width: 780px) {
+      .app { padding: 12px; }
+      .topbar, .riskReadout { grid-template-columns: 1fr; }
+      .radarGrid, .metricGrid { grid-template-columns: 1fr; }
+      .uploadControls { grid-template-columns: 1fr; }
+      .watermark { display: none; }
+    }
   </style>
 </head>
 <body>
-<div class="app">
-  <aside class="side">
-    <div class="brand"><div class="logo">🐼</div><div><h1>PANDA TOOL</h1><p>Proactive Analysis & Diagnostics Assistant</p></div></div>
-    <div class="upload">
-      <label class="btn" for="fileInput">Upload ZIP / Logs / Folder</label>
-      <input id="fileInput" type="file" multiple webkitdirectory directory />
-      <div style="height:8px"></div>
-      <label class="btn" for="zipInput">Upload ZIP files only</label>
-      <input id="zipInput" type="file" multiple accept=".zip,.log,.txt,.csv,.json,.xml" />
-      <div class="hint">Supports root ZIP, nested ZIPs such as <b>opc.zip → logs</b>, plain logs and folders. No real alerts are created without Rules.</div>
-      <div class="progress"><div class="bar" id="bar"></div></div>
+  <div class="app">
+    <div class="shell">
+      <div class="watermark">PANDA</div>
+      <header class="topbar">
+        <section class="masthead" aria-label="PANDA Service Radar header">
+          <div class="eyebrow">Proactive ANomaly Detection Assistant</div>
+          <h1>PANDA Service Radar</h1>
+          <p class="subtitle">Landa Digital Printing / Proactive Machine Monitoring</p>
+          <div class="modeStrip">
+            <span class="pill"><span class="dot red"></span>Current mode: Rules Pending / Discovery Mode</span>
+            <span class="pill"><span class="dot" id="dataDot"></span><span id="dataStatus">No data loaded</span></span>
+            <span class="pill"><span class="dot cyan"></span>Static browser scan</span>
+          </div>
+        </section>
+        <aside class="uploadDock" aria-label="Upload and scan controls">
+          <div class="uploadControls">
+            <label class="btn" for="fileInput">Upload Folder / Logs</label>
+            <input id="fileInput" type="file" multiple webkitdirectory directory />
+            <label class="btn" for="zipInput">Upload ZIP / Files</label>
+            <input id="zipInput" type="file" multiple accept=".zip,.log,.txt,.csv,.json,.xml" />
+          </div>
+          <p class="hint">Focused background scan only: FECNotification, LLCINotification, MachineStates, AlertsMonitoring, and AletrsMonitoring typo.</p>
+          <div class="progressMeta"><span id="scanStage">Idle / waiting for archive</span><span id="scanPct">0%</span></div>
+          <div class="progress"><div class="bar" id="bar"></div></div>
+        </aside>
+      </header>
+
+      <section class="hero">
+        <article class="card riskPanel">
+          <div class="cardHeader"><h2>Machine Risk Panel</h2><span>honest discovery view</span></div>
+          <div class="cardBody">
+            <div class="riskReadout">
+              <div class="dial"><div class="dialText"><strong id="riskLevel">Pending</strong><span>risk state</span></div></div>
+              <div>
+                <h2 class="riskTitle" id="activeMachine">No machine selected</h2>
+                <p class="riskCopy" id="riskMessage">Upload focused logs to build an operational machine health radar. Log scanning runs in the background.</p>
+                <div class="metricGrid">
+                  <div class="metric"><label>Current / last state</label><b id="lastState">Pending</b></div>
+                  <div class="metric"><label>Detected time range</label><b id="timeRange">Empty</b></div>
+                  <div class="metric"><label>Analysis completeness</label><b id="completeness">0 / 4 sources</b></div>
+                  <div class="metric"><label>Rules status</label><b>Pending</b></div>
+                </div>
+                <div class="rulesLock"><b>No real alerts are generated without Rules.</b><br />Alerts require Log Value + Machine State + Rule + Duration + Transition Grace.</div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card radarPanel">
+          <div class="cardHeader"><h2>System Radar</h2><span>click a system for drilldown</span></div>
+          <div class="cardBody"><div class="radarGrid" id="radarGrid"></div></div>
+        </article>
+      </section>
+
+      <main class="mainGrid">
+        <aside class="card">
+          <div class="cardHeader"><h3>Focused Log Sources</h3><span>only these are parsed</span></div>
+          <div class="cardBody"><div class="sourceList" id="sourceList"></div></div>
+        </aside>
+
+        <section class="stack">
+          <article class="card">
+            <div class="cardHeader"><h3>State Timeline</h3><span>actual parsed states only</span></div>
+            <div class="cardBody"><div class="timeline" id="timeline"></div></div>
+          </article>
+
+          <article class="card">
+            <div class="cardHeader"><h3>Evidence Stream — Preliminary Findings</h3><span>not real alerts</span></div>
+            <div class="tableWrap"><table id="evidenceTable"></table></div>
+          </article>
+        </section>
+
+        <aside class="card detailPanel">
+          <div class="cardHeader"><h3 id="detailTitle">System Drilldown</h3><span>selected radar node</span></div>
+          <div class="cardBody" id="detailBody"><div class="empty">Choose a system card to inspect related preliminary evidence.</div></div>
+        </aside>
+      </main>
     </div>
-    <div class="notice"><b>Baseline mode</b><br/>Signal Discovery, State Timeline, Preliminary Findings only. Rule Engine is locked until an official Rules Excel is loaded.</div>
-    <div id="scanBadges"></div>
-    <div class="footerNote">Recommended flow:<br/>Upload → Scan → Log Discovery → StateMachine → Signal Profiling → Rules Excel → Rule Engine → Alerts.</div>
-  </aside>
-  <main class="main">
-    <div class="topbar">
-      <div class="title"><h2>Service Radar</h2><p>Machine risk overview from real uploaded logs. Empty until data is scanned.</p></div>
-      <div class="status">
-        <span class="pill"><span class="dot" id="rulesDot"></span> Rules pending</span>
-        <span class="pill"><span class="dot" id="dataDot"></span> <span id="dataStatus">No data loaded</span></span>
-        <span class="pill"><span class="dot warn"></span> Browser static baseline</span>
-      </div>
-    </div>
+  </div>
 
-    <section class="grid kpis">
-      <div class="card pad kpi"><div class="label">Machines</div><div class="value" id="kMachines">0</div><div class="sub">detected</div></div>
-      <div class="card pad kpi"><div class="label">Log files</div><div class="value" id="kFiles">0</div><div class="sub">scanned</div></div>
-      <div class="card pad kpi"><div class="label">Systems</div><div class="value" id="kSystems">0</div><div class="sub">found in paths/content</div></div>
-      <div class="card pad kpi"><div class="label">Signals</div><div class="value" id="kSignals">0</div><div class="sub">numeric profiles</div></div>
-      <div class="card pad kpi"><div class="label">Real alerts</div><div class="value" id="kAlerts">0</div><div class="sub">locked: Rules required</div></div>
-    </section>
+  <script>
+    const FOCUSED_LOGS = [
+      { key: 'FECNotification', label: 'FECNotification', match: /FECNotification/i },
+      { key: 'LLCINotification', label: 'LLCINotification', match: /LLCINotification/i },
+      { key: 'MachineStates', label: 'MachineStates', match: /MachineStates/i },
+      { key: 'AlertsMonitoring', label: 'AlertsMonitoring', match: /AlertsMonitoring|AletrsMonitoring/i }
+    ];
+    const RADAR_SYSTEMS = ['FEC', 'LLCI', 'BSS', 'IPS', 'MachineStates', 'AlertsMonitoring'];
+    const MACHINE_STATES = ['Standby', 'Ready', 'Prepare2Print', 'Printing', 'PrintEnd', 'Recovery', 'Error', 'Init', 'Idle', 'Maintenance', 'Shutdown', 'Starting', 'Stopped', 'Service'];
+    const NOTIFICATION_EVENT = /\b(error|fatal|exception|failed|failure|fault|warning|warn|timeout|disconnect|alarm|alert)\b/i;
+    const $ = selector => document.querySelector(selector);
+    const $$ = selector => Array.from(document.querySelectorAll(selector));
 
-    <section class="grid layout">
-      <div class="card"><div class="sectionHead"><h3>Machine Overview</h3><span id="machineSummary">Waiting for upload</span></div><div class="tableWrap"><table class="table" id="machineTable"></table></div></div>
-      <div class="card"><div class="sectionHead"><h3>Systems / Hotspots</h3><span>click a system</span></div><div class="sysGrid" id="sysGrid"><div class="empty">No systems discovered yet.</div></div></div>
-    </section>
+    const appState = {
+      progress: 0,
+      parsedPaths: new Set(),
+      scannedArchives: new Set(),
+      files: [],
+      machines: new Map(),
+      systems: new Map(),
+      sourceCounts: new Map(),
+      states: [],
+      evidence: [],
+      lastStateByMachine: new Map(),
+      selectedSystem: null
+    };
 
-    <div class="tabs"><button class="tab active" data-view="signals">Signal Discovery</button><button class="tab" data-view="states">State Timeline</button><button class="tab" data-view="findings">Preliminary Findings</button><button class="tab" data-view="evidence">Evidence Log</button><button class="tab" data-view="drill">System Drill-down</button></div>
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
 
-    <section class="card" id="view-signals"><div class="sectionHead"><h3>Signal Discovery</h3><span>Count / Min / Max / Avg / Source</span></div><div class="tableWrap"><table class="table" id="signalsTable"></table></div></section>
-    <section class="card" id="view-states" style="display:none"><div class="sectionHead"><h3>State Timeline</h3><span>parsed from state-like log lines</span></div><div class="timeline" id="timeline"><div class="empty">No state transitions detected yet.</div></div><div class="tableWrap"><table class="table" id="statesTable"></table></div></section>
-    <section class="card" id="view-findings" style="display:none"><div class="sectionHead"><h3>Preliminary Findings</h3><span>not real alerts</span></div><div class="tableWrap"><table class="table" id="findingsTable"></table></div></section>
-    <section class="card" id="view-evidence" style="display:none"><div class="sectionHead"><h3>Evidence Log</h3><span>raw source context</span></div><div class="tableWrap"><table class="table" id="evidenceTable"></table></div></section>
-    <section class="card" id="view-drill" style="display:none"><div class="sectionHead"><h3 id="drillTitle">System Drill-down</h3><span>overview / logs / signals / findings</span></div><div id="drillBody" class="pad empty">Choose a system from Systems / Hotspots.</div></section>
-  </main>
-</div>
-<script>
-const SYSTEMS=['IRD','FEC','IPS','ECC','LLCI','BSS','DPS','QCS','PSS','BCU','NPD','LPWS','AIC','DPCS','OPC','PCC','FEEDER'];
-const STATES=['Standby','Ready','Prepare2Print','Printing','PrintEnd','Recovery','Error','Init','Idle','Maintenance','Shutdown','Starting'];
-const state={files:[],machines:new Map(),systems:new Map(),signals:new Map(),states:[],findings:[],evidence:[],selectedSystem:null};
-const $=s=>document.querySelector(s);const $$=s=>Array.from(document.querySelectorAll(s));
-function setProgress(v){$('#bar').style.width=Math.max(0,Math.min(100,v))+'%'}
-function badge(text,kind=''){return `<span class="pill"><span class="dot ${kind}"></span>${text}</span>`}
-function parseTs(line){let m=line.match(/\[(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}:\d{2})(?:[\.:](\d+))?\]/); if(m){return `${m[3]}-${m[2]}-${m[1]} ${m[4]}`}; m=line.match(/(20\d{2})[-_](\d{2})[-_](\d{2})[T_\s](\d{2})[-:]?(\d{2})[-:]?(\d{2})/); if(m){return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}`}; return ''}
-function machineFrom(path,text=''){let m=(path+'\n'+text.slice(0,3000)).match(/[SD]\d{9,10}/);return m?m[0]:'UNKNOWN'}
-function systemFrom(path,line=''){let hay=(path+' '+line).toUpperCase(); return SYSTEMS.find(s=>hay.includes(s)) || (path.toLowerCase().includes('opc')?'OPC':'GENERAL')}
-function addMachine(id,file,system){if(!state.machines.has(id))state.machines.set(id,{id,files:new Set(),systems:new Set(),first:'',last:'',findings:0});let m=state.machines.get(id);m.files.add(file);m.systems.add(system)}
-function addSystem(sys,file,sev=''){if(!state.systems.has(sys))state.systems.set(sys,{name:sys,files:new Set(),signals:0,findings:0,severity:''});let s=state.systems.get(sys);s.files.add(file); if(sev==='hot')s.severity='hot'; else if(sev==='warn'&&!s.severity)s.severity='warn'}
-function addEvidence(row){if(state.evidence.length<1000)state.evidence.push(row)}
-function addSignal(machine,system,name,value,ts,file,line){let key=[machine,system,name].join('|');if(!state.signals.has(key))state.signals.set(key,{machine,system,name,count:0,min:value,max:value,sum:0,first:ts,last:ts,file});let s=state.signals.get(key);s.count++;s.min=Math.min(s.min,value);s.max=Math.max(s.max,value);s.sum+=value;if(ts){if(!s.first||ts<s.first)s.first=ts;if(!s.last||ts>s.last)s.last=ts}addSystem(system,file)}
-function extractSignals(line){let out=[]; let rx=/([A-Za-z][A-Za-z0-9_.:\/-]{2,80})\s*(?:=|:|,|\s)\s*(-?\d+(?:\.\d+)?)(?![\d\.])/g; let m; while((m=rx.exec(line))&&out.length<8){let name=m[1].replace(/^\[|\]$/g,''); let value=Number(m[2]); if(Number.isFinite(value)&&!/^20\d{2}$/.test(String(value))&&!/^\d{1,2}$/.test(name)) out.push({name,value});} return out}
-function detectState(line,ts,machine,system,file){let low=line.toLowerCase(); if(!low.includes('state')) return; for(const st of STATES){if(low.includes(st.toLowerCase())){state.states.push({machine,system,state:st,timestamp:ts,file,raw:line.slice(0,500)});addEvidence({type:'State',machine,system,timestamp:ts,state:st,source:file,raw:line.slice(0,500)});break}}
-}
-function detectFinding(line,ts,machine,system,file){let l=line.toLowerCase();let severity=''; if(/\[(error|fatal)\]|\berror\b|exception|failed|fault/i.test(line))severity='hot'; else if(/\[(warn|warning)\]|warning|timeout|disconnect/i.test(line))severity='warn'; if(severity){let f={severity:severity==='hot'?'Error-like':'Warning-like',machine,system,timestamp:ts||'',source:file,raw:line.slice(0,600),note:'Preliminary finding only — requires Rules Excel + state/duration/grace to become a real alert.'};state.findings.push(f);addSystem(system,file,severity);let mm=state.machines.get(machine); if(mm)mm.findings++; addEvidence({type:f.severity,machine,system,timestamp:ts,source:file,raw:f.raw});}
-}
-async function processText(path,text){let machine=machineFrom(path,text);let fileRec={path,size:text.length,machine};state.files.push(fileRec);let lines=text.split(/\r?\n/);let sampleLimit=Math.min(lines.length,35000);let first='',last='';for(let i=0;i<sampleLimit;i++){let line=lines[i]; if(!line)continue;let ts=parseTs(line)||parseTs(path);if(ts){if(!first||ts<first)first=ts;if(!last||ts>last)last=ts}let system=systemFrom(path,line);addMachine(machine,path,system);addSystem(system,path);detectState(line,ts,machine,system,path);detectFinding(line,ts,machine,system,path);for(const sig of extractSignals(line)){addSignal(machine,system,sig.name,sig.value,ts,path,line)}}let m=state.machines.get(machine);if(m){if(first&&(!m.first||first<m.first))m.first=first;if(last&&(!m.last||last>m.last))m.last=last}}
-async function scanZip(blob,prefix=''){let zip=await JSZip.loadAsync(blob);let entries=Object.values(zip.files);for(let idx=0;idx<entries.length;idx++){let e=entries[idx]; if(e.dir)continue; let path=prefix+e.name; if(/\.zip$/i.test(e.name)){let b=await e.async('blob'); await scanZip(b,path+' → ');}
-    else if(/\.(log|txt|csv|json|xml)$/i.test(e.name)||path.toLowerCase().includes('/logs/')){let t=await e.async('text').catch(()=>null); if(t) await processText(path,t)}
-    setProgress(10+Math.round((idx/Math.max(1,entries.length))*70));
-  }}
-async function handleFiles(files){reset();$('#dataStatus').textContent='Scanning…';$('#dataDot').className='dot warn';setProgress(5);let arr=Array.from(files);for(let i=0;i<arr.length;i++){let f=arr[i];try{if(/\.zip$/i.test(f.name)){await scanZip(f,f.webkitRelativePath?f.webkitRelativePath+' → ':'')}else{let t=await f.text();await processText(f.webkitRelativePath||f.name,t)}}catch(err){state.findings.push({severity:'Scan issue',machine:'UNKNOWN',system:'GENERAL',timestamp:'',source:f.name,raw:String(err),note:'File could not be parsed in browser baseline.'})}setProgress(5+Math.round(((i+1)/arr.length)*90))}deriveStateDurations();render();setProgress(100)}
-function deriveStateDurations(){state.states.sort((a,b)=>(a.timestamp||'').localeCompare(b.timestamp||''));for(let i=0;i<state.states.length;i++){let cur=state.states[i],nxt=state.states[i+1];cur.end=(nxt&&nxt.machine===cur.machine)?nxt.timestamp:'';cur.duration=cur.end&&cur.timestamp?durationText(cur.timestamp,cur.end):''}}
-function durationText(a,b){let da=new Date(a.replace(' ','T')),db=new Date(b.replace(' ','T'));if(isNaN(da)||isNaN(db))return '';let sec=Math.max(0,Math.round((db-da)/1000));if(sec<60)return sec+'s';if(sec<3600)return Math.round(sec/60)+'m';return (sec/3600).toFixed(1)+'h'}
-function reset(){state.files=[];state.machines.clear();state.systems.clear();state.signals.clear();state.states=[];state.findings=[];state.evidence=[];state.selectedSystem=null;setProgress(0)}
-function table(el,cols,rows,empty){if(!rows.length){el.innerHTML=`<tr><td class="empty">${empty}</td></tr>`;return}el.innerHTML='<thead><tr>'+cols.map(c=>`<th>${c[0]}</th>`).join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+cols.map(c=>`<td class="${c[2]||''}">${c[1](r)??''}</td>`).join('')+'</tr>').join('')+'</tbody>'}
-function render(){let machines=[...state.machines.values()],systems=[...state.systems.values()],signals=[...state.signals.values()].sort((a,b)=>b.count-a.count).slice(0,500);$('#kMachines').textContent=machines.length;$('#kFiles').textContent=state.files.length;$('#kSystems').textContent=systems.length;$('#kSignals').textContent=state.signals.size;$('#kAlerts').textContent=0;$('#dataStatus').textContent=state.files.length?'Data discovered':'No data loaded';$('#dataDot').className='dot '+(state.files.length?'ok':'');$('#scanBadges').innerHTML=badge(`${state.files.length} files`,'ok')+badge(`${state.states.length} state hits`,state.states.length?'ok':'warn')+badge(`${state.findings.length} preliminary findings`,state.findings.length?'warn':'');$('#machineSummary').textContent=machines.length?`${machines.length} machine(s), ${state.files.length} log files`:'Waiting for upload';
- table($('#machineTable'),[['Machine',r=>r.id],['Files',r=>r.files.size],['Systems',r=>[...r.systems].join(', ')],['First',r=>r.first],['Last',r=>r.last],['Prelim',r=>r.findings]],machines,'No machine detected yet.');
- $('#sysGrid').innerHTML=systems.length?systems.sort((a,b)=>b.findings-a.findings||a.name.localeCompare(b.name)).map(s=>`<div class="sys ${state.selectedSystem===s.name?'active':''}" data-sys="${s.name}"><b>${s.name}</b><div>${s.files.size} files · ${s.findings} findings</div></div>`).join(''):'<div class="empty">No systems discovered yet.</div>'; $$('.sys').forEach(x=>x.onclick=()=>{state.selectedSystem=x.dataset.sys;showTab('drill');renderDrill();render()});
- table($('#signalsTable'),[['Machine',r=>r.machine],['System',r=>r.system],['Signal',r=>r.name],['Count',r=>r.count],['Min',r=>fmt(r.min)],['Max',r=>fmt(r.max)],['Avg',r=>fmt(r.sum/r.count)],['First',r=>r.first],['Last',r=>r.last],['Source',r=>r.file,'raw']],signals,'No numeric signals discovered yet.');
- table($('#statesTable'),[['Machine',r=>r.machine],['State',r=>r.state],['Start',r=>r.timestamp],['End',r=>r.end],['Duration',r=>r.duration],['System',r=>r.system],['Source',r=>r.file,'raw']],state.states.slice(0,500),'No state machine entries detected yet.');
- $('#timeline').innerHTML=state.states.length?state.states.slice(0,120).map(s=>`<div class="seg"><b>${s.state}</b><span>${(s.timestamp||'').slice(11,16)} ${s.duration||''}</span></div>`).join(''):'<div class="empty">No state transitions detected yet.</div>';
- table($('#findingsTable'),[['Severity',r=>r.severity],['Machine',r=>r.machine],['System',r=>r.system],['Timestamp',r=>r.timestamp],['Source',r=>r.source,'raw'],['Note',r=>r.note],['Raw',r=>r.raw,'raw']],state.findings.slice(0,500),'No preliminary findings yet.');
- table($('#evidenceTable'),[['Type',r=>r.type],['Machine',r=>r.machine],['System',r=>r.system],['Timestamp',r=>r.timestamp],['State',r=>r.state||''],['Source',r=>r.source,'raw'],['Raw line',r=>r.raw,'raw']],state.evidence.slice(0,800),'No evidence captured yet.');renderDrill();}
-function fmt(n){return Number.isFinite(n)?(Math.round(n*1000)/1000):''}
-function renderDrill(){let sys=state.selectedSystem;if(!sys){$('#drillTitle').textContent='System Drill-down';$('#drillBody').className='pad empty';$('#drillBody').innerHTML='Choose a system from Systems / Hotspots.';return}$('#drillTitle').textContent=`${sys} Drill-down`;let sig=[...state.signals.values()].filter(s=>s.system===sys).sort((a,b)=>b.count-a.count).slice(0,12);let fin=state.findings.filter(f=>f.system===sys).slice(0,8);let logs=state.files.filter(f=>systemFrom(f.path)===sys||f.path.toUpperCase().includes(sys)).slice(0,10);$('#drillBody').className='pad';$('#drillBody').innerHTML=`<div class="split"><div><h3>Overview</h3><p class="small">System ${sys} is based on discovered paths/content only. Real component status requires Rules Excel.</p><p>${badge(sig.length+' top signals','ok')} ${badge(fin.length+' prelim findings',fin.length?'warn':'')}</p></div><div><h3>Recommended Next Step</h3><p class="small">Map ${sys} signals to Rules columns: System, Component, Log Signal Name, Expected by State, Warning/Critical ranges, Duration and Transition Grace.</p></div></div><h3>Top Signals</h3>${mini(sig.map(s=>({Signal:s.name,Count:s.count,Min:fmt(s.min),Max:fmt(s.max),Avg:fmt(s.sum/s.count)})))}<h3>Related Logs</h3>${mini(logs.map(l=>({Machine:l.machine,Source:l.path,Size:l.size})))}<h3>Preliminary Findings</h3>${mini(fin.map(f=>({Severity:f.severity,Time:f.timestamp,Raw:f.raw.slice(0,180)})))}`}
-function mini(rows){if(!rows.length)return '<div class="empty">None</div>';let keys=Object.keys(rows[0]);return '<div class="tableWrap"><table class="table"><thead><tr>'+keys.map(k=>`<th>${k}</th>`).join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+keys.map(k=>`<td>${r[k]}</td>`).join('')+'</tr>').join('')+'</tbody></table></div>'}
-function showTab(name){$$('.tab').forEach(t=>t.classList.toggle('active',t.dataset.view===name));['signals','states','findings','evidence','drill'].forEach(v=>$('#view-'+v).style.display=v===name?'block':'none')}
-$$('.tab').forEach(t=>t.onclick=()=>showTab(t.dataset.view));$('#fileInput').onchange=e=>handleFiles(e.target.files);$('#zipInput').onchange=e=>handleFiles(e.target.files);render();
-</script>
+    function setStage(stage, progress) {
+      $('#scanStage').textContent = stage;
+      if (typeof progress === 'number') {
+        appState.progress = Math.max(appState.progress, Math.min(100, Math.round(progress)));
+        $('#bar').style.width = `${appState.progress}%`;
+        $('#scanPct').textContent = `${appState.progress}%`;
+      }
+    }
+
+    function resetScan() {
+      appState.progress = 0;
+      appState.parsedPaths.clear();
+      appState.scannedArchives.clear();
+      appState.files = [];
+      appState.machines.clear();
+      appState.systems.clear();
+      appState.sourceCounts.clear();
+      appState.states = [];
+      appState.evidence = [];
+      appState.lastStateByMachine.clear();
+      appState.selectedSystem = null;
+      $('#bar').style.width = '0%';
+      $('#scanPct').textContent = '0%';
+      setStage('Idle / waiting for archive', 0);
+    }
+
+    function focusedLog(path) {
+      return FOCUSED_LOGS.find(log => log.match.test(path));
+    }
+
+    function normalizeSource(path) {
+      const focus = focusedLog(path);
+      return focus ? focus.key : 'Pending';
+    }
+
+    function parseTimestamp(line, path = '') {
+      let match = line.match(/\[(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}:\d{2})(?:[\.:](\d+))?\]/);
+      if (match) return `${match[3]}-${match[2]}-${match[1]} ${match[4]}`;
+      match = line.match(/(20\d{2})[-_](\d{2})[-_](\d{2})[T_\s](\d{2})[-:]?(\d{2})[-:]?(\d{2})/);
+      if (match) return `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`;
+      match = path.match(/(20\d{2})[-_](\d{2})[-_](\d{2})[T_\s-]?(\d{2})?[-:]?(\d{2})?[-:]?(\d{2})?/);
+      if (match) return `${match[1]}-${match[2]}-${match[3]} ${match[4] || '00'}:${match[5] || '00'}:${match[6] || '00'}`;
+      return '';
+    }
+
+    function machineFrom(path, text = '') {
+      const match = `${path}\n${text.slice(0, 2500)}`.match(/[SD]\d{9,10}/);
+      return match ? match[0] : 'UNKNOWN';
+    }
+
+    function systemFrom(path, line = '') {
+      const source = normalizeSource(path);
+      const haystack = `${path} ${line}`.toUpperCase();
+      if (source === 'MachineStates') return 'MachineStates';
+      if (source === 'AlertsMonitoring') return 'AlertsMonitoring';
+      if (source === 'FECNotification') return 'FEC';
+      if (source === 'LLCINotification') {
+        if (/\bBSS\b|BSS[._:-]/i.test(haystack)) return 'BSS';
+        if (/\bIPS\b|IPS[._:-]/i.test(haystack)) return 'IPS';
+        return 'LLCI';
+      }
+      return 'Pending';
+    }
+
+    function ensureMachine(id) {
+      if (!appState.machines.has(id)) {
+        appState.machines.set(id, { id, files: new Set(), systems: new Set(), first: '', last: '' });
+      }
+      return appState.machines.get(id);
+    }
+
+    function ensureSystem(system) {
+      if (!appState.systems.has(system)) {
+        appState.systems.set(system, { name: system, status: 'pending', count: 0, last: '', files: new Set(), severity: 'pending' });
+      }
+      return appState.systems.get(system);
+    }
+
+    function registerEvent({ machine, system, source, timestamp, path, severity = 'discovered' }) {
+      const m = ensureMachine(machine);
+      m.files.add(path);
+      m.systems.add(system);
+      if (timestamp) {
+        if (!m.first || timestamp < m.first) m.first = timestamp;
+        if (!m.last || timestamp > m.last) m.last = timestamp;
+      }
+
+      const sys = ensureSystem(system);
+      sys.status = 'discovered';
+      sys.count += 1;
+      sys.files.add(path);
+      if (timestamp && (!sys.last || timestamp > sys.last)) sys.last = timestamp;
+      if (severity === 'hot') sys.severity = 'hot';
+      else if (sys.severity !== 'hot') sys.severity = 'discovered';
+
+      if (source === 'LLCINotification' && system !== 'LLCI') {
+        const parent = ensureSystem('LLCI');
+        parent.status = 'discovered';
+        parent.count += 1;
+        parent.files.add(path);
+        if (timestamp && (!parent.last || timestamp > parent.last)) parent.last = timestamp;
+        if (severity === 'hot') parent.severity = 'hot';
+        else if (parent.severity !== 'hot') parent.severity = 'discovered';
+      }
+
+      appState.sourceCounts.set(source, (appState.sourceCounts.get(source) || 0) + 1);
+    }
+
+    function detectState(line) {
+      const lower = line.toLowerCase();
+      if (!lower.includes('state')) return '';
+      return MACHINE_STATES.find(machineState => lower.includes(machineState.toLowerCase())) || '';
+    }
+
+    function classifyEvent(line, source, detectedState) {
+      if (detectedState) return 'State transition';
+      if (/\b(error|fatal|exception|failed|failure|fault)\b/i.test(line)) return 'Error-like log event';
+      if (/\b(warning|warn|timeout|disconnect)\b/i.test(line)) return 'Warning-like log event';
+      if (/\b(alarm|alert)\b/i.test(line)) return source === 'AlertsMonitoring' ? 'Alert-like log entry' : 'Notification event';
+      if (/BSS/i.test(line)) return 'BSS LLCI notification';
+      if (/IPS/i.test(line)) return 'IPS LLCI notification';
+      return 'Notification sample';
+    }
+
+    function evidenceSeverity(eventType) {
+      return /Error|Alert-like/i.test(eventType) ? 'hot' : 'discovered';
+    }
+
+    function addEvidence(row) {
+      if (appState.evidence.length < 1200) appState.evidence.push(row);
+    }
+
+    async function processText(path, text) {
+      if (appState.parsedPaths.has(path)) return;
+      appState.parsedPaths.add(path);
+
+      const focus = focusedLog(path);
+      if (!focus) return;
+
+      const source = focus.key;
+      const machine = machineFrom(path, text);
+      appState.files.push({ path, source, machine, size: text.length });
+      const lines = text.split(/\r?\n/);
+      const sampleLimit = Math.min(lines.length, 40000);
+      let capturedSamples = 0;
+
+      for (let i = 0; i < sampleLimit; i += 1) {
+        const line = lines[i];
+        if (!line) continue;
+
+        const timestamp = parseTimestamp(line, path);
+        const system = systemFrom(path, line);
+        const detectedState = detectState(line);
+        const lastKnownState = detectedState || appState.lastStateByMachine.get(machine) || '';
+        const isFinding = NOTIFICATION_EVENT.test(line) || detectedState || /\b(BSS|IPS)\b/i.test(line) || capturedSamples < 3;
+
+        if (detectedState) {
+          const stateRow = { machine, system: 'MachineStates', state: detectedState, timestamp, end: '', duration: '', source: path, raw: line.slice(0, 500) };
+          appState.states.push(stateRow);
+          appState.lastStateByMachine.set(machine, detectedState);
+        }
+
+        if (isFinding) {
+          const eventType = classifyEvent(line, source, detectedState);
+          const severity = evidenceSeverity(eventType);
+          registerEvent({ machine, system, source, timestamp, path, severity });
+          addEvidence({
+            timestamp,
+            machine,
+            source,
+            system,
+            state: lastKnownState,
+            eventType,
+            raw: line.slice(0, 650)
+          });
+          capturedSamples += 1;
+        } else {
+          registerEvent({ machine, system, source, timestamp, path });
+        }
+      }
+    }
+
+    async function scanZip(blob, prefix = '') {
+      const archiveKey = `${prefix}${blob.name || blob.size || 'zip'}`;
+      if (appState.scannedArchives.has(archiveKey)) return;
+      appState.scannedArchives.add(archiveKey);
+      setStage('Opening archive', 8);
+
+      const zip = await JSZip.loadAsync(blob);
+      const entries = Object.values(zip.files).filter(entry => !entry.dir);
+      const focusedEntries = entries.filter(entry => focusedLog(`${prefix}${entry.name}`) || /\.zip$/i.test(entry.name));
+      setStage('Finding focused logs', 22);
+
+      for (let index = 0; index < focusedEntries.length; index += 1) {
+        const entry = focusedEntries[index];
+        const path = `${prefix}${entry.name}`;
+        const sliceProgress = 22 + ((index + 1) / Math.max(1, focusedEntries.length)) * 58;
+
+        if (/\.zip$/i.test(entry.name)) {
+          if (!appState.scannedArchives.has(path)) {
+            const nestedBlob = await entry.async('blob');
+            await scanZip(nestedBlob, `${path} → `);
+          }
+        } else if (focusedLog(path)) {
+          setStage(focusedLog(path).key === 'MachineStates' ? 'Parsing machine states' : 'Profiling selected notifications', sliceProgress);
+          const text = await entry.async('text').catch(() => null);
+          if (text !== null) await processText(path, text);
+        }
+      }
+    }
+
+    async function handleFiles(fileList) {
+      resetScan();
+      $('#dataStatus').textContent = 'Scanning…';
+      $('#dataDot').className = 'dot cyan';
+
+      const files = Array.from(fileList || []);
+      if (!files.length) {
+        render();
+        return;
+      }
+
+      setStage('Opening archive', 4);
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        const path = file.webkitRelativePath || file.name;
+        try {
+          if (/\.zip$/i.test(file.name)) {
+            await scanZip(file, file.webkitRelativePath ? `${file.webkitRelativePath} → ` : '');
+          } else if (focusedLog(path)) {
+            const stage = normalizeSource(path) === 'MachineStates' ? 'Parsing machine states' : 'Profiling selected notifications';
+            setStage(stage, 12 + (index / Math.max(1, files.length)) * 68);
+            await processText(path, await file.text());
+          }
+        } catch (error) {
+          addEvidence({ timestamp: '', machine: 'UNKNOWN', source: normalizeSource(path), system: 'Pending', state: '', eventType: 'Scan issue', raw: String(error) });
+        }
+        setStage('Building evidence view', 80 + ((index + 1) / Math.max(1, files.length)) * 14);
+      }
+
+      deriveStateDurations();
+      render();
+      setStage('Building evidence view', 100);
+    }
+
+    function deriveStateDurations() {
+      appState.states.sort((a, b) => `${a.machine}|${a.timestamp}`.localeCompare(`${b.machine}|${b.timestamp}`));
+      for (let i = 0; i < appState.states.length; i += 1) {
+        const current = appState.states[i];
+        const next = appState.states.slice(i + 1).find(row => row.machine === current.machine && row.timestamp);
+        current.end = next ? next.timestamp : '';
+        current.duration = current.timestamp && current.end ? durationText(current.timestamp, current.end) : '';
+      }
+    }
+
+    function durationText(start, end) {
+      const a = new Date(start.replace(' ', 'T'));
+      const b = new Date(end.replace(' ', 'T'));
+      if (Number.isNaN(a.valueOf()) || Number.isNaN(b.valueOf())) return '';
+      const seconds = Math.max(0, Math.round((b - a) / 1000));
+      if (seconds < 60) return `${seconds}s`;
+      if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+      return `${(seconds / 3600).toFixed(1)}h`;
+    }
+
+    function renderSourceList() {
+      $('#sourceList').innerHTML = FOCUSED_LOGS.map(log => {
+        const fileCount = appState.files.filter(file => file.source === log.key).length;
+        const eventCount = appState.sourceCounts.get(log.key) || 0;
+        const status = fileCount ? 'discovered' : 'pending / empty';
+        return `<div class="sourceItem"><span class="sourceCount">${eventCount}</span><b>${escapeHtml(log.label)}</b><p>${status} · ${fileCount} file(s)</p></div>`;
+      }).join('');
+    }
+
+    function renderRadar() {
+      const html = RADAR_SYSTEMS.map(systemName => {
+        const record = appState.systems.get(systemName) || { status: 'pending', count: 0, last: '', severity: 'pending', files: new Set() };
+        const hasData = record.count > 0;
+        const status = hasData ? 'discovered' : 'pending / no data';
+        const severity = record.severity === 'hot' ? 'hot' : hasData ? 'discovered' : 'pending';
+        const emphasis = ['BSS', 'IPS'].includes(systemName) ? '<div class="underLabel">under LLCINotification</div>' : '';
+        return `<button class="systemCard ${appState.selectedSystem === systemName ? 'active' : ''}" data-system="${escapeHtml(systemName)}" type="button">
+          <div class="systemTop"><div class="systemName">${escapeHtml(systemName)}</div><span class="severity ${severity}"></span></div>
+          <div class="systemStatus">${status}</div>
+          ${emphasis}
+          <div class="systemStats"><div><b>${record.count || 0}</b>events</div><div><b>${escapeHtml(record.last || '—')}</b>last event</div></div>
+        </button>`;
+      }).join('');
+      $('#radarGrid').innerHTML = html;
+      $$('.systemCard').forEach(card => {
+        card.addEventListener('click', () => {
+          appState.selectedSystem = card.dataset.system;
+          renderRadar();
+          renderDetail();
+        });
+      });
+    }
+
+    function renderTimeline() {
+      if (!appState.states.length) {
+        $('#timeline').innerHTML = '<div class="empty">No parsed machine states found in focused logs.</div>';
+        return;
+      }
+      $('#timeline').innerHTML = appState.states.slice(0, 80).map((row, index) => {
+        const arrow = index < Math.min(appState.states.length, 80) - 1 ? '<div class="transitionArrow">→</div>' : '';
+        return `<div class="seg"><b>${escapeHtml(row.state)}</b><span>${escapeHtml(row.machine)}</span><span>${escapeHtml(row.timestamp || 'time pending')}</span><span>${escapeHtml(row.duration || 'duration pending')}</span></div>${arrow}`;
+      }).join('');
+    }
+
+    function renderEvidence() {
+      table($('#evidenceTable'), [
+        ['Timestamp', row => row.timestamp || '—'],
+        ['Machine ID', row => row.machine],
+        ['Source log', row => row.source],
+        ['System', row => row.system],
+        ['State', row => row.state || '—'],
+        ['Event type', row => row.eventType],
+        ['Raw line preview', row => row.raw, 'raw']
+      ], appState.evidence.slice(0, 700), 'No preliminary findings captured yet. Upload focused logs to populate evidence.');
+    }
+
+    function renderHero() {
+      const machines = Array.from(appState.machines.values()).sort((a, b) => b.files.size - a.files.size);
+      const active = machines[0];
+      const sourceCoverage = FOCUSED_LOGS.filter(log => appState.files.some(file => file.source === log.key)).length;
+      const hotCount = appState.evidence.filter(row => /Error|Alert-like/i.test(row.eventType)).length;
+      const activeStates = active ? appState.states.filter(row => row.machine === active.id) : [];
+      const lastState = activeStates.length ? activeStates[activeStates.length - 1].state : '';
+
+      $('#activeMachine').textContent = active ? active.id : 'No machine selected';
+      $('#lastState').textContent = lastState || 'Pending';
+      $('#timeRange').textContent = active && (active.first || active.last) ? `${active.first || '—'} → ${active.last || '—'}` : 'Empty';
+      $('#completeness').textContent = `${sourceCoverage} / ${FOCUSED_LOGS.length} sources`;
+      $('#riskLevel').textContent = hotCount ? 'Review' : active ? 'Pending' : 'Pending';
+      $('#riskMessage').textContent = active
+        ? `${appState.files.length} focused log file(s) scanned. ${appState.evidence.length} preliminary finding(s) are available for service review.`
+        : 'Upload focused logs to build an operational machine health radar. Log scanning runs in the background.';
+      $('#dataStatus').textContent = appState.files.length ? 'Focused data discovered' : 'No data loaded';
+      $('#dataDot').className = `dot ${appState.files.length ? 'cyan' : ''}`;
+    }
+
+    function renderDetail() {
+      const selected = appState.selectedSystem;
+      if (!selected) {
+        $('#detailTitle').textContent = 'System Drilldown';
+        $('#detailBody').innerHTML = '<div class="empty">Choose a system card to inspect related preliminary evidence.</div>';
+        return;
+      }
+
+      $('#detailTitle').textContent = `${selected} Drilldown`;
+      let related = appState.evidence.filter(row => row.system === selected);
+      if (selected === 'BSS' || selected === 'IPS') {
+        related = appState.evidence.filter(row => row.source === 'LLCINotification' && (row.system === selected || new RegExp(`\\b${selected}\\b`, 'i').test(row.raw)));
+      } else if (selected === 'MachineStates') {
+        related = appState.states.map(row => ({ ...row, eventType: 'State timeline detail', state: row.state, raw: row.raw }));
+      } else if (selected === 'AlertsMonitoring') {
+        related = appState.evidence.filter(row => row.source === 'AlertsMonitoring');
+      }
+
+      const system = appState.systems.get(selected) || { count: 0, last: '', status: 'pending' };
+      const guidance = selected === 'AlertsMonitoring'
+        ? 'Alert-like entries remain preliminary until Rules Excel exists and duration/state/grace checks can be applied.'
+        : selected === 'MachineStates'
+          ? 'State details are parsed timeline evidence and are not alerts.'
+          : selected === 'BSS' || selected === 'IPS'
+            ? `${selected} evidence is derived from related LLCINotification entries.`
+            : 'Discovery mode shows source-backed evidence only; real status requires Rules.';
+
+      $('#detailBody').innerHTML = `
+        <div class="metricGrid">
+          <div class="metric"><label>Status</label><b>${escapeHtml(system.count ? 'Discovered' : 'Pending')}</b></div>
+          <div class="metric"><label>Event count</label><b>${system.count || related.length || 0}</b></div>
+          <div class="metric"><label>Last event</label><b>${escapeHtml(system.last || '—')}</b></div>
+          <div class="metric"><label>Severity</label><b>${escapeHtml(system.severity === 'hot' ? 'Preliminary red' : system.count ? 'Preliminary' : 'No data')}</b></div>
+        </div>
+        <div class="detailSection"><h4>Interpretation</h4><p class="small">${escapeHtml(guidance)}</p></div>
+        <div class="detailSection"><h4>Related entries</h4>${miniTable(related.slice(0, 12))}</div>`;
+    }
+
+    function table(element, columns, rows, emptyText) {
+      if (!rows.length) {
+        element.innerHTML = `<tbody><tr><td><div class="empty">${escapeHtml(emptyText)}</div></td></tr></tbody>`;
+        return;
+      }
+      const header = columns.map(([label]) => `<th>${escapeHtml(label)}</th>`).join('');
+      const body = rows.map(row => `<tr>${columns.map(([, getter, className]) => `<td class="${className || ''}">${escapeHtml(getter(row))}</td>`).join('')}</tr>`).join('');
+      element.innerHTML = `<thead><tr>${header}</tr></thead><tbody>${body}</tbody>`;
+    }
+
+    function miniTable(rows) {
+      if (!rows.length) return '<div class="empty">No related entries for this system.</div>';
+      const trimmed = rows.map(row => ({
+        Time: row.timestamp || '—',
+        Machine: row.machine || '—',
+        Type: row.eventType || 'State',
+        State: row.state || '—',
+        Raw: (row.raw || '').slice(0, 150)
+      }));
+      const keys = Object.keys(trimmed[0]);
+      return `<div class="tableWrap"><table><thead><tr>${keys.map(key => `<th>${escapeHtml(key)}</th>`).join('')}</tr></thead><tbody>${trimmed.map(row => `<tr>${keys.map(key => `<td class="${key === 'Raw' ? 'raw' : ''}">${escapeHtml(row[key])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    }
+
+    function render() {
+      renderHero();
+      renderSourceList();
+      renderRadar();
+      renderTimeline();
+      renderEvidence();
+      renderDetail();
+    }
+
+    $('#fileInput').addEventListener('change', event => handleFiles(event.target.files));
+    $('#zipInput').addEventListener('change', event => handleFiles(event.target.files));
+    render();
+  </script>
 </body>
 </html>
