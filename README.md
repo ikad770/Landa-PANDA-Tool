@@ -1,83 +1,77 @@
 # Landa PANDA Tool
 
-Static GitHub-only PANDA baseline for the Landa service-tool prototype.
+Landa PANDA Tool is a GitHub-only static browser app for early PANDA log discovery and preliminary machine analysis.
 
-PANDA means **Proactive Analyzer Notification DA**. This repository is intentionally reduced to a self-contained static application that can run from the repository root on GitHub Pages or directly from `index.html`.
+The app is intentionally simple to deploy:
 
-## How to open
+- Open `index.html` directly in a browser, or serve it with GitHub Pages.
+- No npm is required.
+- No build step is required.
+- No Vite, React, backend service, Vercel deployment, CDN script, external stylesheet, or external asset is used.
+- ZIP archive inspection is performed in the browser through the committed local text JavaScript file `vendor/jszip.min.js`.
 
-- Open `index.html` directly in a browser.
-- Or enable GitHub Pages from the `main` branch root and browse to the generated Pages URL.
+## Current focus
 
-No server is required for the current baseline.
+The current version reads uploaded machine logs and generates useful preliminary analysis from the actual log data it can parse. It does **not** validate against configured parameter thresholds yet.
 
-## Static-only constraints
+Current analysis is based on:
 
-This version does **not** use:
+- uploaded file and folder discovery;
+- root and nested ZIP inspection, limited to a safe browser depth;
+- OPC/archive candidate discovery;
+- log candidate detection;
+- StateMachine timeline extraction;
+- numeric signal discovery and signal profiling;
+- preliminary anomaly heuristics such as spike candidates, flatline candidates, missing state context, and repeated warning/error text.
 
-- npm
-- Vite
-- React
-- a build step
-- external scripts
-- external CSS
-- external assets or images
+## Rules and parameter limits
 
-The application logic, styling, and markup are contained in `index.html` with inline `<style>` and inline `<script>` blocks.
+Rules file pending.
 
-## What is included
+No rules file is loaded yet. Upload the approved PANDA parameter template when ready. Parameter limits are not loaded yet, so the app does not claim rules-based threshold validation, configured severity, or production alert certainty.
 
-- Dark industrial enterprise SaaS-style Service Radar screen.
-- Header for **Landa PANDA Tool** with the subtitle **Proactive Analyzer Notification DA**.
-- KPI cards for machines, OPC archives, log candidates, detected systems, and loaded rules.
-- Professional service topology map using CSS-only press silhouettes, system cards, and connector lines.
-- Active Issue panel for BSS Blanket System pressure deviation.
-- Upload Logs screen with two browser File API upload controls:
-  - Upload ZIP / files (`<input type="file" multiple>`)
-  - Upload folder (`<input type="file" webkitdirectory multiple>`)
-- Rules Catalog screen with initial sample rules from the converted parameter document.
-- BSS Drill-down screen with machine context, component navigation, evidence, key signal chart, recommended actions, and related rules.
+## How to use
 
-## Supported upload structure
+1. Open `index.html` directly, or publish the repository with GitHub Pages.
+2. Go to **Upload Logs**.
+3. Use **Upload ZIP / files** for individual logs and archive files.
+4. Use **Upload folder** for a machine root folder or a folder containing multiple machines.
+5. Review scan progress, machine inventory, warnings, parsed log samples, and preliminary findings.
+6. Select a machine row to update the Service Radar, Analysis screen, evidence panels, signal discovery, and BSS placeholder panel.
+
+Supported folder patterns include machine folders such as:
 
 ```text
-Root folder:
-  S100100025/
-    autocollect.zip
-    opc.zip
-    logs/
-  D110100023/
-    autocollect.zip
-    opc.zip
-    logs/
+S100100025/
+D110100023/
+S100100026/
 ```
 
-## Current scanner behavior
+Each machine folder may include autocollect ZIPs, nested ZIPs, `opc.zip`, `opc/`, `logs/`, `dpc2`, `dpc4`, `dpc6`, `dpc8`, `pcc1`, `pcc2`, and similar log-bearing structures.
 
-The upload scanner is static and browser-only. It uses the File API and inspects file metadata only:
+Machine IDs are detected with this pattern:
 
-- `file.name`
-- `file.webkitRelativePath`
-- `file.size`
-- `file.type`
+```text
+/[SD]\d{8,}/
+```
 
-The scanner detects:
+If no machine ID is found, data is grouped under **Unknown machine** and still processed.
 
-- Machine IDs matching `\b[SD]\d{8,}\b`, such as `S100100025`, `S100100026`, `D100100004`, and `D110100023`.
-- ZIP archive candidates when a path ends with `.zip`.
-- Possible OPC archives when a path includes `opc`.
-- Possible logs when a path includes `logs`.
-- Autocollect sources when a path includes `autocollect`.
-- System tokens in paths or names: BSS, IRD, IPS, FEC, ECC, LLCI, DPS, QCS, PSS, BCU, and NPD.
+## What the UI includes
 
-After selecting files or a folder, the app immediately updates scan KPIs, machine inventory tables, warnings, detected system badges, and the service topology highlights.
+- **Service Radar** with dark industrial SaaS styling, KPI cards, a CSS-only machine service topology, analysis status, timeline, evidence, signal discovery, and next-step guidance.
+- **Upload Logs** with file/folder inputs, visible progress, scan summary cards, machine inventory, warnings/errors, and parsed samples.
+- **Machines** inventory with source, archive, OPC, log, parsed-log, system, and signal profile counts.
+- **Analysis** with selected machine summary, StateMachine timeline, signal discovery table, preliminary findings, evidence log, and raw log samples.
+- **Alerts** placeholder that clearly states there is no rules-based alert yet.
+- **Rules Catalog** placeholder that states no rules file is loaded yet.
+- **Settings / BSS Drilldown** placeholder with the message “Subsystem visual map pending reference image” plus real detected BSS logs/signals when uploaded.
 
-## Current limitations
+## Limitations
 
-- ZIP files are **not** deeply inspected yet.
-- The scanner does not parse real OPC payloads yet.
-- StateMachine and signal mapping are represented as UI-ready placeholders.
-- Rule evaluation is not connected to real signals yet.
-- The BSS subsystem visual intentionally shows a professional placeholder until an approved reference image is supplied.
-
-Deep ZIP inspection will require a future parser or a static JSZip integration. The next phase will connect Excel-derived rules, real OPC logs, StateMachine data, and signal mapping.
+- Very large ZIP files may be slow because inspection happens in browser memory.
+- Deep nested archives are limited to a safe depth to protect the browser.
+- Some binary or proprietary logs cannot be parsed as text.
+- Very large text logs are sampled from the beginning of the file.
+- Threshold validation is pending the approved rules/parameters file.
+- Preliminary anomalies are heuristics only and should not be treated as configured P1/P2 rules-based alerts.
