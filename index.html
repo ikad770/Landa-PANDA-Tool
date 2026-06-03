@@ -4,476 +4,92 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Landa PANDA Tool</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #04070b;
-      --panel: #0a1018;
-      --panel-2: #101924;
-      --panel-3: #172231;
-      --line: rgba(161, 178, 201, .17);
-      --line-hot: rgba(50, 205, 247, .48);
-      --text: #f7fbff;
-      --muted: #9ca9ba;
-      --dim: #6f7d8e;
-      --cyan: #32cdf7;
-      --cyan-2: #75e9ff;
-      --red: #ff514f;
-      --amber: #f5ba3d;
-      --green: #69dc78;
-      --shadow: 0 26px 80px rgba(0,0,0,.42);
-      --radius: 8px;
-      font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      background: #05080c;
+      color: #f7fbff;
     }
 
     * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
-    body { overflow-x: hidden; }
-    button, input { font: inherit; }
-    button { cursor: pointer; }
 
-    .app {
+    body {
       min-height: 100vh;
-      padding: 14px 18px 12px;
-      background:
-        radial-gradient(circle at 50% -4%, rgba(98, 126, 151, .28), transparent 520px),
-        radial-gradient(circle at 82% 26%, rgba(31, 196, 239, .08), transparent 390px),
-        linear-gradient(180deg, #080c12 0%, #04070b 72%);
-    }
-
-    .topbar {
-      min-height: 64px;
+      margin: 0;
       display: grid;
-      grid-template-columns: 430px minmax(450px, 1fr) auto;
-      gap: 18px;
-      align-items: center;
-      padding: 0 4px 12px;
-      border-bottom: 1px solid var(--line);
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 0%, rgba(49, 201, 244, 0.12), transparent 420px),
+        linear-gradient(180deg, #080d13, #030609);
     }
 
-    .brand { display: flex; align-items: center; gap: 16px; min-width: 0; }
-    .launcher { width: 28px; height: 32px; display: grid; grid-template-columns: repeat(3, 5px); gap: 5px; opacity: .58; }
-    .launcher i { width: 5px; height: 5px; border-radius: 50%; background: #aeb8c6; }
-    .landa-logo { width: 152px; height: 48px; flex: 0 0 auto; }
-    .product { border-left: 1px solid var(--line); padding-left: 14px; }
-    .product h1 { margin: 0; font-size: 22px; line-height: 1; font-weight: 850; }
-    .product p { margin: 6px 0 0; font-size: 11px; color: #bdc7d4; }
-
-    .nav { justify-self: center; display: flex; gap: 10px; align-items: center; overflow: auto; max-width: 100%; }
-    .nav button {
-      position: relative;
-      height: 44px;
-      border: 0;
-      border-radius: var(--radius);
-      padding: 0 16px;
-      background: transparent;
-      color: #d9e2ec;
-      white-space: nowrap;
+    main {
+      width: min(760px, calc(100vw - 32px));
+      border: 1px solid rgba(160, 178, 201, 0.18);
+      border-radius: 8px;
+      background: rgba(10, 16, 24, 0.86);
+      padding: 32px;
+      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
     }
-    .nav button.active { color: #fff; font-weight: 800; background: linear-gradient(#1d2937, #0c131d); box-shadow: inset 0 0 0 1px var(--line); }
-    .nav button.active:after { content: ""; position: absolute; left: 16px; right: 16px; bottom: 7px; height: 2px; background: var(--cyan); box-shadow: 0 0 14px var(--cyan); }
 
-    .toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 9px; flex-wrap: wrap; }
-    .button, .file-button, .primary-button, .icon-button {
-      height: 40px;
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .logo {
+      font-size: 28px;
+      font-weight: 300;
+      letter-spacing: 0;
+    }
+
+    .dot { color: #31c9f4; }
+
+    h1 {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.2;
+    }
+
+    p {
+      margin: 12px 0 0;
+      color: #a9b6c7;
+      line-height: 1.55;
+    }
+
+    .status {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: #0c131d;
-      color: #eff6ff;
-      white-space: nowrap;
+      gap: 8px;
+      margin-top: 22px;
+      padding: 8px 12px;
+      border: 1px solid rgba(49, 201, 244, 0.38);
+      border-radius: 999px;
+      background: rgba(49, 201, 244, 0.1);
+      color: #dff8ff;
+      font-size: 13px;
+      font-weight: 700;
     }
-    .button { padding: 0 13px; color: #dce6f2; }
-    .file-button { padding: 0 13px; }
-    .primary-button { padding: 0 18px; border-color: rgba(50,205,247,.56); background: linear-gradient(180deg, #2cc8f2, #178fbd); font-weight: 850; }
-    .icon-button { width: 40px; color: #6be4ff; }
-    .avatar { width: 40px; padding: 0; }
-    .file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
-    .statusbar {
-      min-height: 58px;
-      margin: 12px 0 14px;
-      display: grid;
-      grid-template-columns: auto minmax(250px, 1fr) auto;
-      gap: 14px;
-      align-items: center;
-      padding: 0 14px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: linear-gradient(90deg, rgba(13,20,29,.94), rgba(6,10,15,.94));
+    .status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #31c9f4;
+      box-shadow: 0 0 16px #31c9f4;
     }
-    .mode-pill { height: 38px; display: inline-flex; align-items: center; gap: 9px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line-hot); background: rgba(50,205,247,.12); font-weight: 850; }
-    .mode-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 18px var(--cyan); }
-    .stage { min-width: 0; display: flex; align-items: center; gap: 12px; }
-    .stage b { font-size: 13px; white-space: nowrap; }
-    .stage span, .counts { color: #b4bfcd; font-size: 12px; }
-    .counts { display: flex; gap: 14px; }
-    .counts b { color: #fff; }
-    .progress { height: 8px; flex: 1; background: rgba(143,157,176,.14); border-radius: 99px; overflow: hidden; }
-    .progress i { display: block; width: 0; height: 100%; background: linear-gradient(90deg, #0ba4d2, #6be9ff); transition: width 160ms linear; }
-
-    .kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
-    .kpi-card {
-      min-height: 112px;
-      display: grid;
-      grid-template-columns: 58px 1fr;
-      gap: 15px;
-      align-items: center;
-      padding: 16px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: radial-gradient(circle at 100% 0, rgba(92,115,138,.18), transparent 180px), linear-gradient(145deg, #111a25, #070b11);
-      box-shadow: 0 20px 54px rgba(0,0,0,.34);
-    }
-    .kpi-icon { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 50%; border: 1px solid rgba(50,205,247,.6); background: rgba(50,205,247,.12); box-shadow: 0 0 0 7px rgba(50,205,247,.035); color: var(--cyan); font-weight: 900; }
-    .kpi-card[data-tone="critical"] .kpi-icon { color: var(--red); border-color: rgba(255,81,79,.58); background: rgba(255,81,79,.14); }
-    .kpi-card[data-tone="ok"] .kpi-icon { color: var(--green); border-color: rgba(105,220,120,.55); background: rgba(105,220,120,.12); }
-    .kpi-card small { display: block; color: #a9b6c7; font-size: 12px; text-transform: uppercase; font-weight: 850; }
-    .kpi-card strong { display: block; margin: 8px 0 5px; font-size: 32px; line-height: 1; }
-    .kpi-card p { margin: 0; color: #a6b0bf; font-size: 13px; }
-
-    .panel { border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(145deg, rgba(16,24,34,.96), rgba(6,10,15,.96)); box-shadow: var(--shadow); }
-    .main-grid { display: grid; grid-template-columns: minmax(900px, 1fr) 392px; gap: 14px; }
-
-    .machine-stage {
-      position: relative;
-      height: 540px;
-      overflow: hidden;
-      background:
-        radial-gradient(ellipse at 48% 18%, rgba(153,178,201,.26), transparent 45%),
-        radial-gradient(ellipse at 55% 62%, rgba(50,205,247,.13), transparent 40%),
-        linear-gradient(180deg, #151f2b 0%, #070b11 76%);
-      isolation: isolate;
-    }
-    .machine-stage:before, .cutaway:before { content: ""; position: absolute; left: -4%; right: -4%; bottom: -42px; height: 260px; background-image: linear-gradient(rgba(50,205,247,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(50,205,247,.12) 1px, transparent 1px); background-size: 52px 52px; transform: perspective(720px) rotateX(62deg); transform-origin: bottom; opacity: .58; }
-    .machine-stage:after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; background: linear-gradient(90deg, rgba(2,5,8,.54), transparent 22%, transparent 76%, rgba(2,5,8,.6)), linear-gradient(180deg, transparent 55%, rgba(2,5,8,.36)); }
-
-    .stage-copy { position: relative; z-index: 9; padding: 18px 20px; }
-    .stage-copy h2 { margin: 0 0 9px; font-size: 18px; }
-    .machine-name { display: flex; align-items: center; gap: 10px; font-size: 26px; font-weight: 850; }
-    .badge { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px; background: rgba(255,255,255,.035); color: #abb7c6; font-size: 11px; }
-    .badge[data-tone="ok"] { color: var(--green); border-color: rgba(105,220,120,.38); background: rgba(105,220,120,.1); }
-    .badge[data-tone="critical"] { color: var(--red); border-color: rgba(255,81,79,.38); background: rgba(255,81,79,.13); }
-    .badge[data-tone="warning"] { color: var(--amber); border-color: rgba(246,186,66,.42); background: rgba(246,186,66,.13); }
-    .view-toggle { margin-top: 15px; display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: rgba(3,6,10,.5); }
-    .view-toggle button { height: 34px; min-width: 42px; border: 0; border-right: 1px solid var(--line); background: transparent; color: #aeb8c7; }
-    .view-toggle button.active { background: rgba(50,205,247,.16); color: #5cdbff; }
-
-    .press-shell {
-      position: absolute;
-      z-index: 3;
-      left: 5.2%;
-      right: 5.2%;
-      bottom: 55px;
-      height: 338px;
-      border-radius: 4px;
-      background-color: #131b23;
-      background-image: linear-gradient(180deg, rgba(255,255,255,.08), rgba(0,0,0,.34)), var(--press-image);
-      background-repeat: no-repeat;
-      background-position: center bottom;
-      background-size: contain;
-      background-blend-mode: multiply, normal;
-      filter: brightness(1.38) contrast(1.18) saturate(.95) drop-shadow(0 36px 34px rgba(0,0,0,.68));
-      transform-origin: center 70%;
-    }
-    .press-shell:before { content: ""; position: absolute; inset: -28px -40px -24px; background: radial-gradient(ellipse at 50% 82%, rgba(50,205,247,.16), transparent 58%); pointer-events: none; }
-    .press-shell:after { content: ""; position: absolute; left: 24%; right: 12%; bottom: 35%; height: 5px; border-radius: 999px; background: linear-gradient(90deg, transparent, #20b8e7, #8befff, #20b8e7, transparent); box-shadow: 0 0 22px #32cdf7; opacity: .92; }
-
-    .hotspot { position: absolute; z-index: 10; transform: translate(-50%, -50%); border: 0; background: transparent; color: #fff; text-align: left; }
-    .hotspot .orb { width: 38px; height: 38px; margin: 0 auto; border-radius: 50%; border: 1px solid rgba(111,232,255,.7); background: radial-gradient(circle, #7ef0ff 0 25%, #1bb4de 30% 54%, rgba(50,205,247,.18) 58%); box-shadow: 0 0 0 6px rgba(50,205,247,.1), 0 0 24px rgba(50,205,247,.82); }
-    .hotspot.issue .orb { border-color: rgba(255,114,109,.75); background: radial-gradient(circle, #ffb0a7 0 24%, #f03d39 31% 55%, rgba(255,81,79,.18) 58%); box-shadow: 0 0 0 8px rgba(255,81,79,.12), 0 0 34px rgba(255,81,79,.88); }
-    .hotspot .line { width: 1px; height: 42px; margin: 0 auto; background: rgba(226,238,247,.58); }
-    .hotspot .tag { min-width: 82px; margin-top: 7px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: rgba(4,7,11,.86); box-shadow: 0 12px 28px rgba(0,0,0,.44); font-size: 13px; font-weight: 850; }
-    .hotspot .tag span { display: block; margin-top: 2px; color: #a7b3c2; font-size: 11px; font-weight: 500; }
-    .hotspot.down { display: flex; flex-direction: column-reverse; }
-    .hotspot.down .tag { margin: 0 0 7px; }
-    .hotspot.down .line { order: 2; }
-
-    .stage-actions { position: absolute; z-index: 11; left: 20px; bottom: 18px; display: flex; gap: 7px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(3,6,10,.78); padding: 8px; }
-    .stage-actions button { height: 34px; border: 0; background: transparent; color: #edf6ff; padding: 0 12px; }
-
-    .issue-panel { min-height: 540px; overflow: hidden; }
-    .issue-header { padding: 17px 17px 15px; border-bottom: 1px solid var(--line); }
-    .issue-state { display: flex; justify-content: space-between; align-items: center; color: var(--red); font-weight: 850; font-size: 13px; margin-bottom: 19px; }
-    .issue-header h2 { margin: 0 0 8px; font-size: 25px; }
-    .issue-header h2 span { font-weight: 400; color: #d8e0ea; }
-    .issue-header p { margin: 0; color: #dce5ee; }
-    .issue-body { padding: 15px; display: grid; gap: 14px; }
-    .label { margin-bottom: 7px; color: #8d99a8; font-size: 11px; text-transform: uppercase; font-weight: 850; }
-    .note { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; background: rgba(2,5,8,.27); color: #dbe5ee; line-height: 1.5; font-size: 13px; }
-    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line); }
-    .metric { min-height: 70px; padding: 12px; background: #081018; }
-    .metric small { display: block; margin-bottom: 7px; color: #8f9aa9; text-transform: uppercase; font-size: 11px; }
-    .metric b { font-size: 17px; }
-    .blue-button { width: 100%; height: 42px; border: 0; border-radius: var(--radius); background: linear-gradient(180deg, #51d5fb, #1ea6d4); color: #fff; font-weight: 850; }
-
-    .bottom-grid { display: grid; grid-template-columns: 1.08fr .86fr .9fr; gap: 14px; margin-top: 14px; }
-    .panel-header { padding: 13px 14px; border-bottom: 1px solid var(--line); }
-    .panel-header h3 { margin: 0; font-size: 14px; }
-    .panel-header p { margin: 4px 0 0; color: #a3afbf; font-size: 12px; }
-    .panel-body { padding: 12px; }
-    .empty { border: 1px dashed rgba(145,161,181,.32); border-radius: var(--radius); background: rgba(255,255,255,.025); padding: 16px; color: #aeb9c7; line-height: 1.55; }
-    .timeline { display: flex; gap: 2px; overflow: auto; padding: 8px; }
-    .segment { min-width: 90px; height: 50px; display: flex; flex-direction: column; justify-content: space-between; border-radius: 4px; padding: 7px; color: #fff; font-size: 12px; }
-    .state-Standby { background: #394553; } .state-Ready { background: #477f51; } .state-Prepare2Print { background: #d0ab2c; color: #101010; } .state-Printing { background: #c4413c; } .state-PrintEnd { background: #624486; } .state-Recovery { background: #375c81; } .state-Error { background: #923232; } .state-Unknown { background: #374150; }
-    .table-wrap { max-height: 252px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
-    table { width: 100%; min-width: 720px; border-collapse: collapse; }
-    th, td { padding: 8px 10px; border-bottom: 1px solid rgba(145,161,181,.1); text-align: left; vertical-align: top; font-size: 12px; }
-    th { position: sticky; top: 0; background: #111923; color: #9aa7b6; text-transform: uppercase; }
-    td { color: #dae4ee; }
-    .action-list { display: grid; gap: 8px; }
-    .action-row { display: grid; grid-template-columns: 25px 1fr auto; gap: 9px; align-items: center; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: rgba(255,255,255,.025); font-size: 13px; }
-    .action-row span:first-child { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 5px; color: #73e5ff; }
-    .impact { color: var(--amber); font-size: 11px; font-style: normal; }
-
-    .drill-layout { display: grid; grid-template-columns: 280px minmax(720px,1fr) 390px; gap: 14px; }
-    .side-panel { min-height: 720px; }
-    .side-section { padding: 14px; border-bottom: 1px solid var(--line); }
-    .side-section h2 { margin: 6px 0; font-size: 20px; }
-    .machine-thumb { height: 100px; margin: 12px 0; border-radius: 7px; background: #111a23 center / contain no-repeat; background-blend-mode: multiply; filter: brightness(1.35) contrast(1.1); }
-    .tree { margin-top: 11px; display: grid; gap: 7px; color: #aab6c5; font-size: 12px; }
-    .tree b { color: #fff; }
-    .tabs { height: 45px; display: flex; border: 1px solid var(--line); border-radius: var(--radius); background: #0a1119; overflow: hidden; }
-    .tabs button { height: 45px; border: 0; border-right: 1px solid var(--line); padding: 0 17px; background: transparent; color: #adb7c4; }
-    .tabs button.active { background: rgba(50,205,247,.12); box-shadow: inset 0 -2px 0 var(--cyan); color: #fff; }
-    .drill-main { display: grid; gap: 14px; }
-    .cutaway { position: relative; height: 440px; overflow: hidden; background: radial-gradient(circle at 50% 24%, rgba(83,117,144,.22), transparent 40%), linear-gradient(180deg, #121c26, #060a0f); }
-    .cut-title { position: absolute; z-index: 4; left: 18px; top: 16px; }
-    .cut-title h3 { margin: 0; font-size: 17px; }
-    .cut-title p { margin: 5px 0 0; color: #9eabba; font-size: 12px; }
-    .cut-machine { position: absolute; left: 7%; right: 6%; bottom: 72px; height: 260px; background-color: #111a23; background-image: linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.32)), var(--press-long); background-position: center bottom; background-size: contain; background-repeat: no-repeat; background-blend-mode: multiply, normal; filter: brightness(1.28) contrast(1.14) drop-shadow(0 30px 34px rgba(0,0,0,.58)); opacity: .95; }
-    .process-rail { position: absolute; z-index: 3; left: 22%; right: 12%; bottom: 188px; height: 58px; border-top: 2px solid rgba(50,205,247,.38); border-bottom: 2px solid rgba(50,205,247,.2); background: linear-gradient(90deg, transparent, rgba(50,205,247,.12), transparent); }
-    .component { position: absolute; z-index: 6; transform: translate(-50%, -50%); min-width: 104px; border: 1px solid var(--line-hot); border-radius: 7px; background: rgba(5,9,14,.88); padding: 8px 10px; text-align: left; color: #fff; box-shadow: 0 12px 28px rgba(0,0,0,.38); }
-    .component:after { content: ""; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 18px var(--cyan); border: 2px solid #142b36; }
-    .component b { display: block; font-size: 12px; } .component span { display: block; margin-top: 3px; color: #9faab8; font-size: 11px; } .component small { display: block; margin-top: 5px; color: var(--cyan); }
-    .component.critical { border-color: rgba(255,81,79,.74); } .component.critical:after { background: var(--red); box-shadow: 0 0 20px var(--red); } .component.critical small { color: var(--red); }
-    .component.warning { border-color: rgba(246,186,66,.72); } .component.warning:after { background: var(--amber); box-shadow: 0 0 20px var(--amber); } .component.warning small { color: var(--amber); }
-    .component.left:after { right: -33px; top: 50%; transform: translateY(-50%); } .component.right:after { left: -33px; top: 50%; transform: translateY(-50%); } .component.top:after { left: 50%; bottom: -31px; transform: translateX(-50%); } .component.bottom:after { left: 50%; top: -31px; transform: translateX(-50%); }
-    .legend { position: absolute; right: 18px; top: 18px; display: flex; gap: 14px; color: #aeb7c5; font-size: 12px; }
-    .health-row { display: grid; grid-template-columns: 25px 1fr 70px 120px; gap: 8px; align-items: center; border-bottom: 1px solid rgba(145,161,181,.1); padding: 6px; font-size: 12px; }
-    .meter { height: 8px; border-radius: 999px; background: #263241; overflow: hidden; } .meter i { display: block; height: 100%; background: linear-gradient(90deg, #ff514f, #f6ba42, #69dc78); }
-    .reason-list { display: grid; gap: 9px; } .reason-list div { border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.025); padding: 10px; font-size: 13px; line-height: 1.35; }
-    .right-column { display: grid; gap: 14px; } .chart { height: 254px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: linear-gradient(180deg, rgba(50,205,247,.08), transparent); } .chart svg { width: 100%; height: 100%; }
-    .footer { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 16px; margin-top: 14px; padding: 12px 10px 0; border-top: 1px solid var(--line); color: #aab5c2; font-size: 12px; }
-    .footer div { display: flex; gap: 18px; flex-wrap: wrap; } .ok-text { color: var(--green); }
-
-    @media (max-width: 1420px) { .topbar { grid-template-columns: 1fr; } .nav { justify-self: start; } .kpi-grid { grid-template-columns: repeat(3, 1fr); } .main-grid, .drill-layout { grid-template-columns: 1fr; } .bottom-grid { grid-template-columns: 1fr; } .side-panel { min-height: auto; } }
-    @media (max-width: 840px) { .app { padding: 10px; } .statusbar, .kpi-grid { grid-template-columns: 1fr; } .press-shell { left: 0; right: 0; transform: scale(.86); transform-origin: bottom center; } .hotspot { transform: translate(-50%, -50%) scale(.82); } }
   </style>
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand">
-        <div class="launcher" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <svg class="landa-logo" viewBox="0 0 250 76" role="img" aria-label="Landa logo">
-          <path d="M19 13v38c0 10 7 16 18 16h20" fill="none" stroke="#fff" stroke-width="5.2" stroke-linecap="round"/>
-          <path d="M81 67c-15 0-25-11-25-26S66 15 81 15s25 11 25 26v26" fill="none" stroke="#fff" stroke-width="5.2" stroke-linecap="round"/>
-          <path d="M118 67V36c0-12 9-21 21-21s21 9 21 21v31" fill="none" stroke="#fff" stroke-width="5.2" stroke-linecap="round"/>
-          <path d="M211 13v29c0 15-11 26-26 26s-26-11-26-26 11-26 26-26c8 0 15 3 19 8" fill="none" stroke="#fff" stroke-width="5.2" stroke-linecap="round"/>
-          <circle cx="185" cy="42" r="20" fill="#19aee6" stroke="#fff" stroke-width="4.2"/>
-          <path d="M217 67c-14 0-24-10-24-24s10-24 24-24 24 10 24 24v24" fill="none" stroke="#fff" stroke-width="5.2" stroke-linecap="round"/>
-        </svg>
-        <div class="product"><h1>PANDA Tool</h1><p>Proactive Analyzer Notification DA</p></div>
-      </div>
-      <nav class="nav" aria-label="Primary navigation">
-        <button class="active" data-view="radar">Service Radar</button>
-        <button data-view="alerts">Alerts</button>
-        <button data-view="analysis">Analysis</button>
-        <button data-view="machines">Machines</button>
-        <button data-view="reports">Reports</button>
-        <button data-view="knowledge">Knowledge</button>
-      </nav>
-      <div class="toolbar">
-        <div class="button" id="dataRange">No data range</div>
-        <label class="file-button">Upload Logs<input id="logsInput" type="file" multiple></label>
-        <label class="file-button">Upload Folder<input id="folderInput" type="file" multiple webkitdirectory></label>
-        <label class="file-button">Upload Rules<input id="rulesInput" type="file" accept=".xlsx,.xls,.csv"></label>
-        <button class="primary-button" id="analyzeButton">Analyze</button>
-        <button class="icon-button" type="button" title="Notifications">!</button>
-        <div class="button avatar">JD</div>
-      </div>
-    </header>
-
-    <section class="statusbar" aria-live="polite">
-      <div class="mode-pill"><span class="mode-dot"></span><span id="modeLabel">Idle</span></div>
-      <div class="stage"><b id="stageLabel">Idle / waiting for files</b><div class="progress"><i id="progressFill"></i></div><span id="progressLabel">0%</span></div>
-      <div class="counts"><span>Focused files <b id="focusedFilesCount">0</b></span><span>Rules <b id="rulesCount">0</b></span><span>Machines <b id="machinesCount">0</b></span></div>
-    </section>
-
-    <main id="root"></main>
-
-    <footer class="footer">
-      <div><span class="ok-text">Data Connection</span><span class="ok-text">PANDA Engine</span><span id="lastDataLabel">Last Data: No data</span></div>
-      <div><span id="machineFooter">Machine: None selected</span><span>Site: Pending</span><span>Service User: Local Browser</span></div>
-    </footer>
-  </div>
-
-  <script>
-    (() => {
-      'use strict';
-
-      const CONFIG = Object.freeze({
-        focusedLogNames: ['FECNotification', 'LLCINotification', 'MachineStates', 'AlertsMonitoring', 'AletrsMonitoring'],
-        stages: Object.freeze({ idle: 'Idle / waiting for files', opening: 'Opening archive', finding: 'Finding focused logs', states: 'Parsing MachineStates', notifications: 'Parsing Notifications', rules: 'Loading Rules', evaluating: 'Evaluating Rules', complete: 'Complete' }),
-        assets: Object.freeze({
-          pressHero: 'https://static.wixstatic.com/media/716322_2ea4b3f8057441dea31d9c828028b1c0~mv2.png',
-          pressLong: 'https://static.wixstatic.com/media/716322_89763cebc4464cb8a62936dca2d990c1~mv2.png'
-        }),
-        systems: Object.freeze([
-          { id: 'IRD', label: 'Inspection', x: 19, y: 31 },
-          { id: 'FEC', label: 'Feeder', x: 38, y: 30 },
-          { id: 'IPS', label: 'Ink Process', x: 49, y: 30 },
-          { id: 'ECC', label: 'Engine Control', x: 62, y: 26 },
-          { id: 'LLCI', label: 'Laydown', x: 75, y: 31 },
-          { id: 'BSS', label: 'Blanket System', x: 50, y: 76, down: true }
-        ]),
-        bssComponents: Object.freeze([
-          { id: 'B-CYL-01', name: 'Blanket Cylinder', x: 25, y: 54, anchor: 'left', keywords: ['blanket', 'cylinder'] },
-          { id: 'B-PS-01', name: 'Pressure Sensor', x: 53, y: 30, anchor: 'top', keywords: ['pressure', 'sensor'] },
-          { id: 'B-CL-01', name: 'Cooling Loop', x: 38, y: 28, anchor: 'top', keywords: ['cooling'] },
-          { id: 'B-REG-01', name: 'Regulator', x: 77, y: 36, anchor: 'right', keywords: ['regulator'] },
-          { id: 'B-VB-01', name: 'Valve Block', x: 82, y: 56, anchor: 'right', keywords: ['valve'] },
-          { id: 'B-AIR', name: 'Air Supply', x: 78, y: 77, anchor: 'bottom', keywords: ['air'] },
-          { id: 'B-FB-01', name: 'Feedback Sensor', x: 58, y: 77, anchor: 'bottom', keywords: ['feedback'] },
-          { id: 'B-MTR-01', name: 'Drive Motor', x: 36, y: 77, anchor: 'bottom', keywords: ['drive', 'motor'] }
-        ])
-      });
-
-      const dom = {
-        root: document.getElementById('root'), dataRange: document.getElementById('dataRange'), logsInput: document.getElementById('logsInput'), folderInput: document.getElementById('folderInput'), rulesInput: document.getElementById('rulesInput'), analyzeButton: document.getElementById('analyzeButton'), modeLabel: document.getElementById('modeLabel'), stageLabel: document.getElementById('stageLabel'), progressFill: document.getElementById('progressFill'), progressLabel: document.getElementById('progressLabel'), focusedFilesCount: document.getElementById('focusedFilesCount'), rulesCount: document.getElementById('rulesCount'), machinesCount: document.getElementById('machinesCount'), lastDataLabel: document.getElementById('lastDataLabel'), machineFooter: document.getElementById('machineFooter')
-      };
-
-      const state = createInitialState();
-
-      function createInitialState() {
-        return { mode: 'Idle', view: 'radar', scanStage: CONFIG.stages.idle, progress: 0, focusedFiles: [], machines: new Map(), machineStates: [], evidence: [], signalProfiles: [], rules: [], ruleMatches: [], alerts: [], needsValidation: [], selectedMachineId: null, selectedIssueId: null, selectedSystem: 'BSS', openedZipPaths: new Set(), focusedFilePaths: new Set(), pressAngle: 0, errors: [] };
-      }
-
-      function initApp() {
-        document.documentElement.style.setProperty('--press-image', `url('${CONFIG.assets.pressHero}')`);
-        document.documentElement.style.setProperty('--press-long', `url('${CONFIG.assets.pressLong}')`);
-        dom.logsInput.addEventListener('change', handleLogUpload);
-        dom.folderInput.addEventListener('change', handleLogUpload);
-        dom.rulesInput.addEventListener('change', handleRulesUpload);
-        dom.analyzeButton.addEventListener('click', analyze);
-        document.querySelectorAll('.nav button').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
-        renderDashboard();
-      }
-
-      function resetLogState() { Object.assign(state, { focusedFiles: [], machines: new Map(), machineStates: [], evidence: [], signalProfiles: [], ruleMatches: [], alerts: [], needsValidation: [], selectedMachineId: null, selectedIssueId: null, openedZipPaths: new Set(), focusedFilePaths: new Set(), progress: 0 }); }
-
-      async function handleLogUpload(event) {
-        const files = Array.from(event.target.files || []); if (!files.length) return;
-        resetLogState(); state.mode = 'Discovery Mode'; updateProgress(5, CONFIG.stages.opening);
-        try { await scanFiles(files); updateProgress(100, CONFIG.stages.complete); } catch (error) { state.errors.push(error.message || String(error)); state.scanStage = 'Scan failed'; }
-        renderDashboard();
-      }
-
-      async function handleRulesUpload(event) {
-        const file = event.target.files && event.target.files[0]; if (!file) return;
-        state.mode = state.evidence.length ? 'Evaluating' : 'Rules Loaded'; updateProgress(20, CONFIG.stages.rules);
-        try { state.rules = parseRulesWorkbook(await file.arrayBuffer()); if (state.evidence.length) evaluateRules(); updateProgress(100, CONFIG.stages.complete); } catch (error) { state.errors.push(error.message || String(error)); state.scanStage = 'Rules load failed'; }
-        renderDashboard();
-      }
-
-      async function analyze() {
-        if (state.evidence.length && state.rules.length) { state.mode = 'Evaluating'; updateProgress(72, CONFIG.stages.evaluating); evaluateRules(); state.mode = 'Alert Mode'; }
-        else if (state.evidence.length) state.mode = 'Discovery Mode'; else if (state.rules.length) state.mode = 'Rules Loaded'; else state.mode = 'Idle';
-        updateProgress(100, CONFIG.stages.complete); renderDashboard();
-      }
-
-      async function scanFiles(files) {
-        updateProgress(16, CONFIG.stages.finding);
-        for (const file of files) { const path = normalizePath(file.webkitRelativePath || file.name); if (isZip(path)) await scanZip(await file.arrayBuffer(), path); else if (isFocusedPath(path)) addFocusedFile({ path, text: await file.text(), bytes: file.size }); }
-        updateProgress(46, CONFIG.stages.states); state.focusedFiles.filter(file => file.sourceType === 'MachineStates').forEach(parseFocusedLog);
-        updateProgress(64, CONFIG.stages.notifications); state.focusedFiles.filter(file => file.sourceType !== 'MachineStates').forEach(parseFocusedLog);
-        attachMachineStateContext(); state.signalProfiles = buildSignalDiscovery(state.evidence, state.rules); buildMachineIndex(); if (state.rules.length) evaluateRules();
-      }
-
-      async function scanZip(buffer, basePath) {
-        const normalizedBase = normalizePath(basePath); if (state.openedZipPaths.has(normalizedBase)) return; state.openedZipPaths.add(normalizedBase);
-        const zip = await JSZip.loadAsync(buffer); const entries = Object.values(zip.files).filter(entry => !entry.dir && (isFocusedPath(entry.name) || isZip(entry.name)));
-        for (const entry of entries) { const path = normalizePath(`${normalizedBase}/${entry.name}`); if (isZip(entry.name)) await scanZip(await entry.async('arraybuffer'), path); else addFocusedFile({ path, text: await entry.async('string'), bytes: 0 }); }
-      }
-
-      function addFocusedFile(file) { if (state.focusedFilePaths.has(file.path)) return; const sourceType = detectSourceType(file.path); const machineId = detectMachineId(file.path) || 'UNKNOWN'; state.focusedFilePaths.add(file.path); state.focusedFiles.push({ ...file, sourceType, machineId }); ensureMachine(machineId).focusedFiles += 1; }
-      function parseFocusedLog(file) { if (file.sourceType === 'MachineStates') return parseMachineStates(file); splitLines(file.text).forEach((line, index) => { if (!line.trim()) return; const machineId = detectMachineId(line) || file.machineId || 'UNKNOWN'; state.evidence.push({ id: `EV-${state.evidence.length + 1}`, lineNumber: index + 1, timestamp: extractTimestamp(line), machineId, sourceFile: file.path, sourceType: file.sourceType, system: mapLogSourceToSystem(file.sourceType, line), subsystem: inferSubsystem(line), component: inferComponent(line), state: null, message: stripTimestamp(line), rawLine: line, numericValues: extractNumbers(line), possibleSignals: discoverSignals(line), severityHint: severityHint(line) }); }); }
-      function parseMachineStates(file) { const rows = splitLines(file.text).map((line, index) => ({ id: `ST-${state.machineStates.length + index + 1}`, timestamp: extractTimestamp(line), machineId: detectMachineId(line) || file.machineId || 'UNKNOWN', state: normalizeStateFromLine(line), sourceFile: file.path, rawLine: line })).filter(row => row.state).sort((a, b) => dateValue(a.timestamp) - dateValue(b.timestamp)); rows.forEach((row, index) => { const next = rows[index + 1]; state.machineStates.push({ ...row, startTime: row.timestamp, endTime: next ? next.timestamp : null, durationSec: next && row.timestamp ? (dateValue(next.timestamp) - dateValue(row.timestamp)) / 1000 : null }); }); }
-
-      function parseRulesWorkbook(buffer) {
-        const workbook = XLSX.read(buffer, { type: 'array' }); const sheetName = workbook.SheetNames.includes('PANDA Rules Template') ? 'PANDA Rules Template' : workbook.SheetNames[0]; const sheet = workbook.Sheets[sheetName]; if (!sheet) return [];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: '' }); const headerIndex = detectRulesHeader(rows); if (headerIndex < 0) throw new Error('Rules header not found.'); const headers = rows[headerIndex].map(headerKey); const rules = [];
-        for (let rowIndex = headerIndex + 1; rowIndex < rows.length; rowIndex += 1) { const row = rows[rowIndex]; if (!row || row.every(cell => String(cell || '').trim() === '')) break; const record = Object.fromEntries(headers.map((key, index) => [key, row[index]])); const get = name => String(record[headerKey(name)] ?? '').trim(); const system = get('System'); const component = get('Component'); const checkType = get('Check Type') || 'Range'; rules.push({ id: get('Rule ID') || `RULE-${rowIndex + 1}-${slug(system)}-${slug(component)}`, rowNumber: rowIndex + 1, system, subsystem: get('Subsystem'), component, parameterName: get('Parameter Name'), logSignalName: get('Log Signal Name'), logSource: get('Log Source'), valueMetric: get('Value Metric'), checkType, expectedByState: { ON: get('Expected ON'), Standby: get('Expected Standby'), Ready: get('Expected Ready'), Prepare2Print: get('Expected Prepare2Print'), Printing: get('Expected Printing'), PrintEnd: get('Expected PrintEnd'), Recovery: get('Expected Recovery'), Error: get('Expected Error') }, specTolerance: get('Spec Tolerance'), warningLow: toNumber(get('Warning Low')), warningHigh: toNumber(get('Warning High')), criticalLow: toNumber(get('Critical Low')), criticalHigh: toNumber(get('Critical High')), warningDurationSec: toNumber(get('Warning Duration Sec')), criticalDurationSec: toNumber(get('Critical Duration Sec')), transitionGraceSec: toNumber(get('Transition Grace Sec')), warningSeverity: get('Warning Severity'), criticalSeverity: get('Critical Severity'), warningAction: get('Warning Action'), criticalAction: get('Critical Action'), notes: get('Notes'), evaluatorSupported: ['range', 'above threshold', 'below threshold'].includes(checkType.toLowerCase()) }); }
-        return rules;
-      }
-
-      function detectRulesHeader(rows) { const required = ['system', 'subsystem', 'component', 'logsignalname', 'logsource']; return rows.findIndex(row => { const normalized = row.map(headerKey); return required.every(name => normalized.includes(name)); }); }
-      function evaluateRules() { state.ruleMatches = []; state.alerts = []; state.needsValidation = []; for (const evidence of state.evidence) for (const rule of state.rules) { if (!sourceCompatible(rule, evidence) || !signalMatches(rule.logSignalName, evidence.rawLine) || !evidence.numericValues.length) continue; const match = evaluateRuleMatch(rule, evidence); state.ruleMatches.push(match); if (match.result === 'Critical' || match.result === 'Warning') { if (match.durationStatus === 'Needs duration validation') state.needsValidation.push(match); else state.alerts.push(toAlert(match)); } } state.signalProfiles = buildSignalDiscovery(state.evidence, state.rules); buildMachineIndex(); }
-      function evaluateRuleMatch(rule, evidence) { const actualValue = evidence.numericValues[0].value; const currentState = evidence.state || 'Unknown'; const expectedValue = rule.expectedByState[currentState] || ''; const expectedRange = buildExpectedRange(rule, expectedValue); const durationRequirement = rule.criticalDurationSec || rule.warningDurationSec || null; const graceStatus = getGraceStatus(rule, evidence); let result = 'OK'; let message = 'Within available rule threshold.'; let durationStatus = 'Satisfied'; if (!rule.evaluatorSupported) { result = 'Not evaluable'; message = 'Rule type recognized; evaluator pending.'; } else if (!expectedRange) { result = 'Not evaluable'; message = 'Expected range or threshold could not be calculated.'; } else if (graceStatus === 'Ignored by transition grace') { result = 'OK'; message = 'Evidence is inside transition grace window.'; } else if (violates(rule, actualValue, expectedRange)) { result = violatesCritical(rule, actualValue) ? 'Critical' : 'Warning'; message = 'Confirmed rule violation from focused evidence.'; } if ((result === 'Critical' || result === 'Warning') && durationRequirement) { durationStatus = 'Needs duration validation'; message = 'Rule match requiring duration validation.'; } return { id: `RM-${state.ruleMatches.length + 1}`, ruleId: rule.id, ruleRow: rule.rowNumber, evidenceId: evidence.id, evidence, machineId: evidence.machineId, timestamp: evidence.timestamp, state: currentState, system: rule.system || evidence.system, subsystem: rule.subsystem || evidence.subsystem, component: rule.component || evidence.component, signal: rule.logSignalName, actualValue, expectedValue, expectedRange, result, severity: result, durationStatus, graceStatus, message, recommendedAction: actionFor(rule, result) }; }
-      function toAlert(match) { return { id: `AL-${state.alerts.length + 1}`, ruleMatchId: match.id, machineId: match.machineId, timestamp: match.timestamp, state: match.state, system: match.system, subsystem: match.subsystem, component: match.component, signal: match.signal, actualValue: match.actualValue, expectedRange: match.expectedRange, severity: match.result, duration: match.durationStatus, sourceFile: match.evidence.sourceFile, rawLine: match.evidence.rawLine, ruleId: match.ruleId, recommendedAction: match.recommendedAction, status: 'Confirmed Alert' }; }
-      function buildExpectedRange(rule, expectedValue) { const critical = { low: rule.criticalLow, high: rule.criticalHigh }; const warning = { low: rule.warningLow, high: rule.warningHigh }; if (critical.low !== null || critical.high !== null) return critical; if (warning.low !== null || warning.high !== null) return warning; const expected = toNumber(expectedValue); const tolerance = parseTolerance(rule.specTolerance, expected); return expected === null || tolerance === null ? null : { low: expected - tolerance, high: expected + tolerance }; }
-      function parseTolerance(raw, expected) { if (!raw) return null; const text = String(raw).replace('+-', '').replace('+/-', '').replace('±', '').trim(); const numeric = toNumber(text); if (numeric === null) return null; return text.includes('%') && expected !== null ? Math.abs(expected * numeric / 100) : Math.abs(numeric); }
-      function violates(rule, actualValue, range) { const type = rule.checkType.toLowerCase(); if (type === 'above threshold') return range.high !== null && actualValue > range.high; if (type === 'below threshold') return range.low !== null && actualValue < range.low; return (range.low !== null && actualValue < range.low) || (range.high !== null && actualValue > range.high); }
-      function violatesCritical(rule, actualValue) { return (rule.criticalLow !== null && actualValue < rule.criticalLow) || (rule.criticalHigh !== null && actualValue > rule.criticalHigh); }
-      function getGraceStatus(rule, evidence) { if (!rule.transitionGraceSec) return 'No grace rule'; const segment = state.machineStates.find(row => row.machineId === evidence.machineId && row.state === evidence.state && dateValue(row.startTime) <= dateValue(evidence.timestamp)); if (!segment || !segment.startTime || !evidence.timestamp) return 'Grace not provable'; const seconds = (dateValue(evidence.timestamp) - dateValue(segment.startTime)) / 1000; return seconds <= rule.transitionGraceSec ? 'Ignored by transition grace' : 'Outside grace window'; }
-      function actionFor(rule, result) { if (result === 'Critical') return rule.criticalAction || rule.warningAction || 'Review evidence and validate with service procedure'; if (result === 'Warning') return rule.warningAction || 'Review evidence and validate with service procedure'; return 'No service action required from this rule match'; }
-      function buildSignalDiscovery(evidence, rules) { const profiles = new Map(); const ruleSignals = rules.map(rule => normalizeSignal(rule.logSignalName)).filter(Boolean); evidence.forEach(event => { const signal = event.possibleSignals[0] || 'Unclassified Signal'; const key = `${event.system}|${event.sourceType}|${signal}`; const profile = profiles.get(key) || { signal, system: event.system, source: event.sourceType, count: 0, values: [], first: event.timestamp, last: event.timestamp, example: event.rawLine, mappingStatus: 'unmapped' }; profile.count += 1; event.numericValues.forEach(number => profile.values.push(number.value)); if (event.timestamp && (!profile.first || dateValue(event.timestamp) < dateValue(profile.first))) profile.first = event.timestamp; if (event.timestamp && (!profile.last || dateValue(event.timestamp) > dateValue(profile.last))) profile.last = event.timestamp; const normalized = normalizeSignal(signal); profile.mappingStatus = ruleSignals.some(ruleSignal => normalized.includes(ruleSignal) || ruleSignal.includes(normalized)) ? 'mapped to rule' : 'unmapped'; profiles.set(key, profile); }); return Array.from(profiles.values()).map(profile => ({ ...profile, min: profile.values.length ? Math.min(...profile.values) : null, max: profile.values.length ? Math.max(...profile.values) : null, avg: profile.values.length ? profile.values.reduce((sum, value) => sum + value, 0) / profile.values.length : null })); }
-      function buildMachineIndex() { state.evidence.forEach(event => ensureMachine(event.machineId)); state.machineStates.forEach(row => ensureMachine(row.machineId)); for (const machine of state.machines.values()) { const machineEvidence = state.evidence.filter(event => event.machineId === machine.id); const machineStates = state.machineStates.filter(row => row.machineId === machine.id); machine.latestState = machineStates.length ? machineStates[machineStates.length - 1].state : machine.latestState || 'Unknown'; machine.lastTimestamp = latest([...machineEvidence.map(event => event.timestamp), ...machineStates.map(row => row.timestamp)]); machine.alertCount = state.alerts.filter(alert => alert.machineId === machine.id).length; machine.warningCount = state.needsValidation.filter(match => match.machineId === machine.id).length; } if (!state.selectedMachineId) { const ids = Array.from(state.machines.keys()); state.selectedMachineId = ids.length ? ids[0] : null; } }
-      function attachMachineStateContext() { state.evidence.forEach(event => { const segment = state.machineStates.find(row => row.machineId === event.machineId && dateValue(row.startTime) <= dateValue(event.timestamp) && (!row.endTime || dateValue(event.timestamp) < dateValue(row.endTime))); if (segment) event.state = segment.state; }); }
-
-      function renderDashboard() { renderChrome(); if (state.view === 'alerts') return renderAlertsView(); if (state.view === 'analysis') return renderAnalysisView(); if (state.view === 'machines') return renderMachinesView(); if (state.view === 'reports') return renderPlaceholder('Reports', 'Report export will be enabled only when analyzed evidence exists.'); if (state.view === 'knowledge') return renderPlaceholder('Knowledge', 'Knowledge articles can be linked after the service library is connected.'); renderRadarView(); }
-      function renderChrome() { const range = dataRange(); dom.modeLabel.textContent = state.mode; dom.stageLabel.textContent = state.scanStage; dom.progressFill.style.width = `${state.progress}%`; dom.progressLabel.textContent = `${Math.round(state.progress)}%`; dom.focusedFilesCount.textContent = state.focusedFiles.length; dom.rulesCount.textContent = state.rules.length; dom.machinesCount.textContent = state.machines.size; dom.dataRange.textContent = range || 'No data range'; dom.lastDataLabel.textContent = `Last Data: ${fmtTime(latest(state.evidence.map(event => event.timestamp)))}`; dom.machineFooter.textContent = `Machine: ${state.selectedMachineId || 'Landa S11-1P / No data'}`; }
-      function renderRadarView() { dom.root.innerHTML = `<section class="kpi-grid">${renderKpis()}</section><section class="main-grid"><section class="panel machine-stage">${renderMachineStage()}</section><aside class="panel issue-panel">${renderIssuePanel()}</aside></section><section class="bottom-grid"><section class="panel">${renderTimelinePanel()}</section><section class="panel">${renderEvidencePanel()}</section><section class="panel">${renderActionsPanel()}</section></section>`; bindRenderedControls(); }
-      function renderKpis() { const machineCount = state.machines.size; const machinesAtRisk = new Set(state.alerts.map(alert => alert.machineId)).size; const criticalCount = state.alerts.filter(alert => alert.severity === 'Critical').length; const pendingCount = state.needsValidation.length; const evaluatedCount = state.ruleMatches.filter(match => match.result !== 'Not evaluable').length; const cards = [{ label: 'Machines Scanned', value: machineCount, detail: machineCount ? 'Detected from focused logs' : 'No data', icon: 'M', tone: '' }, { label: 'Machines at Risk', value: machinesAtRisk, detail: machinesAtRisk ? 'With confirmed active anomalies' : 'No confirmed anomalies', icon: 'R', tone: machinesAtRisk ? 'critical' : '' }, { label: 'Focused Files Parsed', value: state.focusedFiles.length, detail: state.focusedFiles.length ? 'Only approved focused logs' : 'No data', icon: 'F', tone: '' }, { label: 'Real Alerts', value: criticalCount, detail: state.rules.length ? 'Confirmed by rules and evidence' : 'No real alerts without Rules', icon: '!', tone: criticalCount ? 'critical' : '' }, { label: 'Rules Evaluated', value: evaluatedCount || (state.rules.length ? 'Pending' : 0), detail: pendingCount ? `${pendingCount} need validation` : 'No fake confidence', icon: 'C', tone: evaluatedCount ? 'ok' : '' }]; return cards.map(card => `<article class="kpi-card" data-tone="${card.tone}"><div class="kpi-icon">${esc(card.icon)}</div><div><small>${esc(card.label)}</small><strong>${esc(card.value)}</strong><p>${esc(card.detail)}</p></div></article>`).join(''); }
-      function renderMachineStage() { const machine = selectedMachine(); const machineLabel = machine ? machine.id : 'Landa S11-1P'; const stateLabel = machine ? machine.latestState : 'No Data'; const tone = machine && machine.latestState !== 'Unknown' ? 'ok' : ''; return `<div class="stage-copy"><h2>Machine Overview</h2><div class="machine-name">${esc(machineLabel)} <span class="badge" data-tone="${tone}">${esc(stateLabel)}</span></div><div class="view-toggle"><button class="active">Grid</button><button>List</button></div></div><div class="press-shell" style="transform:perspective(950px) rotateY(${state.pressAngle}deg)"></div>${renderSystemHotspots()}<div class="stage-actions"><button id="rotatePress">360 View</button><button id="resetPress">Reset</button><button id="openDrilldown">Open Drill-Down</button></div>`; }
-      function renderSystemHotspots() { const issue = selectedIssue(); return CONFIG.systems.map(system => { const systemHasIssue = issue && String(issue.system).toUpperCase().includes(system.id); const classes = ['hotspot', system.down ? 'down' : '', systemHasIssue ? 'issue' : ''].filter(Boolean).join(' '); return `<button class="${classes}" data-system="${system.id}" style="left:${system.x}%;top:${system.y}%"><div class="orb"></div><div class="line"></div><div class="tag">${esc(system.id)}<span>${esc(system.label)}</span></div></button>`; }).join(''); }
-      function renderIssuePanel() { const issue = selectedIssue(); if (!issue) return `<div class="issue-header"><div class="issue-state"><span>No Selected Issue</span><span class="badge">Pending</span></div><h2>Upload evidence to begin</h2><p>No real alerts are generated without matching rules and complete validation.</p></div><div class="issue-body"><div class="note">Upload logs/ZIP and the PANDA Rules Excel, then click Analyze. With logs only, PANDA shows Discovery Mode. With logs and rules, it evaluates real rule matches.</div><button class="blue-button" id="openDrilldownPanel">Open Drill-Down Workspace</button></div>`; return `<div class="issue-header"><div class="issue-state"><span>${esc(issue.status)}</span><span class="badge" data-tone="critical">${esc(issue.severity)}</span></div><h2>${esc(issue.system)} <span>${esc(issue.component || '')}</span></h2><p>${esc(issue.signal)}</p></div><div class="issue-body"><div><div class="label">Summary</div><div class="note">${esc(issue.rawLine)}</div></div><div class="metric-grid"><div class="metric"><small>State Context</small><b>${esc(issue.state || 'No Data')}</b></div><div class="metric"><small>Actual Value</small><b>${fmtValue(issue.actualValue)}</b></div><div class="metric"><small>Expected Range</small><b>${fmtRange(issue.expectedRange)}</b></div><div class="metric"><small>Rule</small><b>${esc(issue.ruleId)}</b></div></div><button class="blue-button" id="openDrilldownPanel">Open Drill-Down</button></div>`; }
-      function renderTimelinePanel() { const rows = filteredStates().slice(0, 14); return `<div class="panel-header"><h3>State Machine Timeline</h3><p>${rows.length ? 'Parsed from MachineStates' : 'No MachineStates parsed'}</p></div><div class="panel-body">${rows.length ? `<div class="timeline">${rows.map(renderStateSegment).join('')}</div>` : '<div class="empty">No MachineStates parsed</div>'}</div>`; }
-      function renderStateSegment(segment) { return `<div class="segment state-${stateClass(segment.state)}"><span>${esc(segment.state)}</span><small>${fmtTime(segment.startTime)}</small></div>`; }
-      function renderEvidencePanel() { const rows = filteredEvidence().slice(-8).reverse(); const tableRows = rows.map(event => [fmtTime(event.timestamp), event.machineId, event.sourceType, event.system, event.state || 'No Data', event.possibleSignals[0], formatNumeric(event.numericValues[0]), event.message.slice(0, 90)]); return `<div class="panel-header"><h3>Evidence Log (Latest)</h3><p>${state.rules.length ? 'Focused evidence used for rule evaluation' : 'Discovery Evidence - no real alerts without Rules'}</p></div><div class="panel-body">${rows.length ? renderTable(['Time', 'Machine', 'Source', 'System', 'State', 'Signal', 'Value', 'Message'], tableRows) : '<div class="empty">No focused evidence parsed yet.</div>'}</div>`; }
-      function renderActionsPanel() { const issue = selectedIssue(); const actions = issue ? [issue.recommendedAction, 'Validate state context and duration before dispatch decisions.', 'Create a service report only from confirmed alerts.'] : state.rules.length ? ['Review rule coverage and missing signals.', 'Validate not-evaluable or duration-required matches.', 'Use confirmed alerts only for escalation decisions.'] : ['Review focused evidence.', 'Confirm state context.', 'Upload Rules Excel to enable real alert evaluation.', 'Do not make dispatch decisions without rules.']; return `<div class="panel-header"><h3>Recommended Service Action</h3><p>Actions are from rules when available.</p></div><div class="panel-body"><div class="action-list">${actions.map((action, index) => `<div class="action-row"><span>${index + 1}</span><span>${esc(action)}</span><em class="impact">${issue && index === 0 ? 'High Impact' : ''}</em></div>`).join('')}</div></div>`; }
-      function renderAnalysisView() { const issue = selectedIssue(); dom.root.innerHTML = `<section class="drill-layout"><aside class="panel side-panel"><div class="side-section"><b>Machine Context</b><h2>${esc(state.selectedMachineId || 'Landa S11-1P')}</h2><span class="badge" data-tone="${state.selectedMachineId ? 'ok' : ''}">${esc(selectedMachine()?.latestState || 'No Data')}</span><div class="machine-thumb" style="background-image:linear-gradient(180deg,rgba(255,255,255,.07),rgba(0,0,0,.24)),url('${CONFIG.assets.pressHero}')"></div><button class="blue-button" id="backToRadar">View Machine Overview</button></div><div class="side-section"><div class="issue-state"><span>${issue ? 'Active Issue' : 'No Active Issue'}</span><span class="badge" data-tone="${issue ? 'critical' : ''}">${issue ? esc(issue.severity) : 'No Data'}</span></div><h3>BSS Blanket System</h3><p style="color:var(--muted)">${issue ? esc(issue.signal) : 'No confirmed component problem without uploaded rules and evidence.'}</p></div><div class="side-section"><b>Subsystem Navigation</b><div class="tree"><b>BSS Blanket System</b>${CONFIG.bssComponents.map(component => `<span>${esc(component.name)} (${esc(component.id)})</span>`).join('')}</div></div></aside><section class="drill-main"><div class="tabs"><button class="active">Overview</button><button>Signals</button><button>Components</button><button>Logs</button><button>Rules</button><button>Maintenance History</button></div><section class="panel cutaway">${renderCutaway(issue)}</section><section class="bottom-grid"><section class="panel">${renderComponentHealth(issue)}</section><section class="panel">${renderReasoning(issue)}</section></section></section><aside class="right-column"><section class="panel">${renderSignalChart(issue)}</section><section class="panel">${renderActionsPanel()}<div class="panel-body"><button class="button" style="width:100%">Create Service Report</button></div></section></aside></section>`; bindRenderedControls(); }
-      function renderCutaway(issue) { return `<div class="cut-title"><h3>BSS Blanket System - Cutaway View</h3><p>${issue ? 'Live component status from rule evidence' : 'Component workspace - waiting for evidence'}</p></div><div class="legend"><span style="color:var(--red)">Critical</span><span style="color:var(--amber)">Warning</span><span style="color:var(--cyan)">Normal</span><button class="button" id="rotatePressSmall">3D Rotation</button></div><div class="cut-machine"></div><div class="process-rail"></div>${CONFIG.bssComponents.map(component => renderComponentPin(component, issue)).join('')}`; }
-      function renderComponentPin(component, issue) { const status = componentStatus(component, issue); return `<button class="component ${status.tone} ${component.anchor}" style="left:${component.x}%;top:${component.y}%"><b>${esc(component.name)}</b><span>${esc(component.id)}</span><small>${esc(status.label)}</small></button>`; }
-      function componentStatus(component, issue) { if (!issue) return { label: 'No Data', tone: '' }; const haystack = normalizeSignal(`${issue.component} ${issue.signal} ${issue.rawLine}`); if (component.keywords.every(keyword => haystack.includes(keyword))) return { label: issue.severity, tone: issue.severity === 'Critical' ? 'critical' : 'warning' }; return { label: 'Normal', tone: '' }; }
-      function renderComponentHealth(issue) { const rows = CONFIG.bssComponents.map((component, index) => { const status = componentStatus(component, issue); const score = status.tone === 'critical' ? 18 : status.tone === 'warning' ? 42 : issue ? 88 : null; const probability = status.tone === 'critical' ? 72 : status.tone === 'warning' ? 18 : issue ? 1 : 0; return `<div class="health-row"><b>${index + 1}</b><span>${esc(component.name)} (${esc(component.id)})</span><span>${score === null ? 'No Data' : `${score} / 100`}</span><div class="meter"><i style="width:${probability}%"></i></div></div>`; }).join(''); return `<div class="panel-header"><h3>Component Health - Likely Root Cause</h3><p>${issue ? 'Based on uploaded rule evidence' : 'No scoring without confirmed evidence'}</p></div><div class="panel-body">${rows}</div>`; }
-      function renderReasoning(issue) { const reasons = issue ? ['Focused log line contains the matching signal and numeric value.', 'Uploaded rule defines the expected threshold or range.', 'Machine state context is attached when MachineStates are available.', 'Duration-required matches stay unconfirmed until duration is provable.'] : ['No confirmed issue yet. Upload logs and rules to enable component evidence.', 'No fake confidence or probability is shown without validated matches.', 'Drill-down remains a workspace until the rules engine has real evidence.']; return `<div class="panel-header"><h3>Why PANDA suspects this</h3></div><div class="panel-body"><div class="reason-list">${reasons.map(reason => `<div>${esc(reason)}</div>`).join('')}</div></div>`; }
-      function renderSignalChart(issue) { const related = issue ? state.ruleMatches.filter(match => match.signal === issue.signal && match.machineId === issue.machineId).slice(-24) : []; return `<div class="panel-header"><h3>Key Signal${issue ? ` - ${esc(issue.signal)}` : ''}</h3><p>${related.length ? 'Real values from matching evidence' : 'No signal chart until matching evidence exists'}</p></div><div class="panel-body"><div class="chart">${related.length ? renderLineChart(related) : '<div class="empty" style="margin:18px">No signal chart until matching evidence exists.</div>'}</div></div>`; }
-      function renderLineChart(matches) { const values = matches.map(match => match.actualValue); const min = Math.min(...values); const max = Math.max(...values); const span = max - min || 1; const points = values.map((value, index) => { const x = 24 + index * (332 / Math.max(1, values.length - 1)); const y = 210 - ((value - min) / span) * 160; return `${x},${y}`; }).join(' '); return `<svg viewBox="0 0 380 248" preserveAspectRatio="none"><g stroke="rgba(150,166,184,.18)"><line x1="20" y1="50" x2="365" y2="50"/><line x1="20" y1="92" x2="365" y2="92"/><line x1="20" y1="134" x2="365" y2="134"/><line x1="20" y1="176" x2="365" y2="176"/></g><polyline points="${points}" fill="none" stroke="#35c9f4" stroke-width="2"/><text x="24" y="28" fill="#9daabc" font-size="12">Min ${fmtValue(min)} / Max ${fmtValue(max)}</text></svg>`; }
-      function renderAlertsView() { const rows = state.alerts.map(alert => [fmtTime(alert.timestamp), alert.machineId, alert.system, alert.component, alert.signal, alert.severity, alert.ruleId]); dom.root.innerHTML = `<section class="kpi-grid">${renderKpis()}</section><section class="panel"><div class="panel-header"><h3>Confirmed Alerts Only</h3><p>No discovery findings are listed here.</p></div><div class="panel-body">${rows.length ? renderTable(['Time', 'Machine', 'System', 'Component', 'Signal', 'Severity', 'Rule'], rows) : '<div class="empty">No confirmed alerts.</div>'}</div></section>`; }
-      function renderMachinesView() { const rows = Array.from(state.machines.values()).map(machine => [machine.id, machine.latestState, machine.focusedFiles, machine.alertCount, machine.warningCount, fmtTime(machine.lastTimestamp)]); dom.root.innerHTML = `<section class="panel"><div class="panel-header"><h3>Machines</h3><p>Detected from paths and focused log text.</p></div><div class="panel-body">${rows.length ? renderTable(['Machine', 'Latest State', 'Focused Files', 'Alerts', 'Needs Validation', 'Last Event'], rows) : '<div class="empty">No machines detected yet.</div>'}</div></section>`; }
-      function renderPlaceholder(title, message) { dom.root.innerHTML = `<section class="panel"><div class="panel-header"><h3>${esc(title)}</h3><p>${esc(message)}</p></div><div class="panel-body"><div class="empty">Future workspace. No fake report data is generated.</div></div></section>`; }
-      function bindRenderedControls() { document.querySelectorAll('#openDrilldown,#openDrilldownPanel').forEach(button => button.addEventListener('click', () => setView('analysis'))); document.querySelectorAll('#backToRadar').forEach(button => button.addEventListener('click', () => setView('radar'))); document.querySelectorAll('#rotatePress,#rotatePressSmall').forEach(button => button.addEventListener('click', () => { state.pressAngle = (state.pressAngle + 12) % 48; renderDashboard(); })); document.querySelectorAll('#resetPress').forEach(button => button.addEventListener('click', () => { state.pressAngle = 0; renderDashboard(); })); document.querySelectorAll('.hotspot[data-system]').forEach(button => button.addEventListener('click', () => selectSystem(button.dataset.system))); }
-      function setView(view) { state.view = view; document.querySelectorAll('.nav button').forEach(button => button.classList.toggle('active', button.dataset.view === view)); renderDashboard(); }
-      function selectSystem(systemId) { state.selectedSystem = systemId; const alert = state.alerts.find(item => String(item.system).toUpperCase().includes(systemId)); state.selectedIssueId = alert ? alert.id : null; renderDashboard(); }
-      function selectedIssue() { return state.alerts.find(alert => alert.id === state.selectedIssueId) || state.alerts[0] || state.needsValidation[0] || null; }
-      function selectedMachine() { return state.selectedMachineId ? state.machines.get(state.selectedMachineId) : null; }
-      function filteredEvidence() { return state.selectedMachineId ? state.evidence.filter(event => event.machineId === state.selectedMachineId) : state.evidence; }
-      function filteredStates() { return state.selectedMachineId ? state.machineStates.filter(row => row.machineId === state.selectedMachineId) : state.machineStates; }
-      function renderTable(headers, rows) { return `<div class="table-wrap"><table><thead><tr>${headers.map(header => `<th>${esc(header)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${esc(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; }
-      function ensureMachine(id) { if (!state.machines.has(id)) state.machines.set(id, { id, latestState: 'Unknown', focusedFiles: 0, alertCount: 0, warningCount: 0, lastTimestamp: null }); return state.machines.get(id); }
-      function updateProgress(value, stage) { state.progress = Math.max(state.progress, Math.min(100, value)); if (stage) state.scanStage = stage; renderChrome(); }
-      function isFocusedPath(path) { return CONFIG.focusedLogNames.some(name => String(path).toLowerCase().includes(name.toLowerCase())); }
-      function isZip(path) { return /\.zip$/i.test(path); } function detectSourceType(path) { return CONFIG.focusedLogNames.find(name => String(path).toLowerCase().includes(name.toLowerCase())) || 'Other'; } function detectMachineId(text) { const match = String(text || '').match(/\b[SD]\d{6,}\b/i); return match ? match[0].toUpperCase() : null; }
-      function mapLogSourceToSystem(type, line) { if (type === 'FECNotification') return 'FEC'; if (type === 'AlertsMonitoring' || type === 'AletrsMonitoring') return 'AlertsMonitoring'; if (type === 'MachineStates') return 'MachineStates'; if (type === 'LLCINotification') { if (/\b(BSS|Blanket|BCU|Tub|Tank|Fill|Drain|Filter|Cooling)\b/i.test(line)) return 'BSS'; if (/\b(IPS|Ink|Ink Process)\b/i.test(line)) return 'IPS'; return 'LLCI'; } return 'LLCI'; }
-      function sourceCompatible(rule, evidence) { const source = String(rule.logSource || '').toLowerCase(); if (!source) return true; if (source.includes('fec')) return evidence.sourceType === 'FECNotification'; if (source.includes('bss')) return evidence.system === 'BSS'; if (source.includes('ips') || source.includes('ink')) return evidence.system === 'IPS'; if (source.includes('state')) return evidence.sourceType === 'MachineStates'; if (source.includes('alert')) return evidence.system === 'AlertsMonitoring'; return true; }
-      function signalMatches(signal, line) { const normalizedSignal = normalizeSignal(signal); const normalizedLine = normalizeSignal(line); if (!normalizedSignal || !normalizedLine) return false; if (normalizedLine.includes(normalizedSignal) || normalizedSignal.includes(normalizedLine)) return true; const terms = normalizedSignal.split(' ').filter(term => term.length > 2); return terms.length >= 2 && terms.every(term => normalizedLine.includes(term)); }
-      function inferSubsystem(line) { if (/blanket/i.test(line)) return 'Blanket System'; if (/ink|ips/i.test(line)) return 'Ink Process'; if (/feeder/i.test(line)) return 'Feeder'; return ''; }
-      function inferComponent(line) { const components = ['Pressure Sensor', 'Blanket Cylinder', 'Regulator', 'Valve Block', 'Air Supply', 'Cooling Loop', 'Drive Motor', 'Filter', 'Pump', 'Feeder']; return components.find(component => new RegExp(component.replace(' ', '\\s+'), 'i').test(line)) || ''; }
-      function discoverSignals(line) { const signals = ['blanket pressure', 'cylinder pressure', 'pressure', 'vacuum', 'temperature', 'flow', 'level', 'speed', 'filter', 'cooling', 'ink', 'feeder', 'laydown']; const match = signals.find(signal => new RegExp(signal.replace(' ', '\\s+'), 'i').test(line)); return [match ? toTitleCase(match) : 'Unclassified Signal']; }
-      function extractNumbers(line) { const values = []; const pattern = /([-+]?\d+(?:[.,]\d+)?)\s*(psi|bar|mbar|c|%|mm|sec|ms|counts?)?\b/gi; let match; while ((match = pattern.exec(line))) { const value = Number(match[1].replace(',', '.')); if (Number.isFinite(value)) values.push({ value, unit: match[2] || '' }); } return values; }
-      function normalizeStateFromLine(line) { const states = [['Prepare2Print', /prepare\s*2\s*print|prepare\s*to\s*print|preparetoprint/i], ['PrintEnd', /print\s*end|printend/i], ['Standby', /standby/i], ['Ready', /ready/i], ['Printing', /printing/i], ['Recovery', /recovery/i], ['Error', /\berror\b|\berr\b/i], ['ON', /\bon\b/i]]; const match = states.find(([, pattern]) => pattern.test(line)); return match ? match[0] : null; }
-      function severityHint(line) { const match = String(line).match(/critical|warning|fault|failed|fail|deviation|timeout|disconnected|low|high/i); return match ? match[0] : ''; }
-      function splitLines(text) { return String(text || '').split(/\r?\n/).filter(Boolean); } function normalizePath(path) { return String(path || '').replace(/\\/g, '/').replace(/\/+/g, '/'); } function normalizeSignal(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9%]+/g, ' ').replace(/\s+/g, ' ').trim(); } function headerKey(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, ''); } function stateClass(value) { return String(value || 'Unknown').replace(/\s+/g, ''); } function toTitleCase(value) { return String(value).replace(/\b\w/g, char => char.toUpperCase()); } function toNumber(value) { if (value === null || value === undefined || value === '') return null; const match = String(value).replace(',', '.').match(/[-+]?\d+(?:\.\d+)?/); return match ? Number(match[0]) : null; } function slug(value) { return String(value || 'Value').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'Value'; }
-      function extractTimestamp(line) { const iso = String(line).match(/\b\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\b/); if (iso) return iso[0].replace(/\//g, '-').replace(' ', 'T').replace(',', '.'); const time = String(line).match(/\b\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\b/); return time ? time[0].replace(',', '.') : null; } function stripTimestamp(line) { return String(line).replace(/\b\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\b/, '').trim(); } function dateValue(value) { if (!value) return 0; if (/^\d{2}:/.test(value)) return Date.parse(`1970-01-01T${value}`); return Date.parse(value) || 0; } function latest(values) { return values.filter(Boolean).sort((a, b) => dateValue(b) - dateValue(a))[0] || null; } function dataRange() { const values = [...state.evidence.map(event => event.timestamp), ...state.machineStates.map(row => row.timestamp)].filter(Boolean).sort((a, b) => dateValue(a) - dateValue(b)); return values.length ? `${fmtTime(values[0])} - ${fmtTime(values[values.length - 1])}` : ''; } function fmtTime(value) { if (!value) return 'No data'; if (/^\d{2}:/.test(value)) return value.slice(0, 5); const date = new Date(value); return Number.isNaN(date.getTime()) ? String(value).slice(0, 16) : date.toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }); } function fmtValue(value) { return value === null || value === undefined || Number.isNaN(value) ? 'No Data' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 }); } function fmtRange(range) { return range ? `${range.low ?? '-inf'} - ${range.high ?? '+inf'}` : 'No Data'; } function formatNumeric(number) { return number ? `${fmtValue(number.value)}${number.unit ? ` ${number.unit}` : ''}` : 'No Data'; } function esc(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
-
-      initApp();
-    })();
-  </script>
+  <main>
+    <div class="brand"><div class="logo">Landa<span class="dot">.</span></div><strong>PANDA Tool</strong></div>
+    <h1>Reset complete. Ready for a fresh rebuild.</h1>
+    <p>The previous dashboard, visual direction, parser UI, drill-down screens, and demo-style implementation have been removed from this file. This is now a clean starting point for rebuilding the PANDA Tool from the beginning.</p>
+    <div class="status">Fresh start state</div>
+  </main>
 </body>
 </html>
