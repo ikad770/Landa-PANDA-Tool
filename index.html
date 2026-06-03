@@ -8,7 +8,6 @@
     :root {
       color-scheme: dark;
       --bg: #05080c;
-      --panel: #0c131c;
       --line: rgba(154, 174, 198, 0.18);
       --line-strong: rgba(154, 174, 198, 0.28);
       --text: #f5f8fc;
@@ -46,7 +45,7 @@
     .topbar {
       height: 76px;
       display: grid;
-      grid-template-columns: 368px 1fr auto;
+      grid-template-columns: 378px 1fr auto;
       align-items: center;
       gap: 22px;
       padding: 0 24px;
@@ -83,16 +82,31 @@
     .logo-lockup {
       display: flex;
       align-items: center;
-      gap: 17px;
+      gap: 18px;
       min-width: 0;
     }
 
     .landa-logo {
-      width: 120px;
-      height: 44px;
+      width: 126px;
+      height: 42px;
       display: block;
       flex: 0 0 auto;
-      filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.04));
+      overflow: visible;
+      filter: drop-shadow(0 0 9px rgba(255, 255, 255, 0.05));
+    }
+
+    .landa-logo .landa-stroke {
+      fill: none;
+      stroke: #ffffff;
+      stroke-width: 5.4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .landa-logo .landa-blue {
+      fill: #27bff0;
+      stroke: #ffffff;
+      stroke-width: 2.8;
     }
 
     .brand-divider {
@@ -614,9 +628,9 @@
     }
 
     @media (max-width: 1280px) {
-      .topbar { grid-template-columns: 330px 1fr; height: auto; padding: 16px 20px; }
+      .topbar { grid-template-columns: 342px 1fr; height: auto; padding: 16px 20px; }
       .header-actions { grid-column: 1 / -1; justify-content: flex-end; }
-      .landa-logo { width: 108px; }
+      .landa-logo { width: 114px; }
       .brand-divider { height: 40px; }
       .product-title strong { font-size: 20px; }
       .product-title span { font-size: 11px; }
@@ -655,11 +669,14 @@
           <span></span><span></span><span></span>
         </div>
         <div class="logo-lockup">
-          <svg class="landa-logo" viewBox="0 0 156 54" role="img" aria-label="Landa logo">
+          <svg class="landa-logo" viewBox="0 0 210 70" role="img" aria-label="Landa logo">
             <title>Landa</title>
-            <text x="2" y="39" fill="#ffffff" font-family="Segoe UI Light, Segoe UI, Arial, sans-serif" font-size="43" font-weight="300" letter-spacing="-3.2">Landa</text>
-            <circle cx="96" cy="29" r="11.5" fill="#28bff0" stroke="#ffffff" stroke-width="2.2"></circle>
-            <circle cx="96" cy="29" r="7.6" fill="#28bff0"></circle>
+            <path class="landa-stroke" d="M12 9 V42 C12 52 20 59 31 59 H39"></path>
+            <path class="landa-stroke" d="M61 59 C47 59 37 49 37 36 C37 23 47 14 61 14 C75 14 85 24 85 36 V59"></path>
+            <path class="landa-stroke" d="M94 59 V31 C94 21 102 14 113 14 C125 14 133 22 133 35 V59"></path>
+            <path class="landa-stroke" d="M158 9 V59"></path>
+            <circle class="landa-blue" cx="145" cy="37" r="19"></circle>
+            <path class="landa-stroke" d="M187 59 C174 59 164 49 164 36 C164 23 174 14 187 14 C199 14 208 24 208 36 V59"></path>
           </svg>
           <div class="brand-divider" aria-hidden="true"></div>
           <div class="product-title">
@@ -701,66 +718,21 @@
 
     <main class="workspace">
       <section class="kpi-grid" aria-label="Key performance indicators">
-        <article class="card kpi-card">
-          <div class="kpi-icon">M</div>
-          <div>
-            <p class="kpi-label">Machines scanned</p>
-            <div class="kpi-value">0</div>
-            <div class="kpi-note">No data</div>
-          </div>
-        </article>
-        <article class="card kpi-card">
-          <div class="kpi-icon">F</div>
-          <div>
-            <p class="kpi-label">Focused log files parsed</p>
-            <div class="kpi-value">0</div>
-            <div class="kpi-note">No data</div>
-          </div>
-        </article>
-        <article class="card kpi-card">
-          <div class="kpi-icon">R</div>
-          <div>
-            <p class="kpi-label">Rules loaded</p>
-            <div class="kpi-value">0</div>
-            <div class="kpi-note">Rules required</div>
-          </div>
-        </article>
-        <article class="card kpi-card">
-          <div class="kpi-icon">!</div>
-          <div>
-            <p class="kpi-label">Real alerts</p>
-            <div class="kpi-value">0</div>
-            <div class="kpi-note">No alerts without Rules</div>
-          </div>
-        </article>
-        <article class="card kpi-card">
-          <div class="kpi-icon">V</div>
-          <div>
-            <p class="kpi-label">Needs validation</p>
-            <div class="kpi-value">0</div>
-            <div class="kpi-note">Pending evidence</div>
-          </div>
-        </article>
+        <article class="card kpi-card"><div class="kpi-icon">M</div><div><p class="kpi-label">Machines scanned</p><div class="kpi-value">0</div><div class="kpi-note">No data</div></div></article>
+        <article class="card kpi-card"><div class="kpi-icon">F</div><div><p class="kpi-label">Focused log files parsed</p><div class="kpi-value">0</div><div class="kpi-note">No data</div></div></article>
+        <article class="card kpi-card"><div class="kpi-icon">R</div><div><p class="kpi-label">Rules loaded</p><div class="kpi-value">0</div><div class="kpi-note">Rules required</div></div></article>
+        <article class="card kpi-card"><div class="kpi-icon">!</div><div><p class="kpi-label">Real alerts</p><div class="kpi-value">0</div><div class="kpi-note">No alerts without Rules</div></div></article>
+        <article class="card kpi-card"><div class="kpi-icon">V</div><div><p class="kpi-label">Needs validation</p><div class="kpi-value">0</div><div class="kpi-note">Pending evidence</div></div></article>
       </section>
 
       <section class="main-grid" aria-label="Service radar workspace">
         <article class="card machine-panel">
           <div class="panel-content">
             <p class="panel-kicker">Machine overview</p>
-            <div class="machine-heading">
-              <h1>No machine selected</h1>
-              <span class="small-badge">No data</span>
-            </div>
-            <div class="view-switch" aria-label="View selector">
-              <span>Grid</span>
-              <span>List</span>
-            </div>
+            <div class="machine-heading"><h1>No machine selected</h1><span class="small-badge">No data</span></div>
+            <div class="view-switch" aria-label="View selector"><span>Grid</span><span>List</span></div>
           </div>
-
-          <div class="machine-empty-stage" aria-hidden="true">
-            <div class="machine-placeholder"></div>
-          </div>
-
+          <div class="machine-empty-stage" aria-hidden="true"><div class="machine-placeholder"></div></div>
           <div class="empty-copy">
             <p>Upload logs and a PANDA Rules file in a later stage to populate real machine systems, evidence, rule matches, and confirmed alerts. This foundation intentionally contains no operational data.</p>
             <button class="outline-button" type="button">Drill-down pending</button>
@@ -768,51 +740,23 @@
         </article>
 
         <aside class="card issue-panel" aria-label="Selected issue panel">
-          <div class="issue-header">
-            <div class="issue-state">No selected issue</div>
-            <span class="small-badge">Pending</span>
-          </div>
-          <div class="issue-title">
-            <h2>Upload evidence to begin</h2>
-            <p>No real alerts are generated without matching rules and complete validation.</p>
-          </div>
-          <div class="details-empty">
-            Stage 1 provides the dashboard structure only. File upload, parsing, discovery mode, rule matching, and alert evaluation will be added in later stages.
-          </div>
+          <div class="issue-header"><div class="issue-state">No selected issue</div><span class="small-badge">Pending</span></div>
+          <div class="issue-title"><h2>Upload evidence to begin</h2><p>No real alerts are generated without matching rules and complete validation.</p></div>
+          <div class="details-empty">Stage 1 provides the dashboard structure only. File upload, parsing, discovery mode, rule matching, and alert evaluation will be added in later stages.</div>
           <button class="primary-action" type="button">Open Drill-Down Workspace</button>
         </aside>
       </section>
 
       <section class="bottom-grid" aria-label="Operational panels">
-        <article class="card bottom-panel">
-          <h3>State Machine Timeline</h3>
-          <p>No MachineStates parsed.</p>
-          <div class="empty-line" aria-hidden="true"></div>
-        </article>
-        <article class="card bottom-panel">
-          <h3>Evidence Log</h3>
-          <p>No focused evidence loaded.</p>
-          <div class="empty-line" aria-hidden="true"></div>
-        </article>
-        <article class="card bottom-panel">
-          <h3>Recommended Service Action</h3>
-          <p>Actions are available only when rules and validated evidence support them.</p>
-          <div class="empty-line" aria-hidden="true"></div>
-        </article>
+        <article class="card bottom-panel"><h3>State Machine Timeline</h3><p>No MachineStates parsed.</p><div class="empty-line" aria-hidden="true"></div></article>
+        <article class="card bottom-panel"><h3>Evidence Log</h3><p>No focused evidence loaded.</p><div class="empty-line" aria-hidden="true"></div></article>
+        <article class="card bottom-panel"><h3>Recommended Service Action</h3><p>Actions are available only when rules and validated evidence support them.</p><div class="empty-line" aria-hidden="true"></div></article>
       </section>
     </main>
 
     <footer class="footer">
-      <div class="footer-left">
-        <span class="status-dot">Data connection: No data</span>
-        <span class="status-dot">PANDA engine: Pending</span>
-        <span>Last data: No data</span>
-      </div>
-      <div class="footer-right">
-        <span>Machine: No machine selected</span>
-        <span>Site: Pending</span>
-        <span>Service user: JD</span>
-      </div>
+      <div class="footer-left"><span class="status-dot">Data connection: No data</span><span class="status-dot">PANDA engine: Pending</span><span>Last data: No data</span></div>
+      <div class="footer-right"><span>Machine: No machine selected</span><span>Site: Pending</span><span>Service user: JD</span></div>
     </footer>
   </div>
 </body>
