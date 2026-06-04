@@ -32,13 +32,14 @@
 
     * { box-sizing: border-box; }
 
-    html { min-height: 100%; background: var(--bg); }
+    html { min-height: 100%; overflow-x: hidden; background: var(--bg); }
 
     body {
       min-height: 100vh;
       margin: 0;
       font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
       color: var(--text);
+      overflow-x: hidden;
       background:
         radial-gradient(circle at 18% 0%, rgba(56, 200, 244, 0.10), transparent 30rem),
         linear-gradient(180deg, #0b1118 0%, #081019 100%);
@@ -66,6 +67,7 @@
     }
 
     .app-shell {
+      max-width: 100%;
       min-height: 100vh;
       display: grid;
       grid-template-rows: auto auto 1fr auto;
@@ -154,12 +156,18 @@
     }
 
     .workspace {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
       display: grid;
       gap: 18px;
       padding: 24px 32px 26px;
     }
 
     .card {
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
       border: 1px solid var(--border-soft);
       border-radius: var(--radius-lg);
       background: linear-gradient(180deg, rgba(21, 31, 43, 0.96), rgba(13, 21, 31, 0.96));
@@ -198,6 +206,7 @@
     .kpi-value.muted { color: var(--text-faint); font-size: 15px; }
 
     .panel-header {
+      min-width: 0;
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
@@ -362,9 +371,11 @@
       line-height: 1.4;
     }
 
-    .panel-body { padding: 18px 24px 24px; }
+    .panel-body { min-width: 0; max-width: 100%; padding: 18px 24px 24px; }
 
     .table-wrap {
+      width: 100%;
+      max-width: 100%;
       max-height: 360px;
       overflow: auto;
       border: 1px solid var(--border);
@@ -407,29 +418,139 @@
     }
 
     .timeline-wrap {
-      display: flex;
-      gap: 10px;
+      width: 100%;
+      max-width: 100%;
       overflow-x: auto;
-      padding-bottom: 8px;
+      overflow-y: hidden;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: rgba(8, 15, 23, 0.52);
     }
 
-    .state-segment {
-      min-width: 260px;
+    .timeline-bar {
+      display: flex;
+      min-width: 860px;
+      height: 58px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-sm);
+      background: rgba(6, 12, 19, 0.72);
+    }
+
+    .timeline-segment {
+      position: relative;
+      min-width: 8px;
+      height: 100%;
+      border: 0;
+      border-right: 1px solid rgba(8, 15, 23, 0.58);
+      border-radius: 0;
+      padding: 0 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #081019;
+      font-size: 12px;
+      font-weight: 800;
+      text-shadow: 0 1px 10px rgba(255, 255, 255, 0.2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .timeline-segment.is-selected {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+      z-index: 1;
+    }
+
+    .timeline-controls, .filter-grid, .drilldown-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .control-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    select, input[type="search"] {
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 9px 12px;
+      color: var(--text);
+      background: var(--surface-muted);
+      font: inherit;
+    }
+
+    .timeline-meta, .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 12px 0;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .legend-item, .metric-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--border-soft);
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .legend-swatch { width: 12px; height: 12px; border-radius: 999px; }
+
+    .segment-details {
+      margin-top: 16px;
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .chart-wrap {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: auto;
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
       padding: 12px;
       background: rgba(8, 15, 23, 0.52);
     }
 
-    .state-time { font-weight: 700; margin-bottom: 8px; }
-
-    .state-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 5px 12px;
-      color: var(--text-muted);
-      font-size: 12px;
+    .signal-chart {
+      display: block;
+      min-width: 760px;
+      width: 100%;
+      height: 280px;
     }
+
+    .state-strip {
+      display: flex;
+      min-width: 760px;
+      height: 18px;
+      margin-top: 10px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .state-strip span { min-width: 2px; }
+
+    .clickable-row { cursor: pointer; }
+    .clickable-row:hover { background: rgba(56, 200, 244, 0.08); }
 
     .empty-state {
       border: 1px dashed var(--border);
@@ -573,36 +694,79 @@
         </div>
       </section>
 
-      <section class="card" aria-label="Parsed evidence preview">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Parsed Evidence Preview</h2>
-            <p class="panel-note">Normalized values and events with MachineStates context attached where available. No fake alerts are generated.</p>
-          </div>
-          <span id="evidenceTag" class="panel-tag">0 rows</span>
-        </div>
-        <div class="panel-body table-wrap">
-          <table>
-            <thead><tr><th>Time</th><th>Source</th><th>System</th><th>Component</th><th>Signal</th><th>Value</th><th>Machine State</th><th>System State</th><th>State Context</th><th>Path</th></tr></thead>
-            <tbody id="evidenceBody"><tr><td class="muted" colspan="10">No evidence records available.</td></tr></tbody>
-          </table>
-        </div>
-      </section>
-
       <section class="card" aria-label="Signal discovery">
         <div class="panel-header">
           <div>
-            <h2 class="panel-title">Signal Discovery</h2>
-            <p class="panel-note">Signals are grouped by system, source, and signal name with numeric summaries and state coverage.</p>
+            <h2 class="panel-title">Signal Discovery / Parameter Comparison</h2>
+            <p class="panel-note">Compact signal profiles grouped by system, source, and signal name. Click a signal to open focused time-series drill-down.</p>
           </div>
           <span id="signalsTag" class="panel-tag">0 signals</span>
         </div>
         <div class="panel-body table-wrap">
           <table>
-            <thead><tr><th>System</th><th>Source</th><th>Signal</th><th>Count</th><th>Numeric Count</th><th>Min</th><th>Max</th><th>Avg</th><th>First</th><th>Last</th><th>State Coverage</th></tr></thead>
-            <tbody id="signalsBody"><tr><td class="muted" colspan="11">No signals discovered.</td></tr></tbody>
+            <thead><tr><th>System</th><th>Source</th><th>Signal</th><th>Count</th><th>Numeric Count</th><th>Min</th><th>Max</th><th>Avg</th><th>Current / Last Value</th><th>State Coverage %</th><th>Rule Mapping Status</th><th>Expected Current State</th><th>Warning Range</th><th>Critical Range</th><th>Result</th></tr></thead>
+            <tbody id="signalsBody"><tr><td class="muted" colspan="15">No signals discovered.</td></tr></tbody>
           </table>
         </div>
+      </section>
+
+      <section class="card" aria-label="MachineStates timeline">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">MachineStates Timeline</h2>
+            <p class="panel-note">Consecutive identical states are aggregated into compact colored timeline segments. Full MachineStates rows are not rendered as cards.</p>
+          </div>
+          <span id="timelineTag" class="panel-tag">0 states</span>
+        </div>
+        <div id="timelineBody" class="panel-body"><div class="empty-state">No MachineStates data parsed.</div></div>
+      </section>
+
+      <section id="drilldownSection" class="card" aria-label="Signal drill-down investigation" hidden>
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Signal Drill-Down / Investigation</h2>
+            <p class="panel-note">Focused numeric time-series, selected state-track context, and limited raw evidence for the selected signal.</p>
+          </div>
+          <span id="drilldownTag" class="panel-tag">No signal</span>
+        </div>
+        <div id="drilldownBody" class="panel-body"><div class="empty-state">Click a signal profile to investigate it.</div></div>
+      </section>
+
+      <section class="card" aria-label="Raw evidence">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Raw Evidence</h2>
+            <p class="panel-note">Latest evidence is limited and filterable. Full raw datasets are not rendered.</p>
+          </div>
+          <span id="evidenceTag" class="panel-tag">0 rows</span>
+        </div>
+        <div class="panel-body">
+          <div class="filter-grid" aria-label="Raw evidence filters">
+            <label class="control-label">System <select id="filterSystem"><option value="">All</option></select></label>
+            <label class="control-label">Source <select id="filterSource"><option value="">All</option></select></label>
+            <label class="control-label">Signal <input id="filterSignal" type="search" placeholder="contains..."></label>
+            <label class="control-label">State <input id="filterState" type="search" placeholder="Machine/System state"></label>
+            <label class="control-label">Numeric <select id="filterNumeric"><option value="">All</option><option value="yes">Has numeric value</option><option value="no">No numeric value</option></select></label>
+            <label class="control-label">Alerts <select id="filterAlert"><option value="">All</option><option value="yes">Alert-like only</option></select></label>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Time</th><th>Source</th><th>System</th><th>Component</th><th>Signal</th><th>Value</th><th>Machine State</th><th>System State</th><th>State Context</th><th>Path</th></tr></thead>
+              <tbody id="evidenceBody"><tr><td class="muted" colspan="10">No evidence records available.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-label="Rules placeholder">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Rules Placeholder</h2>
+            <p class="panel-note">If loaded, the sheet named “PANDA Rules Template” is scanned for state-dependent expected-value columns. Confirmed alert evaluation is intentionally not implemented in this stage.</p>
+          </div>
+          <span id="rulesTag" class="panel-tag">Rules optional</span>
+        </div>
+        <div id="rulesBody" class="panel-body"><div class="empty-state">No rules file loaded. Expected values will be evaluated by machine/system state in a later stage.</div></div>
       </section>
 
       <section class="card" aria-label="Diagnostics">
@@ -621,27 +785,6 @@
         </div>
       </section>
 
-      <section class="card" aria-label="MachineStates timeline foundation">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">MachineStates Timeline Foundation</h2>
-            <p class="panel-note">Time-ordered state rows prepared for future Grafana-like signal drill-down overlays and state-dependent expected ranges.</p>
-          </div>
-          <span id="timelineTag" class="panel-tag">0 states</span>
-        </div>
-        <div id="timelineBody" class="panel-body"><div class="empty-state">No MachineStates data parsed.</div></div>
-      </section>
-
-      <section class="card" aria-label="Rules placeholder">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Rules Placeholder</h2>
-            <p class="panel-note">If loaded, the sheet named “PANDA Rules Template” is scanned for state-dependent expected-value columns. Confirmed alert evaluation is intentionally not implemented in this stage.</p>
-          </div>
-          <span id="rulesTag" class="panel-tag">Rules optional</span>
-        </div>
-        <div id="rulesBody" class="panel-body"><div class="empty-state">No rules file loaded. Expected values will be evaluated by machine/system state in a later stage.</div></div>
-      </section>
     </main>
 
     <footer class="status-bar">
@@ -665,6 +808,8 @@
     const ROW_BATCH_SIZE = 1000;
     const UI_YIELD_EVERY_MS = 40;
     const MAX_POINTS_PER_SIGNAL = 5000;
+    const MAX_TIMELINE_SEGMENTS_RENDERED = 500;
+    const MAX_CHART_POINTS_RENDERED = 5000;
 
     const PIPELINE_STATUS = Object.freeze({
       IDLE: 'idle',
@@ -686,6 +831,13 @@
       'Expected Printing', 'Expected PrintEnd', 'Expected Recovery', 'Expected Error'
     ];
     const MACHINE_STATE_SYSTEMS = ['BSS', 'IPS', 'PSS', 'Dryer', 'IPU', 'Ventilation', 'CWS', 'IRD', 'DFES', 'DPS', 'QCS', 'ICS', 'ECS', 'MSPS', 'ITS'];
+    const STATE_TRACKS = ['Machine', ...MACHINE_STATE_SYSTEMS];
+    const STATE_LEGEND = [
+      { label: 'Standby', color: '#8b97a8' }, { label: 'Ready', color: '#44d07b' },
+      { label: 'Prepare2Print', color: '#f7c948' }, { label: 'Printing', color: '#ff5a5f' },
+      { label: 'PrintEnd', color: '#b084f5' }, { label: 'Recovery', color: '#38c8f4' },
+      { label: 'Error', color: '#ff1f3d' }, { label: 'Unknown', color: '#64748b' }
+    ];
 
     const app = {
       autocollectFile: null,
@@ -703,6 +855,11 @@
       evidenceTotal: 0,
       signalDiscovery: [],
       machineStateRows: [],
+      stateSegmentsByTrack: {},
+      selectedStateTrack: 'Machine',
+      selectedStateSegmentIndex: 0,
+      selectedSignalKey: '',
+      evidenceFilters: { system: '', source: '', signal: '', state: '', numeric: '', alert: '' },
       timeSeriesBySignal: {},
       diagnostics: [],
       archiveSummary: null,
@@ -726,6 +883,15 @@
       timelineBody: document.getElementById('timelineBody'),
       rulesBody: document.getElementById('rulesBody'),
       diagnosticsBody: document.getElementById('diagnosticsBody'),
+      drilldownSection: document.getElementById('drilldownSection'),
+      drilldownBody: document.getElementById('drilldownBody'),
+      drilldownTag: document.getElementById('drilldownTag'),
+      filterSystem: document.getElementById('filterSystem'),
+      filterSource: document.getElementById('filterSource'),
+      filterSignal: document.getElementById('filterSignal'),
+      filterState: document.getElementById('filterState'),
+      filterNumeric: document.getElementById('filterNumeric'),
+      filterAlert: document.getElementById('filterAlert'),
       inventoryTag: document.getElementById('inventoryTag'),
       evidenceTag: document.getElementById('evidenceTag'),
       signalsTag: document.getElementById('signalsTag'),
@@ -777,11 +943,17 @@
       app.evidenceTotal = 0;
       app.signalDiscovery = [];
       app.machineStateRows = [];
+      app.stateSegmentsByTrack = {};
+      app.selectedStateTrack = 'Machine';
+      app.selectedStateSegmentIndex = 0;
+      app.selectedSignalKey = '';
+      app.evidenceFilters = { system: '', source: '', signal: '', state: '', numeric: '', alert: '' };
       app.timeSeriesBySignal = {};
       app.diagnostics = [];
       app.archiveSummary = null;
       els.progressBar.style.width = '0%';
       els.scanStage.textContent = 'Waiting for autocollect ZIP.';
+      [els.filterSystem, els.filterSource, els.filterSignal, els.filterState, els.filterNumeric, els.filterAlert].forEach(control => { if (control) control.value = ''; });
       initializePipeline();
       renderAllData();
     }
@@ -844,8 +1016,9 @@
       renderInventory();
       renderEvidence();
       renderSignals();
-      renderDiagnostics();
       renderTimeline();
+      renderDrilldown();
+      renderDiagnostics();
       renderKpis();
       renderPipeline();
     }
@@ -873,13 +1046,15 @@
     }
 
     function renderEvidence() {
+      populateEvidenceFilterOptions();
       els.evidenceTag.textContent = `${app.evidenceTotal.toLocaleString()} rows`;
       if (!app.evidence.length) {
         els.evidenceBody.innerHTML = '<tr><td class="muted" colspan="10">No evidence records available.</td></tr>';
         return;
       }
-      const rows = app.evidence.slice(0, MAX_RENDER_ROWS);
-      els.evidenceBody.innerHTML = `${renderLimitRow(rows.length, app.evidenceTotal, 10)}${rows.map(ev => `
+      const filtered = getFilteredEvidence();
+      const rows = filtered.slice(-MAX_RENDER_ROWS).reverse();
+      els.evidenceBody.innerHTML = `${renderLimitRow(rows.length, filtered.length, 10)}${rows.map(ev => `
         <tr>
           <td>${escapeHtml(ev.timestamp || '')}</td>
           <td>${escapeHtml(ev.sourceType || '')}</td>
@@ -897,12 +1072,14 @@
     function renderSignals() {
       els.signalsTag.textContent = `${app.signalDiscovery.length} signals`;
       if (!app.signalDiscovery.length) {
-        els.signalsBody.innerHTML = '<tr><td class="muted" colspan="11">No signals discovered.</td></tr>';
+        els.signalsBody.innerHTML = '<tr><td class="muted" colspan="15">No signals discovered.</td></tr>';
         return;
       }
       const rows = app.signalDiscovery.slice(0, MAX_RENDER_ROWS);
-      els.signalsBody.innerHTML = `${renderLimitRow(rows.length, app.signalDiscovery.length, 11)}${rows.map(signal => `
-        <tr>
+      els.signalsBody.innerHTML = `${renderLimitRow(rows.length, app.signalDiscovery.length, 15)}${rows.map(signal => {
+        const key = signalKey(signal);
+        return `
+        <tr class="clickable-row" data-signal-key="${escapeHtml(key)}" title="Open drill-down for ${escapeHtml(signal.signal || '')}">
           <td>${escapeHtml(signal.system)}</td>
           <td>${escapeHtml(signal.sourceType)}</td>
           <td>${escapeHtml(signal.signal)}</td>
@@ -911,10 +1088,15 @@
           <td>${formatNumber(signal.min)}</td>
           <td>${formatNumber(signal.max)}</td>
           <td>${formatNumber(signal.avg)}</td>
-          <td>${escapeHtml(signal.firstTimestamp || '')}</td>
-          <td>${escapeHtml(signal.lastTimestamp || '')}</td>
+          <td>${escapeHtml(String(signal.lastValue ?? signal.exampleValue ?? ''))}</td>
           <td>${escapeHtml(String(signal.stateCoveragePercent ?? 0))}%</td>
-        </tr>`).join('')}`;
+          <td>${escapeHtml(ruleStatus(signal))}</td>
+          <td>${escapeHtml(rulePlaceholder(signal, 'expected'))}</td>
+          <td>${escapeHtml(rulePlaceholder(signal, 'warning'))}</td>
+          <td>${escapeHtml(rulePlaceholder(signal, 'critical'))}</td>
+          <td>${escapeHtml(ruleResult(signal))}</td>
+        </tr>`;
+      }).join('')}`;
     }
 
     function renderDiagnostics() {
@@ -950,25 +1132,286 @@
     }
 
     function renderTimeline() {
-      els.timelineTag.textContent = `${app.machineStateRows.length} states`;
+      app.stateSegmentsByTrack = buildSegmentsByTrack(app.machineStateRows);
+      const selectedTrack = STATE_TRACKS.includes(app.selectedStateTrack) ? app.selectedStateTrack : 'Machine';
+      const allSegments = app.stateSegmentsByTrack[selectedTrack] || [];
+      const renderedSegments = downsampleSegments(allSegments, MAX_TIMELINE_SEGMENTS_RENDERED);
+      const selectedSegment = allSegments[app.selectedStateSegmentIndex] || allSegments[0] || null;
+      els.timelineTag.textContent = `${allSegments.length} segments`;
       if (!app.machineStateRows.length) {
         els.timelineBody.innerHTML = '<div class="empty-state">No MachineStates data parsed.</div>';
         return;
       }
-      const rows = app.machineStateRows.slice(0, Math.min(80, MAX_RENDER_ROWS));
-      els.timelineBody.innerHTML = `<p class="render-note">Showing ${rows.length} of ${app.machineStateRows.length} MachineStates rows.</p><div class="timeline-wrap">${rows.map(row => `
-        <article class="state-segment">
-          <div class="state-time">${escapeHtml(row.timestamp || '')}</div>
-          <div class="state-grid">
-            <span>Machine</span><strong>${escapeHtml(row.machineState || '')}</strong>
-            ${MACHINE_STATE_SYSTEMS.map(system => `<span>${escapeHtml(system)}</span><strong>${escapeHtml(row.systemStates?.[system] || '')}</strong>`).join('')}
+      const totalDuration = renderedSegments.reduce((sum, segment) => sum + segmentWidthBasis(segment), 0) || renderedSegments.length || 1;
+      const range = visibleTimeRange(allSegments);
+      els.timelineBody.innerHTML = `
+        <div class="timeline-controls">
+          <label class="control-label">State Track:
+            <select id="stateTrackSelect">${STATE_TRACKS.map(track => `<option value="${escapeHtml(track)}" ${track === selectedTrack ? 'selected' : ''}>${escapeHtml(track)}</option>`).join('')}</select>
+          </label>
+          <span class="metric-pill">Track: ${escapeHtml(selectedTrack)}</span>
+          <span class="metric-pill">Total segments: ${allSegments.length.toLocaleString()}</span>
+          <span class="metric-pill">Visible time range: ${escapeHtml(range)}</span>
+        </div>
+        <div class="timeline-wrap" aria-label="${escapeHtml(selectedTrack)} state timeline">
+          <div class="timeline-bar">
+            ${renderedSegments.map((segment, renderedIndex) => {
+              const originalIndex = segment.originalIndex ?? renderedIndex;
+              const width = Math.max(0.4, (segmentWidthBasis(segment) / totalDuration) * 100);
+              return `<button class="timeline-segment ${originalIndex === app.selectedStateSegmentIndex ? 'is-selected' : ''}" type="button" data-segment-index="${originalIndex}" style="width:${width}%; background:${stateColor(segment.state)}" title="${escapeHtml(segmentTooltip(segment))}">${escapeHtml(segment.state || 'Unknown')}</button>`;
+            }).join('')}
           </div>
-        </article>`).join('')}</div>`;
+        </div>
+        <div class="legend-row">${STATE_LEGEND.map(item => `<span class="legend-item"><span class="legend-swatch" style="background:${item.color}"></span>${escapeHtml(item.label)}</span>`).join('')}</div>
+        <div class="segment-details">
+          ${selectedSegment ? renderSegmentDetails(selectedSegment) : '<div class="empty-state">No segment selected.</div>'}
+        </div>`;
+    }
+
+    function buildSegmentsByTrack(rows) {
+      return STATE_TRACKS.reduce((acc, track) => {
+        acc[track] = buildStateSegments(rows, track);
+        return acc;
+      }, {});
+    }
+
+    function buildStateSegments(machineStatesRows, selectedTrack) {
+      const rows = Array.isArray(machineStatesRows) ? machineStatesRows : [];
+      const segments = [];
+      rows.forEach(row => {
+        const state = normalizeStateValue(selectedTrack === 'Machine' ? row.machineState : row.systemStates?.[selectedTrack]);
+        const timeMs = Number.isFinite(row.timeMs) ? row.timeMs : parseTimeSafe(row.timestamp);
+        const previous = segments[segments.length - 1];
+        if (previous && previous.state === state) {
+          previous.endTimestamp = row.timestamp || previous.endTimestamp;
+          previous.endTimeMs = Number.isFinite(timeMs) ? timeMs : previous.endTimeMs;
+          previous.rowCount += 1;
+          previous.rows.push(row);
+          previous.durationMs = computeDuration(previous.startTimeMs, previous.endTimeMs);
+          return;
+        }
+        segments.push({
+          state,
+          startTimestamp: row.timestamp || '',
+          endTimestamp: row.timestamp || '',
+          startTimeMs: Number.isFinite(timeMs) ? timeMs : NaN,
+          endTimeMs: Number.isFinite(timeMs) ? timeMs : NaN,
+          durationMs: null,
+          rowCount: 1,
+          track: selectedTrack,
+          rows: [row],
+          originalIndex: segments.length
+        });
+      });
+      return segments.map((segment, index) => ({ ...segment, originalIndex: index, durationMs: computeDuration(segment.startTimeMs, segment.endTimeMs) }));
+    }
+
+    function renderSegmentDetails(segment) {
+      const rows = segment.rows.slice(0, MAX_RENDER_ROWS);
+      return `
+        <div class="timeline-meta">
+          <span class="metric-pill">Selected: ${escapeHtml(segment.state)}</span>
+          <span class="metric-pill">Track: ${escapeHtml(segment.track)}</span>
+          <span class="metric-pill">Rows: ${segment.rowCount.toLocaleString()}</span>
+          <span class="metric-pill">Start: ${escapeHtml(segment.startTimestamp || 'Unavailable')}</span>
+          <span class="metric-pill">End: ${escapeHtml(segment.endTimestamp || 'Unavailable')}</span>
+          <span class="metric-pill">Duration: ${escapeHtml(formatDuration(segment.durationMs))}</span>
+        </div>
+        <p class="render-note">Showing selected segment rows only. Full MachineStates data is summarized in the timeline.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Machine</th>${MACHINE_STATE_SYSTEMS.map(system => `<th>${escapeHtml(system)}</th>`).join('')}</tr></thead>
+            <tbody>${renderLimitRow(rows.length, segment.rows.length, MACHINE_STATE_SYSTEMS.length + 2)}${rows.map(row => `<tr><td>${escapeHtml(row.timestamp || '')}</td><td>${escapeHtml(row.machineState || '')}</td>${MACHINE_STATE_SYSTEMS.map(system => `<td>${escapeHtml(row.systemStates?.[system] || '')}</td>`).join('')}</tr>`).join('')}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function downsampleSegments(segments, maxSegments) {
+      if (segments.length <= maxSegments) return segments;
+      const step = segments.length / maxSegments;
+      const sampled = [];
+      for (let i = 0; i < maxSegments; i += 1) sampled.push(segments[Math.floor(i * step)]);
+      return sampled;
+    }
+
+    function segmentWidthBasis(segment) {
+      return Number.isFinite(segment.durationMs) && segment.durationMs > 0 ? segment.durationMs : Math.max(1, segment.rowCount);
+    }
+
+    function computeDuration(start, end) {
+      return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : null;
+    }
+
+    function normalizeStateValue(value) {
+      const text = String(value ?? '').trim();
+      return text || 'Unknown';
+    }
+
+    function parseTimeSafe(value) {
+      const parsed = Date.parse(value);
+      return Number.isFinite(parsed) ? parsed : NaN;
+    }
+
+    function visibleTimeRange(segments) {
+      if (!segments.length) return 'Unavailable';
+      const first = segments[0].startTimestamp || 'Unavailable';
+      const last = segments[segments.length - 1].endTimestamp || 'Unavailable';
+      return `${first} → ${last}`;
+    }
+
+    function formatDuration(ms) {
+      if (!Number.isFinite(ms)) return 'Unavailable';
+      if (ms < 1000) return `${ms} ms`;
+      const seconds = Math.round(ms / 1000);
+      if (seconds < 60) return `${seconds}s`;
+      const minutes = Math.floor(seconds / 60);
+      const remaining = seconds % 60;
+      if (minutes < 60) return `${minutes}m ${remaining}s`;
+      const hours = Math.floor(minutes / 60);
+      return `${hours}h ${minutes % 60}m`;
+    }
+
+    function segmentTooltip(segment) {
+      return `${segment.track}: ${segment.state}\n${segment.startTimestamp || 'Unavailable'} → ${segment.endTimestamp || 'Unavailable'}\nRows: ${segment.rowCount}\nDuration: ${formatDuration(segment.durationMs)}`;
+    }
+
+    function stateColor(state) {
+      const normalized = String(state || '').toLowerCase();
+      if (normalized.includes('prepare2print')) return '#f7c948';
+      if (normalized.includes('printend')) return '#b084f5';
+      if (normalized.includes('printing')) return '#ff5a5f';
+      if (normalized.includes('standby')) return '#8b97a8';
+      if (normalized.includes('ready')) return '#44d07b';
+      if (normalized.includes('recovery')) return '#38c8f4';
+      if (normalized.includes('error') || normalized.includes('fault')) return '#ff1f3d';
+      return '#64748b';
+    }
+
+    function signalKey(signal) {
+      return [signal.system || '', signal.sourceType || '', signal.signal || ''].join('||');
+    }
+
+    function ruleStatus() { return app.rulesSummary ? 'Needs validation' : 'No rule'; }
+    function rulePlaceholder() { return app.rulesSummary ? 'Not evaluated' : '—'; }
+    function ruleResult() { return app.rulesSummary ? 'Needs validation' : 'No rule'; }
+
+    function getFilteredEvidence() {
+      const filters = app.evidenceFilters;
+      return app.evidence.filter(ev => {
+        if (filters.system && ev.system !== filters.system) return false;
+        if (filters.source && ev.sourceType !== filters.source) return false;
+        if (filters.signal && !String(ev.signal || '').toLowerCase().includes(filters.signal.toLowerCase())) return false;
+        if (filters.state) {
+          const stateText = `${ev.machineState || ''} ${ev.systemState || ''}`.toLowerCase();
+          if (!stateText.includes(filters.state.toLowerCase())) return false;
+        }
+        if (filters.numeric === 'yes' && toNumberClient(ev.value) === null) return false;
+        if (filters.numeric === 'no' && toNumberClient(ev.value) !== null) return false;
+        if (filters.alert === 'yes' && !ev.isAlertLike) return false;
+        return true;
+      });
+    }
+
+    function populateEvidenceFilterOptions() {
+      updateSelectOptions(els.filterSystem, uniqueValues(app.evidence.map(ev => ev.system)), app.evidenceFilters.system);
+      updateSelectOptions(els.filterSource, uniqueValues(app.evidence.map(ev => ev.sourceType)), app.evidenceFilters.source);
+    }
+
+    function uniqueValues(values) {
+      return Array.from(new Set(values.filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b)));
+    }
+
+    function updateSelectOptions(select, values, selected) {
+      if (!select) return;
+      const current = select.value || selected || '';
+      select.innerHTML = `<option value="">All</option>${values.map(value => `<option value="${escapeHtml(value)}" ${value === current ? 'selected' : ''}>${escapeHtml(value)}</option>`).join('')}`;
+    }
+
+    function toNumberClient(value) {
+      const cleaned = String(value ?? '').replace(/,/g, '').trim();
+      if (!cleaned) return null;
+      const parsed = Number(cleaned);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function renderDrilldown() {
+      if (!app.selectedSignalKey) {
+        els.drilldownSection.hidden = true;
+        return;
+      }
+      els.drilldownSection.hidden = false;
+      const profile = app.signalDiscovery.find(item => signalKey(item) === app.selectedSignalKey);
+      const series = app.timeSeriesBySignal[app.selectedSignalKey];
+      if (!profile) {
+        els.drilldownBody.innerHTML = '<div class="empty-state">Selected signal is no longer available.</div>';
+        return;
+      }
+      els.drilldownTag.textContent = profile.signal || 'Selected signal';
+      const points = series?.points || [];
+      const chartData = downsamplePoints(points, MAX_CHART_POINTS_RENDERED);
+      const evidenceRows = app.evidence.filter(ev => signalKey(ev) === app.selectedSignalKey).slice(-MAX_RENDER_ROWS).reverse();
+      const downsampled = points.length > chartData.length;
+      els.drilldownBody.innerHTML = `
+        <div class="drilldown-metrics">
+          <span class="metric-pill">Signal: ${escapeHtml(profile.signal || '')}</span>
+          <span class="metric-pill">System: ${escapeHtml(profile.system || '')}</span>
+          <span class="metric-pill">Source: ${escapeHtml(profile.sourceType || '')}</span>
+          <span class="metric-pill">Count: ${escapeHtml(String(profile.count || 0))}</span>
+          <span class="metric-pill">Min: ${formatNumber(profile.min)}</span>
+          <span class="metric-pill">Max: ${formatNumber(profile.max)}</span>
+          <span class="metric-pill">Avg: ${formatNumber(profile.avg)}</span>
+          <span class="metric-pill">First: ${escapeHtml(profile.firstTimestamp || '')}</span>
+          <span class="metric-pill">Last: ${escapeHtml(profile.lastTimestamp || '')}</span>
+        </div>
+        ${downsampled ? '<p class="render-note">Chart is downsampled for performance.</p>' : ''}
+        <div class="chart-wrap">${renderSvgChart(chartData, profile)}${renderStateStripForChart()}</div>
+        <h3 class="panel-title" style="font-size:16px;margin-top:18px;">Evidence for selected signal</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Value</th><th>Machine State</th><th>System State</th><th>Source</th><th>Raw Preview</th></tr></thead>
+            <tbody>${renderLimitRow(evidenceRows.length, app.evidence.filter(ev => signalKey(ev) === app.selectedSignalKey).length, 6)}${evidenceRows.map(ev => `<tr><td>${escapeHtml(ev.timestamp || '')}</td><td>${escapeHtml(String(ev.value ?? ''))}</td><td>${escapeHtml(ev.machineState || '')}</td><td>${escapeHtml(ev.systemState || '')}</td><td class="path-cell">${escapeHtml(ev.sourceFileId || '')}</td><td class="path-cell">${escapeHtml(ev.rawPreview || '')}</td></tr>`).join('') || '<tr><td class="muted" colspan="6">No stored evidence rows for this signal.</td></tr>'}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function downsamplePoints(points, maxPoints) {
+      if (points.length <= maxPoints) return points;
+      const step = points.length / maxPoints;
+      const sampled = [];
+      for (let i = 0; i < maxPoints; i += 1) sampled.push(points[Math.floor(i * step)]);
+      return sampled;
+    }
+
+    function renderSvgChart(points, profile) {
+      const width = 900, height = 260, pad = 36;
+      if (!points.length) return '<div class="empty-state">No numeric time-series points stored for this signal.</div>';
+      const values = points.map(p => Number(p.value)).filter(Number.isFinite);
+      const min = Math.min(...values), max = Math.max(...values);
+      const ySpan = max === min ? 1 : max - min;
+      const xFor = index => pad + (index / Math.max(1, points.length - 1)) * (width - pad * 2);
+      const yFor = value => height - pad - ((value - min) / ySpan) * (height - pad * 2);
+      const path = points.map((point, index) => `${index ? 'L' : 'M'} ${xFor(index).toFixed(1)} ${yFor(Number(point.value)).toFixed(1)}`).join(' ');
+      return `<svg class="signal-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(profile.signal || 'Signal')} numeric value chart">
+        <rect x="0" y="0" width="${width}" height="${height}" rx="14" fill="#081019"></rect>
+        <line x1="${pad}" y1="${height-pad}" x2="${width-pad}" y2="${height-pad}" stroke="#263443"></line>
+        <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height-pad}" stroke="#263443"></line>
+        <text x="${pad}" y="22" fill="#9fb0c3" font-size="12">max ${formatNumber(max)}</text>
+        <text x="${pad}" y="${height-8}" fill="#9fb0c3" font-size="12">min ${formatNumber(min)}</text>
+        <text x="${width-pad-180}" y="${height-8}" fill="#9fb0c3" font-size="12">${escapeHtml(points[points.length - 1]?.timestamp || '')}</text>
+        <path d="${path}" fill="none" stroke="#38c8f4" stroke-width="2.5"></path>
+      </svg>`;
+    }
+
+    function renderStateStripForChart() {
+      const segments = app.stateSegmentsByTrack[app.selectedStateTrack] || [];
+      if (!segments.length) return '<div class="state-strip" title="No state context"></div>';
+      const total = segments.reduce((sum, segment) => sum + segmentWidthBasis(segment), 0) || 1;
+      return `<div class="state-strip" title="${escapeHtml(app.selectedStateTrack)} state changes">${segments.slice(0, MAX_TIMELINE_SEGMENTS_RENDERED).map(segment => `<span style="width:${Math.max(0.3, (segmentWidthBasis(segment) / total) * 100)}%; background:${stateColor(segment.state)}" title="${escapeHtml(segmentTooltip(segment))}"></span>`).join('')}</div>`;
     }
 
     function renderLimitRow(showing, total, colspan) {
       if (total <= showing) return '';
-      return `<tr><td class="muted" colspan="${colspan}">Showing ${showing} of ${total.toLocaleString()} rows. Full data is summarized in signal profiles.</td></tr>`;
+      return `<tr><td class="muted" colspan="${colspan}">Showing ${showing} of ${total.toLocaleString()} rows. Full data is summarized or available through focused views.</td></tr>`;
     }
 
     function renderKpis() {
@@ -985,6 +1428,45 @@
       el.textContent = value;
       el.classList.toggle('muted', value === 'No data');
     }
+
+    els.signalsBody.addEventListener('click', event => {
+      const row = event.target.closest('[data-signal-key]');
+      if (!row) return;
+      app.selectedSignalKey = row.dataset.signalKey || '';
+      renderDrilldown();
+      els.drilldownSection.hidden = false;
+      els.drilldownSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    els.timelineBody.addEventListener('change', event => {
+      if (event.target.id !== 'stateTrackSelect') return;
+      app.selectedStateTrack = event.target.value || 'Machine';
+      app.selectedStateSegmentIndex = 0;
+      renderTimeline();
+      renderDrilldown();
+    });
+
+    els.timelineBody.addEventListener('click', event => {
+      const segment = event.target.closest('[data-segment-index]');
+      if (!segment) return;
+      app.selectedStateSegmentIndex = Number(segment.dataset.segmentIndex || 0);
+      renderTimeline();
+      renderDrilldown();
+    });
+
+    [els.filterSystem, els.filterSource, els.filterSignal, els.filterState, els.filterNumeric, els.filterAlert].forEach(control => {
+      control?.addEventListener('input', () => {
+        app.evidenceFilters = {
+          system: els.filterSystem.value,
+          source: els.filterSource.value,
+          signal: els.filterSignal.value.trim(),
+          state: els.filterState.value.trim(),
+          numeric: els.filterNumeric.value,
+          alert: els.filterAlert.value
+        };
+        renderEvidence();
+      });
+    });
 
     els.zipInput.addEventListener('change', () => {
       app.autocollectFile = els.zipInput.files[0] || null;
@@ -1468,16 +1950,16 @@
           ctx.evidenceTotal += 1;
           updateSignalProfile(evidence);
           updateTimeSeries(evidence);
-          if (ctx.evidencePreview.length < Math.min(MAX_RENDER_ROWS, MAX_EVIDENCE_ROWS_STORED)) ctx.evidencePreview.push(evidence);
-          else if (ctx.evidencePreview.length < MAX_EVIDENCE_ROWS_STORED && ctx.evidenceTotal <= MAX_EVIDENCE_ROWS_STORED) ctx.evidencePreview.push(evidence);
-          else if (ctx.evidenceTotal === MAX_EVIDENCE_ROWS_STORED + 1) addDiagnostic('warning', 'CSV/TXT parsing', '', 'detailed evidence storage cap reached', 'Stored preview is capped at ' + MAX_EVIDENCE_ROWS_STORED + ' compact evidence rows; signal profiles continue streaming.');
+          ctx.evidencePreview.push(evidence);
+          if (ctx.evidencePreview.length > MAX_EVIDENCE_ROWS_STORED) ctx.evidencePreview.shift();
+          if (ctx.evidenceTotal === MAX_EVIDENCE_ROWS_STORED + 1) addDiagnostic('warning', 'CSV/TXT parsing', '', 'detailed evidence storage cap reached', 'Stored raw evidence is capped at the latest ' + MAX_EVIDENCE_ROWS_STORED + ' compact rows; signal profiles continue streaming.');
         }
 
         function updateSignalProfile(ev) {
           const key = [ev.system, ev.sourceType, ev.signal].join('||');
           let profile = ctx.profiles.get(key);
           if (!profile) {
-            profile = { system: ev.system, sourceType: ev.sourceType, signal: ev.signal, count: 0, numericCount: 0, min: null, max: null, sum: 0, avg: null, firstTimestamp: ev.timestamp, lastTimestamp: ev.timestamp, exampleValue: ev.value, exampleRawPreview: ev.rawPreview, stateCoverageCount: 0, stateCoveragePercent: 0 };
+            profile = { system: ev.system, sourceType: ev.sourceType, signal: ev.signal, count: 0, numericCount: 0, min: null, max: null, sum: 0, avg: null, firstTimestamp: ev.timestamp, lastTimestamp: ev.timestamp, lastValue: ev.value, exampleValue: ev.value, exampleRawPreview: ev.rawPreview, stateCoverageCount: 0, stateCoveragePercent: 0, ruleMappingStatus: 'No rule' };
             ctx.profiles.set(key, profile);
           }
           profile.count += 1;
@@ -1489,7 +1971,7 @@
             profile.avg = profile.sum / profile.numericCount;
           }
           if (!profile.firstTimestamp || compareTimestamp(ev.timestamp, profile.firstTimestamp) < 0) profile.firstTimestamp = ev.timestamp;
-          if (!profile.lastTimestamp || compareTimestamp(ev.timestamp, profile.lastTimestamp) > 0) profile.lastTimestamp = ev.timestamp;
+          if (!profile.lastTimestamp || compareTimestamp(ev.timestamp, profile.lastTimestamp) > 0) { profile.lastTimestamp = ev.timestamp; profile.lastValue = ev.value; }
           if (ev.stateContextStatus === 'matched' || ev.stateContextStatus === 'inferred') profile.stateCoverageCount += 1;
           profile.stateCoveragePercent = Math.round((profile.stateCoverageCount / profile.count) * 100);
         }
@@ -1502,7 +1984,7 @@
           series.totalCount += 1;
           series.min = Math.min(series.min, ev.numericValue);
           series.max = Math.max(series.max, ev.numericValue);
-          const point = { timestamp: ev.timestamp, value: ev.numericValue };
+          const point = { timestamp: ev.timestamp, value: ev.numericValue, machineState: ev.machineState, systemState: ev.systemState, sourceFileId: ev.sourceFileId, rawPreview: ev.rawPreview };
           if (series.points.length < MAX_POINTS_PER_SIGNAL) series.points.push(point);
           else {
             series.points[series.points.length - 1] = point;
@@ -1679,7 +2161,7 @@
           sendProgress();
         }
         function sendProgress() { self.postMessage({ type: 'progress', progress: ctx.progress, pipeline: ctx.pipeline }); }
-        function sendPartial() { const signalProfiles = finalizeProfiles().slice(0, MAX_RENDER_ROWS); const machineStatesPreview = ctx.machineStateRows.slice(0, MAX_RENDER_ROWS); self.postMessage({ type: 'partialSummary', focusedFiles: ctx.inventory, inventory: ctx.inventory, evidencePreview: ctx.evidencePreview.slice(0, MAX_RENDER_ROWS), evidenceTotal: ctx.evidenceTotal, signalProfiles, machineStatesPreview, machineStateRows: machineStatesPreview, counts: { focusedFilesParsed: ctx.inventory.length, evidenceRecords: ctx.evidenceTotal, signalsDiscovered: signalProfiles.length, machineStateRows: ctx.machineStateRows.length }, diagnostics: ctx.diagnostics, pipeline: ctx.pipeline }); }
+        function sendPartial() { const signalProfiles = finalizeProfiles().slice(0, MAX_RENDER_ROWS); const machineStatesPreview = ctx.machineStateRows.slice(0, MAX_RENDER_ROWS); self.postMessage({ type: 'partialSummary', focusedFiles: ctx.inventory, inventory: ctx.inventory, evidencePreview: ctx.evidencePreview.slice(-MAX_RENDER_ROWS), evidenceTotal: ctx.evidenceTotal, signalProfiles, machineStatesPreview, machineStateRows: machineStatesPreview, counts: { focusedFilesParsed: ctx.inventory.length, evidenceRecords: ctx.evidenceTotal, signalsDiscovered: signalProfiles.length, machineStateRows: ctx.machineStateRows.length }, diagnostics: ctx.diagnostics, pipeline: ctx.pipeline }); }
         async function yieldIfNeeded(force = false) { const now = Date.now(); if (force || now - ctx.lastUi >= UI_YIELD_EVERY_MS) { ctx.lastUi = now; await new Promise(resolve => setTimeout(resolve, 0)); } }
         function addDiagnostic(level, stage, filePath, message, technicalDetails) { ctx.diagnostics.push({ level, stage, filePath, message, technicalDetails }); }
         function countDiagnostics(level) { return ctx.diagnostics.filter(item => item.level === level).length; }
