@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PANDA Tool</title>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root {
       color-scheme: dark;
@@ -18,20 +20,18 @@
       --text-faint: #748498;
       --accent: #38c8f4;
       --accent-soft: rgba(56, 200, 244, 0.12);
+      --success: #44d07b;
+      --warning: #f7c948;
+      --danger: #ff6b6b;
       --shadow: 0 20px 54px rgba(0, 0, 0, 0.28);
       --radius-lg: 20px;
       --radius-md: 14px;
       --radius-sm: 10px;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
-    html {
-      min-height: 100%;
-      background: var(--bg);
-    }
+    html { min-height: 100%; background: var(--bg); }
 
     body {
       min-height: 100vh;
@@ -43,8 +43,25 @@
         linear-gradient(180deg, #0b1118 0%, #081019 100%);
     }
 
+    button, input { font: inherit; }
+
     button {
-      font: inherit;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 10px 15px;
+      color: var(--text);
+      background: var(--surface-soft);
+      cursor: pointer;
+    }
+
+    button.primary {
+      border-color: rgba(56, 200, 244, 0.62);
+      background: var(--accent-soft);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.52;
     }
 
     .app-shell {
@@ -62,10 +79,6 @@
       border-bottom: 1px solid var(--border-soft);
       background: rgba(8, 16, 25, 0.88);
       backdrop-filter: blur(16px);
-    }
-
-    .brand-block {
-      min-width: 0;
     }
 
     .eyebrow {
@@ -111,6 +124,10 @@
       background: var(--text-faint);
     }
 
+    .status-indicator.ready { background: var(--success); }
+    .status-indicator.active { background: var(--accent); }
+    .status-indicator.failed { background: var(--danger); }
+
     .primary-nav {
       display: flex;
       gap: 8px;
@@ -122,8 +139,6 @@
 
     .nav-item {
       border: 1px solid transparent;
-      border-radius: 999px;
-      padding: 10px 15px;
       color: var(--text-muted);
       background: transparent;
       cursor: default;
@@ -142,17 +157,17 @@
       padding: 24px 32px 26px;
     }
 
-    .kpi-row {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 14px;
-    }
-
     .card {
       border: 1px solid var(--border-soft);
       border-radius: var(--radius-lg);
       background: linear-gradient(180deg, rgba(21, 31, 43, 0.96), rgba(13, 21, 31, 0.96));
       box-shadow: var(--shadow);
+    }
+
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
     }
 
     .kpi-card {
@@ -172,23 +187,13 @@
       text-transform: uppercase;
     }
 
-    .empty-value {
-      color: var(--text-faint);
-      font-size: 15px;
-      font-weight: 600;
+    .kpi-value {
+      color: var(--text);
+      font-size: 25px;
+      font-weight: 700;
     }
 
-    .dashboard-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 360px;
-      gap: 18px;
-      align-items: stretch;
-    }
-
-    .main-panel,
-    .issue-panel {
-      min-height: 470px;
-    }
+    .kpi-value.muted { color: var(--text-faint); font-size: 15px; }
 
     .panel-header {
       display: flex;
@@ -222,82 +227,181 @@
       text-transform: uppercase;
     }
 
-    .empty-stage {
-      min-height: 325px;
-      margin: 24px;
-      border: 1px dashed var(--border);
-      border-radius: var(--radius-md);
-      display: grid;
-      place-items: center;
-      padding: 28px;
-      background:
-        linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px),
-        rgba(8, 15, 23, 0.52);
-      background-size: 28px 28px;
-      text-align: center;
+    .control-panel { padding-bottom: 22px; }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 24px 0;
     }
 
-    .empty-message {
-      max-width: 520px;
+    .file-picker {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 9px 14px;
+      color: var(--text);
+      background: var(--surface-muted);
+      cursor: pointer;
     }
 
-    .empty-message strong {
-      display: block;
-      margin-bottom: 8px;
-      font-size: 18px;
+    .file-picker input { display: none; }
+
+    .file-name { color: var(--text-muted); font-size: 13px; }
+
+    .progress-wrap {
+      padding: 18px 24px 0;
     }
 
-    .empty-message span {
+    .progress-track {
+      height: 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(6, 12, 19, 0.75);
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #1ea7d6, #44d07b);
+      transition: width 180ms ease;
+    }
+
+    .scan-stage {
+      margin: 8px 0 0;
       color: var(--text-muted);
-      line-height: 1.55;
+      font-size: 13px;
     }
 
-    .issue-panel {
+    .pipeline-grid {
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      padding: 20px 24px 24px;
     }
 
-    .issue-empty {
-      margin: 24px;
-      padding: 22px;
-      border: 1px dashed var(--border);
-      border-radius: var(--radius-md);
-      color: var(--text-muted);
+    .pipeline-step {
+      border: 1px solid var(--border);
+      border-left-width: 4px;
+      border-radius: var(--radius-sm);
+      padding: 12px;
       background: rgba(8, 15, 23, 0.52);
-      line-height: 1.55;
     }
 
-    .bottom-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 18px;
+    .pipeline-step.waiting { border-left-color: var(--text-faint); }
+    .pipeline-step.active { border-left-color: var(--accent); box-shadow: 0 0 0 1px rgba(56, 200, 244, 0.18); }
+    .pipeline-step.done { border-left-color: var(--success); }
+    .pipeline-step.warning { border-left-color: var(--warning); }
+    .pipeline-step.failed { border-left-color: var(--danger); }
+
+    .step-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+      font-weight: 700;
     }
 
-    .bottom-panel {
-      min-height: 178px;
-      padding: 20px;
-    }
-
-    .bottom-panel h3 {
-      margin: 0 0 10px;
-      font-size: 15px;
-      letter-spacing: 0.06em;
+    .step-status {
+      color: var(--text-faint);
+      font-size: 11px;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
     }
 
-    .bottom-panel p {
-      margin: 0;
-      color: var(--text-muted);
-      line-height: 1.5;
+    .step-count {
+      color: var(--accent);
+      font-size: 12px;
     }
 
-    .placeholder-line {
-      height: 42px;
-      margin-top: 18px;
+    .step-message {
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .panel-body { padding: 18px 24px 24px; }
+
+    .table-wrap {
+      max-height: 360px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: rgba(8, 15, 23, 0.52);
+    }
+
+    table {
+      width: 100%;
+      min-width: 980px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-soft);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      color: var(--text-muted);
+      background: #101925;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    td { color: var(--text); }
+    td.muted, .muted { color: var(--text-faint); }
+
+    .path-cell {
+      max-width: 420px;
+      overflow-wrap: anywhere;
+      color: var(--text-muted);
+    }
+
+    .timeline-wrap {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 8px;
+    }
+
+    .state-segment {
+      min-width: 260px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      background: rgba(8, 15, 23, 0.52);
+    }
+
+    .state-time { font-weight: 700; margin-bottom: 8px; }
+
+    .state-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 5px 12px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .empty-state {
       border: 1px dashed var(--border);
-      border-radius: var(--radius-sm);
-      background: rgba(255, 255, 255, 0.025);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      color: var(--text-muted);
+      background: rgba(8, 15, 23, 0.52);
+      text-align: center;
     }
 
     .status-bar {
@@ -313,69 +417,22 @@
       font-size: 12px;
     }
 
-    .status-group {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      min-width: 0;
-    }
+    .status-group { display: flex; align-items: center; gap: 16px; min-width: 0; }
 
     @media (max-width: 1180px) {
-      .kpi-row {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-
-      .dashboard-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .main-panel,
-      .issue-panel {
-        min-height: auto;
-      }
+      .kpi-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .pipeline-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @media (max-width: 820px) {
-      .app-header,
-      .workspace,
-      .primary-nav,
-      .status-bar {
-        padding-left: 18px;
-        padding-right: 18px;
-      }
-
-      .app-header {
-        grid-template-columns: 1fr;
-      }
-
-      .header-status {
-        justify-self: start;
-      }
-
-      .kpi-row,
-      .bottom-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .panel-header {
-        display: block;
-      }
-
-      .panel-tag {
-        display: inline-flex;
-        margin-top: 14px;
-      }
-
-      .status-bar {
-        align-items: flex-start;
-        flex-direction: column;
-        padding-top: 12px;
-        padding-bottom: 12px;
-      }
-
-      .status-group {
-        flex-wrap: wrap;
-      }
+      .app-header, .workspace, .primary-nav, .status-bar { padding-left: 18px; padding-right: 18px; }
+      .app-header { grid-template-columns: 1fr; }
+      .header-status { justify-self: start; }
+      .kpi-row, .pipeline-grid { grid-template-columns: 1fr; }
+      .panel-header { display: block; }
+      .panel-tag { display: inline-flex; margin-top: 14px; }
+      .status-bar { align-items: flex-start; flex-direction: column; padding-top: 12px; padding-bottom: 12px; }
+      .status-group { flex-wrap: wrap; }
     }
   </style>
 </head>
@@ -388,8 +445,8 @@
         <p class="product-subtitle">Proactive Analyzer Notification DA</p>
       </div>
       <div class="header-status" aria-label="Application data status">
-        <span class="status-indicator" aria-hidden="true"></span>
-        <span>No data loaded</span>
+        <span id="statusIndicator" class="status-indicator" aria-hidden="true"></span>
+        <span id="headerStatusText">No data loaded</span>
       </div>
     </header>
 
@@ -405,74 +462,133 @@
     <main class="workspace">
       <section class="kpi-row" aria-label="Service radar KPI placeholders">
         <article class="card kpi-card">
-          <p class="kpi-label">Machines scanned</p>
-          <span class="empty-value">No data</span>
+          <p class="kpi-label">Focused files parsed</p>
+          <span id="kpiFiles" class="kpi-value muted">No data</span>
         </article>
         <article class="card kpi-card">
-          <p class="kpi-label">Log files parsed</p>
-          <span class="empty-value">No data</span>
+          <p class="kpi-label">Evidence records</p>
+          <span id="kpiEvidence" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Signals discovered</p>
+          <span id="kpiSignals" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Machine state rows</p>
+          <span id="kpiStates" class="kpi-value muted">No data</span>
         </article>
         <article class="card kpi-card">
           <p class="kpi-label">Rules loaded</p>
-          <span class="empty-value">Rules required</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Real alerts</p>
-          <span class="empty-value">Pending</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Needs validation</p>
-          <span class="empty-value">Pending</span>
+          <span id="kpiRules" class="kpi-value muted">Rules optional</span>
         </article>
       </section>
 
-      <section class="dashboard-grid" aria-label="Main service radar dashboard">
-        <article class="card main-panel">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-title">Machine / System Overview</h2>
-              <p class="panel-note">This area will show evidence-based machine and system status after real logs and rules are loaded in later stages.</p>
-            </div>
-            <span class="panel-tag">No data</span>
+      <section class="card control-panel" aria-label="Data upload controls">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Data / Log Upload Pipeline</h2>
+            <p class="panel-note">Load a Landa autocollect ZIP, then analyze focused log sources only. Rules loading is a placeholder for later state-dependent evaluation.</p>
           </div>
-          <div class="empty-stage" role="status" aria-live="polite">
-            <div class="empty-message">
-              <strong>Service radar awaiting input</strong>
-              <span>No machine systems, alerts, or health indicators are shown until they can be derived from uploaded operational data.</span>
-            </div>
-          </div>
-        </article>
-
-        <aside class="card issue-panel" aria-label="Selected issue details">
-          <div class="panel-header">
-            <div>
-              <h2 class="panel-title">Selected Issue</h2>
-              <p class="panel-note">Evidence and service context will appear here only after a real finding exists.</p>
-            </div>
-            <span class="panel-tag">Pending</span>
-          </div>
-          <div class="issue-empty">
-            No active finding selected. Confirmed alerts and recommended service actions require parsed logs and uploaded rules.
-          </div>
-        </aside>
+          <span id="modeTag" class="panel-tag">Waiting</span>
+        </div>
+        <div class="controls">
+          <label class="file-picker">
+            <span>Load autocollect ZIP</span>
+            <input id="zipInput" type="file" accept=".zip,application/zip,application/x-zip-compressed">
+          </label>
+          <span id="zipFileName" class="file-name">No ZIP selected</span>
+          <label class="file-picker">
+            <span>Load Rules</span>
+            <input id="rulesInput" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+          </label>
+          <span id="rulesFileName" class="file-name">No rules file selected</span>
+          <button id="analyzeButton" class="primary" type="button" disabled>Analyze</button>
+        </div>
+        <div class="progress-wrap" aria-label="Scan progress">
+          <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+          <p id="scanStage" class="scan-stage">Waiting for autocollect ZIP.</p>
+        </div>
       </section>
 
-      <section class="bottom-grid" aria-label="Supporting analysis placeholders">
-        <article class="card bottom-panel">
-          <h3>State Machine Timeline</h3>
-          <p>No MachineStates data parsed.</p>
-          <div class="placeholder-line" aria-hidden="true"></div>
-        </article>
-        <article class="card bottom-panel">
-          <h3>Evidence Log</h3>
-          <p>No evidence records available.</p>
-          <div class="placeholder-line" aria-hidden="true"></div>
-        </article>
-        <article class="card bottom-panel">
-          <h3>Recommended Service Action</h3>
-          <p>No recommendation available. Rules and supporting evidence are required.</p>
-          <div class="placeholder-line" aria-hidden="true"></div>
-        </article>
+      <section class="card" aria-label="Log extraction pipeline">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Log Extraction Pipeline</h2>
+            <p class="panel-note">Each stage reports waiting, active, done, warning, or failed with focused counts where relevant.</p>
+          </div>
+          <span id="pipelineTag" class="panel-tag">Not started</span>
+        </div>
+        <div id="pipelineGrid" class="pipeline-grid"></div>
+      </section>
+
+      <section class="card" aria-label="File inventory">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">File Inventory</h2>
+            <p class="panel-note">Focused parsed files only: FECNotifications, BSS, IPS, MachineStates, and AlertsMonitoring.</p>
+          </div>
+          <span id="inventoryTag" class="panel-tag">0 files</span>
+        </div>
+        <div class="panel-body table-wrap">
+          <table>
+            <thead><tr><th>Source</th><th>Group</th><th>File type</th><th>Rows</th><th>Status</th><th>Path</th></tr></thead>
+            <tbody id="inventoryBody"><tr><td class="muted" colspan="6">No focused files parsed.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" aria-label="Parsed evidence preview">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Parsed Evidence Preview</h2>
+            <p class="panel-note">Normalized values and events with MachineStates context attached where available. No fake alerts are generated.</p>
+          </div>
+          <span id="evidenceTag" class="panel-tag">0 rows</span>
+        </div>
+        <div class="panel-body table-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Source</th><th>System</th><th>Component</th><th>Signal</th><th>Value</th><th>Machine State</th><th>System State</th><th>State Context</th><th>Path</th></tr></thead>
+            <tbody id="evidenceBody"><tr><td class="muted" colspan="10">No evidence records available.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" aria-label="Signal discovery">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Signal Discovery</h2>
+            <p class="panel-note">Signals are grouped by system, source, and signal name with numeric summaries and state coverage.</p>
+          </div>
+          <span id="signalsTag" class="panel-tag">0 signals</span>
+        </div>
+        <div class="panel-body table-wrap">
+          <table>
+            <thead><tr><th>System</th><th>Source</th><th>Signal</th><th>Count</th><th>Numeric Count</th><th>Min</th><th>Max</th><th>Avg</th><th>First</th><th>Last</th><th>State Coverage</th></tr></thead>
+            <tbody id="signalsBody"><tr><td class="muted" colspan="11">No signals discovered.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" aria-label="MachineStates timeline foundation">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">MachineStates Timeline Foundation</h2>
+            <p class="panel-note">Time-ordered state rows prepared for future Grafana-like signal drill-down overlays and state-dependent expected ranges.</p>
+          </div>
+          <span id="timelineTag" class="panel-tag">0 states</span>
+        </div>
+        <div id="timelineBody" class="panel-body"><div class="empty-state">No MachineStates data parsed.</div></div>
+      </section>
+
+      <section class="card" aria-label="Rules placeholder">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Rules Placeholder</h2>
+            <p class="panel-note">If loaded, the sheet named “PANDA Rules Template” is scanned for state-dependent expected-value columns. Confirmed alert evaluation is intentionally not implemented in this stage.</p>
+          </div>
+          <span id="rulesTag" class="panel-tag">Rules optional</span>
+        </div>
+        <div id="rulesBody" class="panel-body"><div class="empty-state">No rules file loaded. Expected values will be evaluated by machine/system state in a later stage.</div></div>
       </section>
     </main>
 
@@ -482,11 +598,909 @@
         <span>Static browser foundation</span>
       </div>
       <div class="status-group" aria-label="Data readiness summary">
-        <span>Logs: No data</span>
-        <span>Rules: Rules required</span>
-        <span>Mode: Pending</span>
+        <span id="footerLogs">Logs: No data</span>
+        <span id="footerRules">Rules: Optional placeholder</span>
+        <span id="footerMode">Mode: Pending</span>
       </div>
     </footer>
   </div>
+
+  <script>
+    const PIPELINE_STEPS = [
+      ['waitingZip', 'Waiting for autocollect ZIP'],
+      ['rootLoaded', 'Root ZIP loaded'],
+      ['opcDetected', 'opc.zip detected'],
+      ['opcExtracted', 'opc.zip extracted'],
+      ['logsDetected', 'logs folder detected'],
+      ['fecDetected', 'FECNotifications folder detected'],
+      ['llciDetected', 'LLCINotifications folder detected'],
+      ['bssDetected', 'BSS folder detected'],
+      ['ipsDetected', 'IPS folder detected'],
+      ['machineStatesDetected', 'MachineStates folder detected'],
+      ['alertsDetected', 'AlertsMonitoring file detected'],
+      ['internalZipsDetected', 'Internal ZIPs detected'],
+      ['internalZipsExtracted', 'Internal ZIPs extracted'],
+      ['csvParsed', 'CSV files parsed'],
+      ['txtParsed', 'TXT logs parsed'],
+      ['evidenceBuilt', 'Evidence model built'],
+      ['signalDiscoveryBuilt', 'Signal discovery built'],
+      ['readyForRules', 'Ready for Rules evaluation']
+    ];
+
+    const EXPECTED_RULE_COLUMNS = [
+      'Expected ON', 'Expected Standby', 'Expected Ready', 'Expected Prepare2Print',
+      'Expected Printing', 'Expected PrintEnd', 'Expected Recovery', 'Expected Error'
+    ];
+
+    const MACHINE_STATE_SYSTEMS = ['BSS', 'IPS', 'PSS', 'Dryer', 'IPU', 'Ventilation', 'CWS', 'IRD', 'DFES', 'DPS', 'QCS', 'ICS', 'ECS', 'MSPS', 'ITS'];
+
+    const app = {
+      autocollectFile: null,
+      rulesFile: null,
+      progress: 0,
+      pipeline: new Map(),
+      inventory: [],
+      evidence: [],
+      signalDiscovery: [],
+      machineStateRows: [],
+      timeSeriesBySignal: {},
+      rulesSummary: null
+    };
+
+    const els = {
+      zipInput: document.getElementById('zipInput'),
+      rulesInput: document.getElementById('rulesInput'),
+      analyzeButton: document.getElementById('analyzeButton'),
+      zipFileName: document.getElementById('zipFileName'),
+      rulesFileName: document.getElementById('rulesFileName'),
+      progressBar: document.getElementById('progressBar'),
+      scanStage: document.getElementById('scanStage'),
+      pipelineGrid: document.getElementById('pipelineGrid'),
+      pipelineTag: document.getElementById('pipelineTag'),
+      inventoryBody: document.getElementById('inventoryBody'),
+      evidenceBody: document.getElementById('evidenceBody'),
+      signalsBody: document.getElementById('signalsBody'),
+      timelineBody: document.getElementById('timelineBody'),
+      rulesBody: document.getElementById('rulesBody'),
+      inventoryTag: document.getElementById('inventoryTag'),
+      evidenceTag: document.getElementById('evidenceTag'),
+      signalsTag: document.getElementById('signalsTag'),
+      timelineTag: document.getElementById('timelineTag'),
+      rulesTag: document.getElementById('rulesTag'),
+      kpiFiles: document.getElementById('kpiFiles'),
+      kpiEvidence: document.getElementById('kpiEvidence'),
+      kpiSignals: document.getElementById('kpiSignals'),
+      kpiStates: document.getElementById('kpiStates'),
+      kpiRules: document.getElementById('kpiRules'),
+      modeTag: document.getElementById('modeTag'),
+      headerStatusText: document.getElementById('headerStatusText'),
+      statusIndicator: document.getElementById('statusIndicator'),
+      footerLogs: document.getElementById('footerLogs'),
+      footerRules: document.getElementById('footerRules'),
+      footerMode: document.getElementById('footerMode')
+    };
+
+    function initializePipeline() {
+      app.pipeline.clear();
+      PIPELINE_STEPS.forEach(([key, label]) => {
+        app.pipeline.set(key, { key, label, status: 'waiting', count: null, message: 'Waiting.' });
+      });
+      updateStep('waitingZip', 'waiting', 'Select a Landa autocollect ZIP to begin.');
+      renderPipeline();
+    }
+
+    function updateStep(key, status, message, count = null) {
+      const step = app.pipeline.get(key);
+      if (!step) return;
+      step.status = status;
+      step.message = message;
+      step.count = count;
+      renderPipeline();
+    }
+
+    function setActiveStep(key, message) {
+      updateStep(key, 'active', message);
+    }
+
+    function setProgress(percent, message) {
+      app.progress = Math.max(app.progress, Math.min(100, Math.round(percent)));
+      els.progressBar.style.width = app.progress + '%';
+      if (message) els.scanStage.textContent = message;
+    }
+
+    function setHeader(statusText, indicatorClass = '') {
+      els.headerStatusText.textContent = statusText;
+      els.statusIndicator.className = 'status-indicator ' + indicatorClass;
+    }
+
+    function resetScanState() {
+      app.progress = 0;
+      app.inventory = [];
+      app.evidence = [];
+      app.signalDiscovery = [];
+      app.machineStateRows = [];
+      app.timeSeriesBySignal = {};
+      els.progressBar.style.width = '0%';
+      initializePipeline();
+      renderAllData();
+    }
+
+    function renderPipeline() {
+      els.pipelineGrid.innerHTML = Array.from(app.pipeline.values()).map(step => `
+        <article class="pipeline-step ${escapeHtml(step.status)}">
+          <div class="step-top">
+            <span>${escapeHtml(step.label)}</span>
+            <span class="step-status">${escapeHtml(step.status)}</span>
+          </div>
+          ${step.count === null ? '' : `<div class="step-count">Count: ${escapeHtml(String(step.count))}</div>`}
+          <div class="step-message">${escapeHtml(step.message)}</div>
+        </article>
+      `).join('');
+    }
+
+    function renderAllData() {
+      renderInventory();
+      renderEvidence();
+      renderSignals();
+      renderTimeline();
+      renderKpis();
+    }
+
+    function renderInventory() {
+      els.inventoryTag.textContent = `${app.inventory.length} files`;
+      if (!app.inventory.length) {
+        els.inventoryBody.innerHTML = '<tr><td class="muted" colspan="6">No focused files parsed.</td></tr>';
+        return;
+      }
+      els.inventoryBody.innerHTML = app.inventory.map(file => `
+        <tr>
+          <td>${escapeHtml(file.sourceType)}</td>
+          <td>${escapeHtml(file.sourceGroup)}</td>
+          <td>${escapeHtml(file.fileType)}</td>
+          <td>${escapeHtml(String(file.rowCount))}</td>
+          <td>${escapeHtml(file.parseStatus)}</td>
+          <td class="path-cell">${escapeHtml(file.path)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderEvidence() {
+      els.evidenceTag.textContent = `${app.evidence.length} rows`;
+      const rows = app.evidence.slice(0, 250);
+      if (!rows.length) {
+        els.evidenceBody.innerHTML = '<tr><td class="muted" colspan="10">No evidence records available.</td></tr>';
+        return;
+      }
+      els.evidenceBody.innerHTML = rows.map(ev => `
+        <tr>
+          <td>${escapeHtml(ev.timestamp || '')}</td>
+          <td>${escapeHtml(ev.sourceType || '')}</td>
+          <td>${escapeHtml(ev.system || '')}</td>
+          <td>${escapeHtml(ev.component || '')}</td>
+          <td>${escapeHtml(ev.signal || '')}</td>
+          <td>${escapeHtml(String(ev.value ?? ''))}</td>
+          <td>${escapeHtml(ev.machineState || '')}</td>
+          <td>${escapeHtml(ev.systemState || '')}</td>
+          <td>${escapeHtml(ev.stateContextStatus || '')}</td>
+          <td class="path-cell">${escapeHtml(ev.sourceFile || '')}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderSignals() {
+      els.signalsTag.textContent = `${app.signalDiscovery.length} signals`;
+      if (!app.signalDiscovery.length) {
+        els.signalsBody.innerHTML = '<tr><td class="muted" colspan="11">No signals discovered.</td></tr>';
+        return;
+      }
+      els.signalsBody.innerHTML = app.signalDiscovery.slice(0, 250).map(signal => `
+        <tr>
+          <td>${escapeHtml(signal.system)}</td>
+          <td>${escapeHtml(signal.sourceType)}</td>
+          <td>${escapeHtml(signal.signal)}</td>
+          <td>${escapeHtml(String(signal.count))}</td>
+          <td>${escapeHtml(String(signal.numericCount))}</td>
+          <td>${formatNumber(signal.min)}</td>
+          <td>${formatNumber(signal.max)}</td>
+          <td>${formatNumber(signal.avg)}</td>
+          <td>${escapeHtml(signal.firstTimestamp || '')}</td>
+          <td>${escapeHtml(signal.lastTimestamp || '')}</td>
+          <td>${escapeHtml(signal.stateCoveragePercentage + '%')}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderTimeline() {
+      els.timelineTag.textContent = `${app.machineStateRows.length} states`;
+      if (!app.machineStateRows.length) {
+        els.timelineBody.innerHTML = '<div class="empty-state">No MachineStates data parsed.</div>';
+        return;
+      }
+      const rows = app.machineStateRows.slice(0, 80);
+      els.timelineBody.innerHTML = `<div class="timeline-wrap">${rows.map(row => `
+        <article class="state-segment">
+          <div class="state-time">${escapeHtml(row.timestamp || '')}</div>
+          <div class="state-grid">
+            <span>Machine</span><strong>${escapeHtml(row.machineState || '')}</strong>
+            ${MACHINE_STATE_SYSTEMS.map(system => `<span>${escapeHtml(system)}</span><strong>${escapeHtml(row.systemStates[system] || '')}</strong>`).join('')}
+          </div>
+        </article>
+      `).join('')}</div>`;
+    }
+
+    function renderKpis() {
+      setKpi(els.kpiFiles, app.inventory.length ? app.inventory.length : 'No data');
+      setKpi(els.kpiEvidence, app.evidence.length ? app.evidence.length : 'No data');
+      setKpi(els.kpiSignals, app.signalDiscovery.length ? app.signalDiscovery.length : 'No data');
+      setKpi(els.kpiStates, app.machineStateRows.length ? app.machineStateRows.length : 'No data');
+    }
+
+    function setKpi(el, value) {
+      el.textContent = value;
+      el.classList.toggle('muted', value === 'No data');
+    }
+
+    els.zipInput.addEventListener('change', () => {
+      app.autocollectFile = els.zipInput.files[0] || null;
+      els.zipFileName.textContent = app.autocollectFile ? app.autocollectFile.name : 'No ZIP selected';
+      els.analyzeButton.disabled = !app.autocollectFile;
+      if (app.autocollectFile) {
+        resetScanState();
+        updateStep('waitingZip', 'done', `Selected ${app.autocollectFile.name}.`, 1);
+        setHeader('Autocollect ZIP selected', 'active');
+        els.modeTag.textContent = 'Ready to analyze';
+        els.footerMode.textContent = 'Mode: Ready to analyze';
+      }
+    });
+
+    els.rulesInput.addEventListener('change', async () => {
+      app.rulesFile = els.rulesInput.files[0] || null;
+      els.rulesFileName.textContent = app.rulesFile ? app.rulesFile.name : 'No rules file selected';
+      if (app.rulesFile) await parseRulesPlaceholder(app.rulesFile);
+    });
+
+    els.analyzeButton.addEventListener('click', () => analyzeAutocollect().catch(error => failPipeline(error)));
+
+    async function analyzeAutocollect() {
+      if (!app.autocollectFile) return;
+      resetScanState();
+      els.analyzeButton.disabled = true;
+      setHeader('Analyzing autocollect ZIP', 'active');
+      els.modeTag.textContent = 'Analyzing';
+      els.pipelineTag.textContent = 'Running';
+      els.footerMode.textContent = 'Mode: Analyzing';
+      updateStep('waitingZip', 'done', `Selected ${app.autocollectFile.name}.`, 1);
+      setActiveStep('rootLoaded', 'Opening root autocollect ZIP...');
+      setProgress(4, 'Opening root autocollect ZIP...');
+
+      const rootZip = await JSZip.loadAsync(await app.autocollectFile.arrayBuffer());
+      updateStep('rootLoaded', 'done', 'Root autocollect ZIP opened.', Object.keys(rootZip.files).length);
+      setActiveStep('opcDetected', 'Scanning root ZIP paths for opc.zip...');
+      setProgress(10, 'Scanning root ZIP paths for opc.zip...');
+
+      const opcEntry = findOpcZip(rootZip);
+      if (!opcEntry) throw new Error('opc.zip was not found inside the uploaded autocollect ZIP.');
+      updateStep('opcDetected', 'done', `Found ${opcEntry.name}.`, 1);
+      setActiveStep('opcExtracted', 'Extracting opc.zip contents...');
+      setProgress(16, 'Extracting opc.zip...');
+
+      const opcZip = await JSZip.loadAsync(await opcEntry.async('arraybuffer'));
+      updateStep('opcExtracted', 'done', 'opc.zip opened successfully.', Object.keys(opcZip.files).length);
+      setActiveStep('logsDetected', 'Scanning opc.zip paths for logs/...');
+      setProgress(22, 'Scanning opc.zip paths for focused logs...');
+
+      const opcFiles = Object.values(opcZip.files).filter(file => !file.dir);
+      const hasLogs = opcFiles.some(file => normalizePath(file.name).includes('logs/'));
+      if (!hasLogs) throw new Error('logs/ folder was not found inside opc.zip.');
+      updateStep('logsDetected', 'done', 'logs/ folder detected in opc.zip.');
+
+      setActiveStep('fecDetected', 'Checking focused folders and files...');
+      setActiveStep('llciDetected', 'Checking focused folders and files...');
+      setActiveStep('bssDetected', 'Checking focused folders and files...');
+      setActiveStep('ipsDetected', 'Checking focused folders and files...');
+      setActiveStep('machineStatesDetected', 'Checking focused folders and files...');
+      setActiveStep('alertsDetected', 'Checking focused AlertsMonitoring file names...');
+      const directFocused = findFocusedFiles(opcFiles);
+      const focusedPaths = opcFiles.map(file => normalizePath(file.name));
+      updateFolderSteps(focusedPaths);
+      setProgress(34, 'Locating focused folders, AlertsMonitoring, and focused internal ZIPs...');
+
+      setActiveStep('internalZipsDetected', 'Looking for internal ZIPs under focused folders...');
+      const internalZipEntries = directFocused.filter(item => item.fileType === 'zip');
+      updateStep(
+        'internalZipsDetected',
+        internalZipEntries.length ? 'done' : 'warning',
+        internalZipEntries.length ? 'Focused internal ZIP files found.' : 'No focused internal ZIP files found; direct focused files will still be parsed.',
+        internalZipEntries.length
+      );
+      setProgress(43, 'Opening internal ZIPs from focused notification folders...');
+
+      setActiveStep('internalZipsExtracted', 'Opening focused internal ZIPs...');
+      const extractedFocused = [];
+      for (const item of directFocused) {
+        if (item.fileType === 'zip') {
+          const nestedFiles = await extractFocusedInternalZip(item);
+          extractedFocused.push(...nestedFiles);
+        } else {
+          extractedFocused.push(item);
+        }
+      }
+
+      updateStep(
+        'internalZipsExtracted',
+        internalZipEntries.length ? 'done' : 'warning',
+        internalZipEntries.length ? 'Focused internal ZIPs opened and scanned.' : 'No internal ZIP extraction was needed.',
+        extractedFocused.filter(item => item.extractedFrom).length
+      );
+      setProgress(55, 'Parsing focused CSV and TXT log files...');
+
+      setActiveStep('csvParsed', 'Parsing focused CSV files...');
+      setActiveStep('txtParsed', 'Parsing focused TXT logs best effort...');
+      let csvCount = 0;
+      let txtCount = 0;
+      for (const item of extractedFocused) {
+        if (item.fileType === 'csv') {
+          await parseCsvFile(item);
+          csvCount += 1;
+        } else if (item.fileType === 'txt') {
+          await parseTxtFile(item);
+          txtCount += 1;
+        }
+      }
+
+      updateStep('csvParsed', csvCount ? 'done' : 'warning', csvCount ? 'Focused CSV files parsed.' : 'No focused CSV files were available to parse.', csvCount);
+      updateStep('txtParsed', txtCount ? 'done' : 'warning', txtCount ? 'Focused TXT logs parsed best effort.' : 'No AlertsMonitoring TXT log was available.', txtCount);
+      setProgress(72, 'Attaching MachineStates context to normalized evidence...');
+
+      setActiveStep('evidenceBuilt', 'Attaching MachineStates context and building normalized evidence...');
+      app.machineStateRows.sort((a, b) => (a.timeMs ?? Number.POSITIVE_INFINITY) - (b.timeMs ?? Number.POSITIVE_INFINITY));
+      attachStateContext();
+      updateStep('evidenceBuilt', app.evidence.length ? 'done' : 'warning', app.evidence.length ? 'Normalized evidence records built.' : 'No evidence rows were extracted from focused sources.', app.evidence.length);
+      setProgress(84, 'Building grouped signal discovery and time-series model...');
+
+      setActiveStep('signalDiscoveryBuilt', 'Grouping normalized evidence into discovered signals...');
+      buildSignalDiscovery();
+      buildTimeSeriesBySignal();
+      updateStep('signalDiscoveryBuilt', app.signalDiscovery.length ? 'done' : 'warning', app.signalDiscovery.length ? 'Signal discovery table built.' : 'No signals were discovered.', app.signalDiscovery.length);
+      setProgress(96, 'Preparing for later Rules evaluation...');
+
+      setActiveStep('readyForRules', 'Preparing handoff to later Rules evaluation...');
+      updateStep('readyForRules', 'done', 'Pipeline complete. Rules evaluation is intentionally deferred to a later stage.', app.rulesSummary?.parsedCount ?? 0);
+      setProgress(100, 'Pipeline complete. Ready for state-dependent Rules evaluation in a later stage.');
+      els.pipelineTag.textContent = 'Complete';
+      els.modeTag.textContent = 'Complete';
+      els.footerMode.textContent = 'Mode: Pipeline complete';
+      els.footerLogs.textContent = `Logs: ${app.inventory.length} focused files, ${app.evidence.length} evidence rows`;
+      setHeader('Log extraction complete', 'ready');
+      renderAllData();
+      els.analyzeButton.disabled = false;
+    }
+
+    function failPipeline(error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setProgress(100, `Pipeline stopped: ${message}`);
+      els.pipelineTag.textContent = 'Failed';
+      els.modeTag.textContent = 'Failed';
+      els.footerMode.textContent = 'Mode: Failed';
+      setHeader('Pipeline failed', 'failed');
+      const activeStep = Array.from(app.pipeline.values()).find(step => step.status === 'active');
+      if (activeStep) updateStep(activeStep.key, 'failed', message);
+      else updateStep('readyForRules', 'failed', message);
+      els.analyzeButton.disabled = false;
+      renderAllData();
+      console.error(error);
+    }
+
+    function findOpcZip(zip) {
+      return Object.values(zip.files).find(file => !file.dir && basename(file.name).toLowerCase() === 'opc.zip');
+    }
+
+    function updateFolderSteps(paths) {
+      const fec = paths.filter(path => isUnder(path, 'logs/fecnotifications/'));
+      const llci = paths.filter(path => isUnder(path, 'logs/llcinotifications/'));
+      const bss = paths.filter(path => isUnder(path, 'logs/llcinotifications/bss/'));
+      const ips = paths.filter(path => isUnder(path, 'logs/llcinotifications/ips/'));
+      const states = paths.filter(path => isUnder(path, 'logs/machinestates/'));
+      const alerts = paths.filter(path => isAlertsPath(path));
+      updateStep('fecDetected', fec.length ? 'done' : 'warning', fec.length ? 'FECNotifications folder content detected.' : 'FECNotifications folder was not found.', fec.length);
+      updateStep('llciDetected', llci.length ? 'done' : 'warning', llci.length ? 'LLCINotifications folder content detected.' : 'LLCINotifications folder was not found.', llci.length);
+      updateStep('bssDetected', bss.length ? 'done' : 'warning', bss.length ? 'BSS folder content detected.' : 'LLCINotifications/BSS folder was not found.', bss.length);
+      updateStep('ipsDetected', ips.length ? 'done' : 'warning', ips.length ? 'IPS folder content detected.' : 'LLCINotifications/IPS folder was not found.', ips.length);
+      updateStep('machineStatesDetected', states.length ? 'done' : 'warning', states.length ? 'MachineStates folder content detected.' : 'MachineStates folder was not found.', states.length);
+      updateStep('alertsDetected', alerts.length ? 'done' : 'warning', alerts.length ? 'AlertsMonitoring TXT file detected.' : 'AlertsMonitoring.txt / AletrsMonitoring.txt was not found.', alerts.length);
+    }
+
+    function findFocusedFiles(files, inheritedSource = null, extractedFrom = '') {
+      return files
+        .map(file => createFocusedItem(file, inheritedSource, extractedFrom))
+        .filter(Boolean)
+        .filter(item => ['csv', 'txt', 'zip'].includes(item.fileType));
+    }
+
+    function createFocusedItem(file, inheritedSource, extractedFrom) {
+      const normalizedPath = normalizePath(file.name);
+      const displayPath = String(file.name || '');
+      const mapped = inheritedSource || mapSource(normalizedPath);
+      if (!mapped) return null;
+      const ext = extension(normalizedPath);
+      if (!['csv', 'txt', 'zip'].includes(ext)) return null;
+      return {
+        file,
+        path: extractedFrom ? `${extractedFrom} -> ${displayPath}` : displayPath,
+        sourceType: mapped.sourceType,
+        sourceGroup: mapped.sourceGroup,
+        fileType: ext,
+        isNestedZip: Boolean(extractedFrom) || ext === 'zip',
+        extractedFrom
+      };
+    }
+
+    async function extractFocusedInternalZip(item) {
+      try {
+        const nestedZip = await JSZip.loadAsync(await item.file.async('arraybuffer'));
+        const nestedFiles = Object.values(nestedZip.files).filter(file => !file.dir);
+        return findFocusedFiles(nestedFiles, { sourceType: item.sourceType, sourceGroup: item.sourceGroup }, item.path)
+          .filter(nested => nested.fileType !== 'zip');
+      } catch (error) {
+        addInventory(item, 0, [], 'failed: unable to open internal ZIP');
+        return [];
+      }
+    }
+
+    async function parseCsvFile(item) {
+      try {
+        const text = await item.file.async('string');
+        const parsed = parseCsv(text);
+        const headers = parsed.headers;
+        const rows = parsed.rows;
+        addInventory(item, rows.length, headers, rows.length ? 'parsed' : 'warning: no rows');
+        if (item.sourceType === 'MachineStates') {
+          rows.forEach(row => app.machineStateRows.push(normalizeMachineStateRow(row, item.path)));
+        } else {
+          rows.forEach(row => {
+            const evidence = normalizeCsvEvidence(row, item);
+            if (evidence) app.evidence.push(evidence);
+          });
+        }
+      } catch (error) {
+        addInventory(item, 0, [], 'failed: csv parse error');
+        console.error(error);
+      }
+    }
+
+    async function parseTxtFile(item) {
+      try {
+        const text = await item.file.async('string');
+        const events = parseAlertsText(text, item);
+        addInventory(item, events.length, [], 'partial');
+        app.evidence.push(...events);
+      } catch (error) {
+        addInventory(item, 0, [], 'failed: txt parse error');
+        console.error(error);
+      }
+    }
+
+    function addInventory(item, rowCount, headers, parseStatus) {
+      app.inventory.push({
+        id: `file-${app.inventory.length + 1}`,
+        path: item.path,
+        sourceType: item.sourceType,
+        sourceGroup: item.sourceGroup,
+        fileType: item.fileType,
+        isNestedZip: item.isNestedZip,
+        extractedFrom: item.extractedFrom,
+        rowCount,
+        headers,
+        parseStatus
+      });
+    }
+
+    function normalizeCsvEvidence(row, item) {
+      if (item.sourceType === 'FECNotifications') {
+        const value = firstValue(row, ['SetPoint', 'Status']);
+        const signal = firstValue(row, ['PSSID', 'Type']) || 'FEC signal';
+        return createEvidence({
+          timestamp: firstValue(row, ['Timestamp', 'Time']),
+          sourceFile: item.path,
+          sourceType: 'FECNotifications',
+          system: 'FEC',
+          signal,
+          value,
+          state: firstValue(row, ['State', 'PSCState']),
+          isAlertLike: isTruthy(firstValue(row, ['HasErrors', 'HasWarnings'])),
+          raw: row
+        });
+      }
+      if (item.sourceType === 'BSSNotifications') {
+        const component = firstValue(row, ['Component']);
+        const subComponent = firstValue(row, ['SubComponent']);
+        const parameterType = firstValue(row, ['ParameterType']);
+        return createEvidence({
+          timestamp: firstValue(row, ['Timestamp', 'Time']),
+          sourceFile: item.path,
+          sourceType: 'BSSNotifications',
+          system: 'BSS',
+          component,
+          subComponent,
+          signal: compactJoin([component, subComponent, parameterType], ' / ') || 'BSS signal',
+          value: firstValue(row, ['Value']),
+          isAlertLike: isTruthy(firstValue(row, ['IsAlert'])),
+          raw: row
+        });
+      }
+      if (item.sourceType === 'IPSNotifications') {
+        const keyName = firstValue(row, ['KeyName']);
+        const parameterType = firstValue(row, ['ParameterType']);
+        return createEvidence({
+          timestamp: firstValue(row, ['Timestamp', 'Time']),
+          sourceFile: item.path,
+          sourceType: 'IPSNotifications',
+          system: 'IPS',
+          signal: compactJoin([keyName, parameterType], ' / ') || 'IPS signal',
+          value: firstValue(row, ['Value']),
+          isAlertLike: isTruthy(firstValue(row, ['IsAlert'])),
+          raw: row
+        });
+      }
+      return null;
+    }
+
+    function createEvidence(fields) {
+      const numericValue = toNumber(fields.value);
+      return {
+        id: `ev-${app.evidence.length + 1}`,
+        timestamp: fields.timestamp || '',
+        sourceFile: fields.sourceFile || '',
+        sourceType: fields.sourceType || '',
+        system: fields.system || '',
+        component: fields.component || '',
+        subComponent: fields.subComponent || '',
+        signal: fields.signal || '',
+        value: fields.value ?? '',
+        numericValue,
+        unit: '',
+        machineState: '',
+        systemState: fields.state || '',
+        stateContextStatus: 'pending',
+        isAlertLike: Boolean(fields.isAlertLike),
+        raw: fields.raw
+      };
+    }
+
+    function normalizeMachineStateRow(row, sourceFile) {
+      const timestamp = firstValue(row, ['Time', 'Timestamp']);
+      const systemStates = {};
+      MACHINE_STATE_SYSTEMS.forEach(system => { systemStates[system] = firstValue(row, [system]) || ''; });
+      return {
+        id: `state-${app.machineStateRows.length + 1}`,
+        timestamp,
+        timeMs: parseTime(timestamp),
+        sourceFile,
+        machineState: firstValue(row, ['Machine']) || '',
+        systemStates,
+        raw: row
+      };
+    }
+
+    function parseAlertsText(text, item) {
+      const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      return lines.map((line, index) => {
+        const timestamp = extractTimestamp(line);
+        const subsystem = extractKeyValue(line, ['subsystem', 'system']) || 'Alerts';
+        const alertName = extractKeyValue(line, ['alert name', 'name', 'title']) || 'AlertMonitoring event';
+        const alertId = extractKeyValue(line, ['alert id', 'id']);
+        const alertStatus = extractKeyValue(line, ['status']);
+        const levelType = extractKeyValue(line, ['level', 'type']);
+        const origin = extractKeyValue(line, ['origin']);
+        const hardware = extractKeyValue(line, ['hardware']);
+        const body = extractKeyValue(line, ['message', 'body']) || line;
+        return createEvidence({
+          timestamp,
+          sourceFile: item.path,
+          sourceType: 'AlertsMonitoring',
+          system: subsystem,
+          signal: compactJoin([alertId, alertName], ' / '),
+          value: compactJoin([alertStatus, levelType, origin, hardware, body], ' | '),
+          isAlertLike: true,
+          raw: { lineNumber: index + 1, text: line, timestamp, subsystem, alertName, alertId, alertStatus, levelType, origin, hardware, body }
+        });
+      });
+    }
+
+    function attachStateContext() {
+      app.evidence.forEach(evidence => {
+        const state = getStateAt(evidence.timestamp, evidence.system);
+        if (!state) {
+          evidence.stateContextStatus = 'missing';
+          return;
+        }
+        evidence.machineState = state.machineState || '';
+        evidence.systemState = state.systemState || evidence.systemState || '';
+        evidence.stateContextStatus = state.inferred ? 'inferred' : 'matched';
+      });
+    }
+
+    function getStateAt(timestamp, system) {
+      if (!app.machineStateRows.length) return null;
+      const timeMs = parseTime(timestamp);
+      const normalizedSystem = normalizeSystemForState(system);
+      if (Number.isNaN(timeMs)) {
+        const fallback = app.machineStateRows[0];
+        return { machineState: fallback.machineState, systemState: fallback.systemStates[normalizedSystem] || '', inferred: true, raw: fallback };
+      }
+      let match = null;
+      for (const row of app.machineStateRows) {
+        if (Number.isNaN(row.timeMs)) continue;
+        if (row.timeMs <= timeMs) match = row;
+        if (row.timeMs > timeMs) break;
+      }
+      if (!match) return null;
+      return { machineState: match.machineState, systemState: match.systemStates[normalizedSystem] || '', inferred: false, raw: match };
+    }
+
+    function buildSignalDiscovery() {
+      const groups = new Map();
+      app.evidence.forEach(evidence => {
+        const key = [evidence.system, evidence.sourceType, evidence.signal].join('||');
+        if (!groups.has(key)) {
+          groups.set(key, {
+            system: evidence.system,
+            sourceType: evidence.sourceType,
+            signal: evidence.signal,
+            count: 0,
+            numericCount: 0,
+            numericSum: 0,
+            min: null,
+            max: null,
+            firstTimestamp: evidence.timestamp,
+            lastTimestamp: evidence.timestamp,
+            exampleValue: evidence.value,
+            exampleRaw: evidence.raw,
+            stateCovered: 0
+          });
+        }
+        const group = groups.get(key);
+        group.count += 1;
+        if (typeof evidence.numericValue === 'number') {
+          group.numericCount += 1;
+          group.numericSum += evidence.numericValue;
+          group.min = group.min === null ? evidence.numericValue : Math.min(group.min, evidence.numericValue);
+          group.max = group.max === null ? evidence.numericValue : Math.max(group.max, evidence.numericValue);
+        }
+        if (evidence.timestamp && compareTimestamp(evidence.timestamp, group.firstTimestamp) < 0) group.firstTimestamp = evidence.timestamp;
+        if (evidence.timestamp && compareTimestamp(evidence.timestamp, group.lastTimestamp) > 0) group.lastTimestamp = evidence.timestamp;
+        if (['matched', 'inferred'].includes(evidence.stateContextStatus)) group.stateCovered += 1;
+      });
+      app.signalDiscovery = Array.from(groups.values()).map(group => ({
+        ...group,
+        avg: group.numericCount ? group.numericSum / group.numericCount : null,
+        stateCoveragePercentage: group.count ? Math.round((group.stateCovered / group.count) * 100) : 0
+      })).sort((a, b) => b.count - a.count);
+    }
+
+    function buildTimeSeriesBySignal() {
+      app.timeSeriesBySignal = {};
+      app.evidence.forEach(evidence => {
+        const key = [evidence.system, evidence.signal].join('||');
+        if (!app.timeSeriesBySignal[key]) {
+          app.timeSeriesBySignal[key] = { system: evidence.system, signal: evidence.signal, points: [] };
+        }
+        app.timeSeriesBySignal[key].points.push({
+          timestamp: evidence.timestamp,
+          value: evidence.numericValue ?? evidence.value,
+          machineState: evidence.machineState,
+          systemState: evidence.systemState,
+          sourceFile: evidence.sourceFile,
+          raw: evidence.raw
+        });
+      });
+      Object.values(app.timeSeriesBySignal).forEach(series => {
+        series.points.sort((a, b) => compareTimestamp(a.timestamp, b.timestamp));
+      });
+    }
+
+    async function parseRulesPlaceholder(file) {
+      if (!window.XLSX) {
+        app.rulesSummary = { parsedCount: 0, expectedColumns: [], status: 'SheetJS unavailable' };
+        renderRules();
+        return;
+      }
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const sheet = workbook.Sheets['PANDA Rules Template'];
+      if (!sheet) {
+        app.rulesSummary = { parsedCount: 0, expectedColumns: [], status: 'PANDA Rules Template sheet not found' };
+        renderRules();
+        return;
+      }
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      const required = ['System', 'Subsystem', 'Component', 'Log Signal Name', 'Log Source'];
+      const headerIndex = rows.findIndex(row => required.every(name => row.map(String).includes(name)));
+      if (headerIndex === -1) {
+        app.rulesSummary = { parsedCount: 0, expectedColumns: [], status: 'Required header row not found' };
+        renderRules();
+        return;
+      }
+      const headers = rows[headerIndex].map(String);
+      const expectedColumns = EXPECTED_RULE_COLUMNS.filter(column => headers.includes(column));
+      const parsedCount = rows.slice(headerIndex + 1).filter(row => row.some(cell => String(cell).trim())).length;
+      app.rulesSummary = { parsedCount, expectedColumns, status: 'parsed placeholder only' };
+      renderRules();
+    }
+
+    function renderRules() {
+      const summary = app.rulesSummary;
+      if (!summary) return;
+      els.rulesTag.textContent = summary.status;
+      els.kpiRules.textContent = String(summary.parsedCount);
+      els.kpiRules.classList.remove('muted');
+      els.footerRules.textContent = `Rules: ${summary.parsedCount} parsed placeholder rows`;
+      els.rulesBody.innerHTML = `
+        <div class="empty-state">
+          <strong>${escapeHtml(summary.status)}</strong><br>
+          Rules parsed count: ${escapeHtml(String(summary.parsedCount))}<br>
+          Expected-by-state columns detected: ${summary.expectedColumns.length ? escapeHtml(summary.expectedColumns.join(', ')) : 'None'}<br>
+          No confirmed alert evaluation has been run.
+        </div>`;
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let row = [];
+      let cell = '';
+      let inQuotes = false;
+      for (let i = 0; i < text.length; i += 1) {
+        const char = text[i];
+        const next = text[i + 1];
+        if (inQuotes) {
+          if (char === '"' && next === '"') {
+            cell += '"';
+            i += 1;
+          } else if (char === '"') {
+            inQuotes = false;
+          } else {
+            cell += char;
+          }
+        } else if (char === '"') {
+          inQuotes = true;
+        } else if (char === ',') {
+          row.push(cell);
+          cell = '';
+        } else if (char === '\n') {
+          row.push(cell);
+          rows.push(row);
+          row = [];
+          cell = '';
+        } else if (char === '\r') {
+          continue;
+        } else {
+          cell += char;
+        }
+      }
+      if (cell.length || row.length) {
+        row.push(cell);
+        rows.push(row);
+      }
+      const nonEmptyRows = rows.filter(csvRow => csvRow.some(value => String(value).trim() !== ''));
+      const headers = (nonEmptyRows.shift() || []).map(header => String(header).trim());
+      const objects = nonEmptyRows.map(csvRow => {
+        const object = {};
+        headers.forEach((header, index) => { object[header] = csvRow[index] ?? ''; });
+        return object;
+      });
+      return { headers, rows: objects };
+    }
+
+    function mapSource(path) {
+      const normalized = normalizePath(path);
+      if (isUnder(normalized, 'logs/fecnotifications/')) return { sourceType: 'FECNotifications', sourceGroup: 'FECNotifications' };
+      if (isUnder(normalized, 'logs/llcinotifications/bss/')) return { sourceType: 'BSSNotifications', sourceGroup: 'LLCINotifications/BSS' };
+      if (isUnder(normalized, 'logs/llcinotifications/ips/')) return { sourceType: 'IPSNotifications', sourceGroup: 'LLCINotifications/IPS' };
+      if (isUnder(normalized, 'logs/machinestates/')) return { sourceType: 'MachineStates', sourceGroup: 'MachineStates' };
+      if (isAlertsPath(normalized)) return { sourceType: 'AlertsMonitoring', sourceGroup: 'AlertsMonitoring' };
+      return null;
+    }
+
+    function isAlertsPath(path) {
+      const normalized = normalizePath(path);
+      return normalized.endsWith('logs/alertsmonitoring.txt') || normalized.endsWith('logs/aletrsmonitoring.txt');
+    }
+
+    function isUnder(path, prefix) {
+      return normalizePath(path).includes(prefix.toLowerCase());
+    }
+
+    function normalizePath(path) {
+      return String(path || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+    }
+
+    function basename(path) {
+      return String(path || '').replace(/\\/g, '/').split('/').pop();
+    }
+
+    function extension(path) {
+      const name = basename(path).toLowerCase();
+      const dot = name.lastIndexOf('.');
+      return dot === -1 ? '' : name.slice(dot + 1);
+    }
+
+    function firstValue(row, keys) {
+      for (const key of keys) {
+        if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return String(row[key]).trim();
+      }
+      const lowerMap = Object.fromEntries(Object.entries(row).map(([key, value]) => [key.toLowerCase(), value]));
+      for (const key of keys) {
+        const value = lowerMap[key.toLowerCase()];
+        if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+      }
+      return '';
+    }
+
+    function compactJoin(values, separator) {
+      return values.map(value => String(value || '').trim()).filter(Boolean).join(separator);
+    }
+
+    function toNumber(value) {
+      const text = String(value ?? '').trim();
+      if (!text) return null;
+      const number = Number(text.replace(/,/g, ''));
+      return Number.isFinite(number) ? number : null;
+    }
+
+    function isTruthy(value) {
+      return ['true', '1', 'yes', 'y', 'error', 'warning'].includes(String(value || '').trim().toLowerCase());
+    }
+
+    function parseTime(value) {
+      const text = String(value || '').trim();
+      if (!text) return Number.NaN;
+      const direct = Date.parse(text);
+      if (!Number.isNaN(direct)) return direct;
+      const normalized = text.replace(/^(\d{4}-\d{2}-\d{2})[ _](\d{2}-\d{2}-\d{2})/, '$1T$2').replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3');
+      const retry = Date.parse(normalized);
+      return Number.isNaN(retry) ? Number.NaN : retry;
+    }
+
+    function compareTimestamp(left, right) {
+      const leftMs = parseTime(left);
+      const rightMs = parseTime(right);
+      if (!Number.isNaN(leftMs) && !Number.isNaN(rightMs)) return leftMs - rightMs;
+      return String(left || '').localeCompare(String(right || ''));
+    }
+
+    function normalizeSystemForState(system) {
+      if (system === 'FEC') return 'PSS';
+      if (MACHINE_STATE_SYSTEMS.includes(system)) return system;
+      return system;
+    }
+
+    function extractTimestamp(text) {
+      const match = String(text).match(/\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?|\d{2}[-/]\d{2}[-/]\d{4}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?/);
+      return match ? match[0] : '';
+    }
+
+    function extractKeyValue(text, keys) {
+      for (const key of keys) {
+        const pattern = new RegExp(`${escapeRegex(key)}\\s*[:=]\\s*([^|;,]+)`, 'i');
+        const match = String(text).match(pattern);
+        if (match) return match[1].trim();
+      }
+      return '';
+    }
+
+    function escapeRegex(text) {
+      return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+    }
+
+    function formatNumber(value) {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return '';
+      return escapeHtml(String(Math.round(value * 1000) / 1000));
+    }
+
+    initializePipeline();
+  </script>
 </body>
 </html>
