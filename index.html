@@ -561,6 +561,139 @@
       text-align: center;
     }
 
+
+    .health-map-card { min-height: 620px; }
+
+    .health-map-layout {
+      display: grid;
+      grid-template-columns: minmax(520px, 1fr) minmax(320px, 390px);
+      gap: 18px;
+      padding: 18px 24px 24px;
+    }
+
+    .map-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 0 14px;
+    }
+
+    .toggle-group { display: inline-flex; gap: 8px; }
+
+    .toggle-button[aria-pressed="true"] {
+      border-color: rgba(56, 200, 244, 0.62);
+      color: var(--text);
+      background: var(--accent-soft);
+    }
+
+    .health-summary { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    .health-map-stage {
+      position: relative;
+      min-height: 520px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 46%, rgba(56, 200, 244, 0.11), transparent 18rem),
+        linear-gradient(135deg, rgba(8, 15, 23, 0.92), rgba(12, 22, 34, 0.92));
+    }
+
+    .machine-visual {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(62%, 560px);
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 30px 44px rgba(0, 0, 0, 0.42));
+      opacity: 0.96;
+    }
+
+    .map-hotspot {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      min-width: 82px;
+      transform: translate(-50%, -50%);
+      border-color: color-mix(in srgb, var(--status-color) 70%, var(--border));
+      border-radius: 16px;
+      padding: 9px 10px;
+      display: grid;
+      gap: 3px;
+      color: var(--text);
+      background: rgba(9, 16, 25, 0.88);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 0 26px color-mix(in srgb, var(--status-color) 28%, transparent);
+    }
+
+    .map-hotspot::before {
+      content: '';
+      position: absolute;
+      inset: -5px;
+      border: 1px solid color-mix(in srgb, var(--status-color) 44%, transparent);
+      border-radius: 20px;
+      opacity: 0.58;
+      pointer-events: none;
+    }
+
+    .map-hotspot.is-selected { outline: 2px solid var(--accent); outline-offset: 3px; }
+    .map-hotspot.is-hidden { display: none; }
+
+    .hotspot-name { font-size: 13px; font-weight: 800; letter-spacing: 0.04em; }
+    .hotspot-status { color: var(--text-muted); font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+
+    .status-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      display: inline-block;
+      margin-right: 6px;
+      background: var(--status-color);
+      box-shadow: 0 0 18px var(--status-color);
+    }
+
+    .issue-panel {
+      min-height: 520px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      background: rgba(8, 15, 23, 0.58);
+    }
+
+    .issue-card-title { margin: 0 0 8px; font-size: 22px; }
+    .issue-card-subtitle { margin: 0 0 16px; color: var(--text-muted); line-height: 1.45; }
+    .issue-fields { display: grid; gap: 10px; margin: 16px 0; }
+    .issue-field { border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 10px; background: rgba(255,255,255,0.03); }
+    .issue-field strong { display: block; margin-bottom: 4px; color: var(--text-muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+    .status-ok { --status-color: var(--success); }
+    .status-warning { --status-color: var(--warning); }
+    .status-critical { --status-color: var(--danger); }
+    .status-needs_validation { --status-color: var(--accent); }
+    .status-no_data { --status-color: #64748b; }
+
+    .parameter-list { display: grid; gap: 12px; margin-bottom: 18px; }
+    .parameter-card { border: 1px solid var(--border-soft); border-left: 4px solid var(--status-color); border-radius: var(--radius-md); padding: 14px; background: rgba(8, 15, 23, 0.52); }
+    .parameter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+    .parameter-field { color: var(--text-muted); font-size: 12px; }
+    .parameter-field strong { display: block; color: var(--text); font-size: 13px; margin-top: 3px; overflow-wrap: anywhere; }
+    .mini-timeline { display: flex; width: 100%; min-height: 24px; overflow: hidden; border: 1px solid var(--border); border-radius: 999px; background: rgba(255,255,255,0.04); }
+    .mini-timeline span { min-width: 3px; }
+
+    @media (max-width: 1100px) {
+      .health-map-layout { grid-template-columns: 1fr; }
+      .health-map-stage, .issue-panel { min-height: 480px; }
+      .parameter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 700px) {
+      .health-map-stage { min-height: 620px; }
+      .map-hotspot { min-width: 70px; padding: 7px 8px; }
+      .machine-visual { width: 88%; }
+      .parameter-grid { grid-template-columns: 1fr; }
+    }
+
     .status-bar {
       display: flex;
       align-items: center;
@@ -664,6 +797,29 @@
         <div class="progress-wrap" aria-label="Scan progress">
           <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
           <p id="scanStage" class="scan-stage">Waiting for autocollect ZIP.</p>
+        </div>
+      </section>
+
+      <section class="card health-map-card" aria-label="Machine-centered system health map">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Machine System Health Map</h2>
+            <p class="panel-note">Primary view: machine-centered hotspots show which systems are OK, need validation, or have issues. Raw tables remain secondary below.</p>
+          </div>
+          <span id="healthMapTag" class="panel-tag">0 issues</span>
+        </div>
+        <div class="health-map-layout">
+          <div>
+            <div class="map-toolbar" aria-label="System health map controls">
+              <div class="toggle-group" role="group" aria-label="Health map filter">
+                <button id="showAllSystemsButton" class="toggle-button" type="button" aria-pressed="true">Show all systems</button>
+                <button id="showIssuesButton" class="toggle-button" type="button" aria-pressed="false">Show only issues</button>
+              </div>
+              <div id="healthSummary" class="health-summary" aria-label="System status summary"></div>
+            </div>
+            <div id="healthMapStage" class="health-map-stage" aria-label="Machine image with mapped system hotspots"></div>
+          </div>
+          <aside id="systemIssuePanel" class="issue-panel" aria-label="Selected system issue summary"></aside>
         </div>
       </section>
 
@@ -839,6 +995,18 @@
       { label: 'Error', color: '#ff1f3d' }, { label: 'Unknown', color: '#64748b' }
     ];
 
+
+    const HEALTH_SYSTEMS = ['DPS', 'DFES', 'MSPS', 'ITS', 'IPS', 'Ventilation', 'ECS', 'IRD', 'QCS', 'BSS', 'STS', 'IPU', 'ICS'];
+    const SYSTEM_HOTSPOTS = [
+      { system: 'DPS', x: 16, y: 18 }, { system: 'DFES', x: 31, y: 14 }, { system: 'MSPS', x: 50, y: 12 },
+      { system: 'ITS', x: 68, y: 15 }, { system: 'IPS', x: 84, y: 20 }, { system: 'Ventilation', x: 88, y: 42 },
+      { system: 'ECS', x: 82, y: 68 }, { system: 'IRD', x: 66, y: 82 }, { system: 'QCS', x: 50, y: 86 },
+      { system: 'BSS', x: 33, y: 81 }, { system: 'STS', x: 16, y: 66 }, { system: 'IPU', x: 12, y: 43 },
+      { system: 'ICS', x: 49, y: 51 }
+    ];
+    const STATUS_PRIORITY = { critical: 5, warning: 4, needs_validation: 3, ok: 2, no_data: 1 };
+    const ISSUE_STATUSES = new Set(['critical', 'warning', 'needs_validation']);
+
     const app = {
       autocollectFile: null,
       rulesFile: null,
@@ -864,7 +1032,10 @@
       diagnostics: [],
       archiveSummary: null,
       rulesSummary: null,
-      worker: null
+      worker: null,
+      selectedSystem: 'DPS',
+      healthFilter: 'all',
+      systemDrilldownOpen: false
     };
 
     const els = {
@@ -877,6 +1048,12 @@
       scanStage: document.getElementById('scanStage'),
       pipelineGrid: document.getElementById('pipelineGrid'),
       pipelineTag: document.getElementById('pipelineTag'),
+      healthMapTag: document.getElementById('healthMapTag'),
+      healthSummary: document.getElementById('healthSummary'),
+      healthMapStage: document.getElementById('healthMapStage'),
+      systemIssuePanel: document.getElementById('systemIssuePanel'),
+      showAllSystemsButton: document.getElementById('showAllSystemsButton'),
+      showIssuesButton: document.getElementById('showIssuesButton'),
       inventoryBody: document.getElementById('inventoryBody'),
       evidenceBody: document.getElementById('evidenceBody'),
       signalsBody: document.getElementById('signalsBody'),
@@ -947,6 +1124,9 @@
       app.selectedStateTrack = 'Machine';
       app.selectedStateSegmentIndex = 0;
       app.selectedSignalKey = '';
+      app.selectedSystem = 'DPS';
+      app.healthFilter = 'all';
+      app.systemDrilldownOpen = false;
       app.evidenceFilters = { system: '', source: '', signal: '', state: '', numeric: '', alert: '' };
       app.timeSeriesBySignal = {};
       app.diagnostics = [];
@@ -1013,6 +1193,7 @@
     }
 
     function renderAll() {
+      renderHealthMap();
       renderInventory();
       renderEvidence();
       renderSignals();
@@ -1025,6 +1206,162 @@
 
     function renderAllData() {
       renderAll();
+    }
+
+    function renderHealthMap() {
+      const systems = getSystemHealthSummaries();
+      const selected = systems.find(item => item.system === app.selectedSystem) || systems.find(item => ISSUE_STATUSES.has(item.status)) || systems[0];
+      app.selectedSystem = selected?.system || 'DPS';
+      const counts = systems.reduce((acc, item) => ({ ...acc, [item.status]: (acc[item.status] || 0) + 1 }), {});
+      const issueCount = systems.filter(item => ISSUE_STATUSES.has(item.status)).length;
+      if (els.healthMapTag) els.healthMapTag.textContent = `${issueCount} issues`;
+      if (els.healthSummary) {
+        els.healthSummary.innerHTML = ['critical', 'warning', 'needs_validation', 'ok', 'no_data'].map(status => `
+          <span class="metric-pill status-${status}"><span class="status-dot"></span>${escapeHtml(statusLabel(status))}: ${counts[status] || 0}</span>
+        `).join('');
+      }
+      if (els.showAllSystemsButton) els.showAllSystemsButton.setAttribute('aria-pressed', app.healthFilter === 'all' ? 'true' : 'false');
+      if (els.showIssuesButton) els.showIssuesButton.setAttribute('aria-pressed', app.healthFilter === 'issues' ? 'true' : 'false');
+      if (els.healthMapStage) {
+        els.healthMapStage.innerHTML = `${renderMachineImage()}${SYSTEM_HOTSPOTS.map(point => {
+          const summary = systems.find(item => item.system === point.system) || { system: point.system, status: 'no_data' };
+          const hidden = app.healthFilter === 'issues' && !ISSUE_STATUSES.has(summary.status);
+          return `<button class="map-hotspot status-${escapeHtml(summary.status)} ${summary.system === app.selectedSystem ? 'is-selected' : ''} ${hidden ? 'is-hidden' : ''}" type="button" data-system="${escapeHtml(summary.system)}" style="--x:${point.x}%;--y:${point.y}%;" title="${escapeHtml(summary.system)}: ${statusLabel(summary.status)}">
+            <span class="hotspot-name"><span class="status-dot"></span>${escapeHtml(summary.system)}</span>
+            <span class="hotspot-status">${escapeHtml(statusLabel(summary.status))}</span>
+          </button>`;
+        }).join('')}`;
+      }
+      renderSystemIssuePanel(selected);
+    }
+
+    function renderMachineImage() {
+      return `<svg class="machine-visual" viewBox="0 0 900 520" role="img" aria-label="Landa press machine structural silhouette">
+        <defs>
+          <linearGradient id="machineBody" x1="0" x2="1"><stop offset="0" stop-color="#1b2a39"/><stop offset="0.52" stop-color="#27394b"/><stop offset="1" stop-color="#162232"/></linearGradient>
+          <linearGradient id="machineGlow" x1="0" x2="1"><stop offset="0" stop-color="#38c8f4" stop-opacity="0.12"/><stop offset="1" stop-color="#44d07b" stop-opacity="0.10"/></linearGradient>
+        </defs>
+        <rect x="58" y="158" width="784" height="206" rx="44" fill="url(#machineBody)" stroke="#395166" stroke-width="3"/>
+        <rect x="96" y="194" width="250" height="128" rx="26" fill="#0f1720" stroke="#31475c"/>
+        <rect x="384" y="184" width="134" height="146" rx="30" fill="#101b27" stroke="#40576e"/>
+        <rect x="558" y="196" width="244" height="122" rx="24" fill="#0f1720" stroke="#31475c"/>
+        <path d="M150 158 L228 88 H684 L758 158" fill="#1d2e3f" stroke="#40576e" stroke-width="3"/>
+        <rect x="238" y="108" width="418" height="48" rx="16" fill="url(#machineGlow)" stroke="#38c8f4" stroke-opacity="0.36"/>
+        <circle cx="172" cy="384" r="31" fill="#09111a" stroke="#40576e" stroke-width="6"/><circle cx="450" cy="384" r="31" fill="#09111a" stroke="#40576e" stroke-width="6"/><circle cx="728" cy="384" r="31" fill="#09111a" stroke="#40576e" stroke-width="6"/>
+        <path d="M116 242 H334 M568 242 H784 M408 256 H494" stroke="#38c8f4" stroke-opacity="0.32" stroke-width="8" stroke-linecap="round"/>
+        <text x="450" y="273" text-anchor="middle" fill="#9fb0c3" font-size="28" font-weight="800" letter-spacing="8">PANDA</text>
+      </svg>`;
+    }
+
+    function renderSystemIssuePanel(summary) {
+      if (!els.systemIssuePanel) return;
+      if (!summary) {
+        els.systemIssuePanel.innerHTML = '<div class="empty-state">No systems configured.</div>';
+        return;
+      }
+      const hasIssue = ISSUE_STATUSES.has(summary.status);
+      const problem = summary.topProblem;
+      els.systemIssuePanel.innerHTML = `
+        <div class="status-${escapeHtml(summary.status)}">
+          <h3 class="issue-card-title"><span class="status-dot"></span>${escapeHtml(summary.system)}</h3>
+          <p class="issue-card-subtitle">${escapeHtml(hasIssue ? (problem?.title || `${summary.system} requires attention`) : `${summary.system} is ${statusLabel(summary.status)}.`)}</p>
+          <div class="issue-fields">
+            <div class="issue-field"><strong>Main issue title</strong>${escapeHtml(problem?.title || (hasIssue ? 'Review system validation items' : 'No active issue'))}</div>
+            <div class="issue-field"><strong>Summary</strong>${escapeHtml(problem?.summary || summary.summary)}</div>
+            <div class="issue-field"><strong>Current machine state</strong>${escapeHtml(summary.currentMachineState || 'Unavailable')}</div>
+            <div class="issue-field"><strong>Severity</strong>${escapeHtml(statusLabel(summary.status))}</div>
+            <div class="issue-field"><strong>Confidence</strong>${escapeHtml(problem?.confidence || summary.confidence || 'Unavailable')}</div>
+            <div class="issue-field"><strong>Actual vs expected preview</strong>${escapeHtml(problem?.actualExpected || summary.actualExpectedPreview)}</div>
+            <div class="issue-field"><strong>Recommended action preview</strong>${escapeHtml(problem?.recommendedAction || recommendedAction(summary.status, summary.system))}</div>
+          </div>
+          <button id="openSystemDrilldown" class="primary" type="button">Open Drill-Down</button>
+        </div>`;
+    }
+
+    function getSystemHealthSummaries() {
+      const currentMachineState = latestMachineState();
+      return HEALTH_SYSTEMS.map(system => {
+        const signals = app.signalDiscovery.filter(signal => sameSystem(signal.system, system));
+        const evidence = app.evidence.filter(ev => sameSystem(ev.system, system));
+        const stateValues = app.machineStateRows.map(row => row.systemStates?.[system]).filter(Boolean);
+        const latestSystemState = stateValues[stateValues.length - 1] || '';
+        const problems = buildSystemProblems(system, signals, evidence, latestSystemState, currentMachineState);
+        const statuses = problems.map(item => item.status);
+        if (signals.length || evidence.length || stateValues.length) statuses.push(app.rulesSummary ? 'needs_validation' : 'ok');
+        else statuses.push('no_data');
+        const status = highestStatus(statuses);
+        const topProblem = problems.sort((a, b) => STATUS_PRIORITY[b.status] - STATUS_PRIORITY[a.status])[0] || null;
+        return {
+          system, status, topProblem, signals, evidence, latestSystemState, currentMachineState,
+          confidence: topProblem?.confidence || (signals.length || evidence.length ? 'Medium' : 'Unavailable'),
+          summary: summarizeSystem(system, status, signals.length, evidence.length, latestSystemState),
+          actualExpectedPreview: topProblem?.actualExpected || defaultActualExpected(signals, latestSystemState)
+        };
+      });
+    }
+
+    function buildSystemProblems(system, signals, evidence, latestSystemState, currentMachineState) {
+      const problems = [];
+      if (/error|fault|critical|fail/i.test(latestSystemState)) {
+        problems.push(systemProblem(system, 'critical', `${system} state is ${latestSystemState}`, `The latest system state indicates ${latestSystemState}.`, latestSystemState, 'Expected non-error operating state.', currentMachineState, 'High'));
+      }
+      signals.forEach(signal => {
+        const result = signalResult(signal);
+        if (result === 'ok' || result === 'no_data') return;
+        const severity = result === 'critical' ? 'critical' : (result === 'warning' ? 'warning' : 'needs_validation');
+        problems.push(systemProblem(system, severity, `${signal.signal || 'Parameter'} ${statusLabel(severity)}`, `Rule/result evaluation for ${signal.signal || 'parameter'} is ${statusLabel(result)}.`, signal.lastValue ?? signal.exampleValue ?? 'Unavailable', rulePlaceholder(signal, 'expected'), currentMachineState, signal.confidence || 'Medium', signal));
+      });
+      evidence.filter(ev => ev.isAlertLike || /critical|error|fault|alarm|warning/i.test(`${ev.signal || ''} ${ev.value || ''} ${ev.rawPreview || ''}`)).slice(-12).forEach(ev => {
+        const severity = /critical|error|fault|fail/i.test(`${ev.signal || ''} ${ev.value || ''} ${ev.rawPreview || ''}`) ? 'critical' : 'warning';
+        problems.push(systemProblem(system, severity, `${ev.signal || 'Alert'} observed`, `Alert-like evidence was found in ${ev.sourceType || 'logs'}.`, ev.value ?? ev.rawPreview ?? 'Observed', 'No alert-like evidence expected.', ev.machineState || currentMachineState, ev.confidence || 'Medium'));
+      });
+      return problems;
+    }
+
+    function systemProblem(system, status, title, summary, actual, expected, machineState, confidence, signal = null) {
+      return {
+        system, status, title, summary, confidence,
+        actualExpected: `Actual: ${actual ?? 'Unavailable'} • Expected: ${expected || 'Not evaluated'}`,
+        recommendedAction: recommendedAction(status, system), machineState, signal
+      };
+    }
+
+    function signalResult(signal) {
+      const explicit = String(signal.result || signal.ruleResult || signal.evaluationResult || '').toLowerCase();
+      if (/critical|fail|error/.test(explicit)) return 'critical';
+      if (/warn|alarm/.test(explicit)) return 'warning';
+      if (/needs[_\s-]*validation|not evaluated|pending/.test(explicit)) return 'needs_validation';
+      if (/ok|pass|normal/.test(explicit)) return 'ok';
+      return app.rulesSummary ? 'needs_validation' : 'ok';
+    }
+
+    function highestStatus(statuses) {
+      return statuses.reduce((best, status) => STATUS_PRIORITY[status] > STATUS_PRIORITY[best] ? status : best, 'no_data');
+    }
+
+    function sameSystem(value, system) { return String(value || '').trim().toUpperCase() === system.toUpperCase(); }
+    function statusLabel(status) { return String(status || 'no_data').replace(/_/g, ' '); }
+    function latestMachineState() { return app.machineStateRows[app.machineStateRows.length - 1]?.machineState || ''; }
+
+    function summarizeSystem(system, status, signalCount, evidenceCount, latestSystemState) {
+      if (status === 'no_data') return `${system} has no parsed evidence, signals, or state rows yet.`;
+      if (status === 'ok') return `${system} has ${signalCount} signals and ${evidenceCount} evidence rows with no detected issue.`;
+      if (status === 'needs_validation') return `${system} has data, but rule-backed results still need validation.`;
+      return `${system} has ${statusLabel(status)} findings. Latest system state: ${latestSystemState || 'Unavailable'}.`;
+    }
+
+    function defaultActualExpected(signals, latestSystemState) {
+      const latestSignal = signals.find(signal => signal.lastValue !== undefined || signal.exampleValue !== undefined);
+      if (latestSignal) return `Actual: ${latestSignal.lastValue ?? latestSignal.exampleValue} • Expected: ${rulePlaceholder(latestSignal, 'expected')}`;
+      return `Actual state: ${latestSystemState || 'Unavailable'} • Expected: healthy operating state`;
+    }
+
+    function recommendedAction(status, system) {
+      if (status === 'critical') return `Stop and investigate ${system}; validate the failing parameter against service guidance before continuing production.`;
+      if (status === 'warning') return `Inspect ${system}, confirm trend direction, and schedule corrective action if the warning persists.`;
+      if (status === 'needs_validation') return `Validate ${system} rule mappings and expected ranges for the current machine/system state.`;
+      if (status === 'ok') return `No immediate action required for ${system}. Continue monitoring.`;
+      return `Load focused logs/rules to evaluate ${system}.`;
     }
 
     function renderInventory() {
@@ -1291,9 +1628,14 @@
       return [signal.system || '', signal.sourceType || '', signal.signal || ''].join('||');
     }
 
-    function ruleStatus() { return app.rulesSummary ? 'Needs validation' : 'No rule'; }
-    function rulePlaceholder() { return app.rulesSummary ? 'Not evaluated' : '—'; }
-    function ruleResult() { return app.rulesSummary ? 'Needs validation' : 'No rule'; }
+    function ruleStatus(signal) { return signal?.ruleMappingStatus || signal?.mappingStatus || (app.rulesSummary ? 'Needs validation' : 'No rule'); }
+    function rulePlaceholder(signal, kind) {
+      if (!app.rulesSummary && !signal) return '—';
+      const keys = kind === 'warning' ? ['warningRange', 'expectedWarningRange'] : (kind === 'critical' ? ['criticalRange', 'expectedCriticalRange'] : ['expectedValue', 'expectedRange', 'expected']);
+      const found = keys.map(key => signal?.[key]).find(value => value !== undefined && value !== null && String(value).trim() !== '');
+      return found ?? (app.rulesSummary ? 'Not evaluated' : '—');
+    }
+    function ruleResult(signal) { return statusLabel(signalResult(signal)); }
 
     function getFilteredEvidence() {
       const filters = app.evidenceFilters;
@@ -1335,43 +1677,93 @@
     }
 
     function renderDrilldown() {
-      if (!app.selectedSignalKey) {
+      if (!app.systemDrilldownOpen) {
+        els.drilldownSection.hidden = true;
+        return;
+      }
+      const system = app.selectedSystem;
+      if (!system) {
         els.drilldownSection.hidden = true;
         return;
       }
       els.drilldownSection.hidden = false;
-      const profile = app.signalDiscovery.find(item => signalKey(item) === app.selectedSignalKey);
-      const series = app.timeSeriesBySignal[app.selectedSignalKey];
-      if (!profile) {
-        els.drilldownBody.innerHTML = '<div class="empty-state">Selected signal is no longer available.</div>';
+      const summary = getSystemHealthSummaries().find(item => item.system === system);
+      if (!summary) {
+        els.drilldownBody.innerHTML = '<div class="empty-state">Selected system is no longer available.</div>';
         return;
       }
-      els.drilldownTag.textContent = profile.signal || 'Selected signal';
-      const points = series?.points || [];
-      const chartData = downsamplePoints(points, MAX_CHART_POINTS_RENDERED);
-      const evidenceRows = app.evidence.filter(ev => signalKey(ev) === app.selectedSignalKey).slice(-MAX_RENDER_ROWS).reverse();
-      const downsampled = points.length > chartData.length;
+      els.drilldownTag.textContent = `${summary.system} • ${statusLabel(summary.status)}`;
+      app.selectedStateTrack = STATE_TRACKS.includes(summary.system) ? summary.system : app.selectedStateTrack;
+      const parameters = buildSystemParameterRows(summary).sort((a, b) => STATUS_PRIORITY[b.result] - STATUS_PRIORITY[a.result]);
+      const numericParameter = parameters.find(parameter => parameter.signal && (app.timeSeriesBySignal[signalKey(parameter.signal)]?.points || []).length);
+      const chartPoints = numericParameter ? downsamplePoints(app.timeSeriesBySignal[signalKey(numericParameter.signal)]?.points || [], MAX_CHART_POINTS_RENDERED) : [];
+      const relevantEvidence = summary.evidence.slice(-MAX_RENDER_ROWS).reverse();
       els.drilldownBody.innerHTML = `
-        <div class="drilldown-metrics">
-          <span class="metric-pill">Signal: ${escapeHtml(profile.signal || '')}</span>
-          <span class="metric-pill">System: ${escapeHtml(profile.system || '')}</span>
-          <span class="metric-pill">Source: ${escapeHtml(profile.sourceType || '')}</span>
-          <span class="metric-pill">Count: ${escapeHtml(String(profile.count || 0))}</span>
-          <span class="metric-pill">Min: ${formatNumber(profile.min)}</span>
-          <span class="metric-pill">Max: ${formatNumber(profile.max)}</span>
-          <span class="metric-pill">Avg: ${formatNumber(profile.avg)}</span>
-          <span class="metric-pill">First: ${escapeHtml(profile.firstTimestamp || '')}</span>
-          <span class="metric-pill">Last: ${escapeHtml(profile.lastTimestamp || '')}</span>
+        <div class="drilldown-metrics status-${escapeHtml(summary.status)}">
+          <span class="metric-pill"><span class="status-dot"></span>System: ${escapeHtml(summary.system)}</span>
+          <span class="metric-pill">Result: ${escapeHtml(statusLabel(summary.status))}</span>
+          <span class="metric-pill">Machine state: ${escapeHtml(summary.currentMachineState || 'Unavailable')}</span>
+          <span class="metric-pill">System state: ${escapeHtml(summary.latestSystemState || 'Unavailable')}</span>
+          <span class="metric-pill">Signals: ${summary.signals.length.toLocaleString()}</span>
+          <span class="metric-pill">Evidence rows: ${summary.evidence.length.toLocaleString()}</span>
         </div>
-        ${downsampled ? '<p class="render-note">Chart is downsampled for performance.</p>' : ''}
-        <div class="chart-wrap">${renderSvgChart(chartData, profile)}${renderStateStripForChart()}</div>
-        <h3 class="panel-title" style="font-size:16px;margin-top:18px;">Evidence for selected signal</h3>
+        <h3 class="panel-title" style="font-size:16px;margin:0 0 12px;">Parameters — problematic first</h3>
+        <div class="parameter-list">${parameters.map(renderParameterCard).join('') || '<div class="empty-state">No parameters found for this system.</div>'}</div>
+        <h3 class="panel-title" style="font-size:16px;margin:18px 0 12px;">Compact actual-vs-expected chart</h3>
+        <div class="chart-wrap">${numericParameter ? renderSvgChart(chartPoints, numericParameter.signal) : '<div class="empty-state">No numeric data exists for this system.</div>'}</div>
+        <h3 class="panel-title" style="font-size:16px;margin:18px 0 12px;">Compact state timeline</h3>
+        ${renderSystemMiniTimeline(summary.system)}
+        <h3 class="panel-title" style="font-size:16px;margin:18px 0 12px;">Relevant evidence rows for ${escapeHtml(summary.system)}</h3>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Time</th><th>Value</th><th>Machine State</th><th>System State</th><th>Source</th><th>Raw Preview</th></tr></thead>
-            <tbody>${renderLimitRow(evidenceRows.length, app.evidence.filter(ev => signalKey(ev) === app.selectedSignalKey).length, 6)}${evidenceRows.map(ev => `<tr><td>${escapeHtml(ev.timestamp || '')}</td><td>${escapeHtml(String(ev.value ?? ''))}</td><td>${escapeHtml(ev.machineState || '')}</td><td>${escapeHtml(ev.systemState || '')}</td><td class="path-cell">${escapeHtml(ev.sourceFileId || '')}</td><td class="path-cell">${escapeHtml(ev.rawPreview || '')}</td></tr>`).join('') || '<tr><td class="muted" colspan="6">No stored evidence rows for this signal.</td></tr>'}</tbody>
+            <thead><tr><th>Time</th><th>Source</th><th>Parameter</th><th>Actual Value</th><th>Machine State</th><th>System State</th><th>Raw Preview</th></tr></thead>
+            <tbody>${renderLimitRow(relevantEvidence.length, summary.evidence.length, 7)}${relevantEvidence.map(ev => `<tr><td>${escapeHtml(ev.timestamp || '')}</td><td>${escapeHtml(ev.sourceType || '')}</td><td>${escapeHtml(ev.signal || '')}</td><td>${escapeHtml(String(ev.value ?? ''))}</td><td>${escapeHtml(ev.machineState || '')}</td><td>${escapeHtml(ev.systemState || '')}</td><td class="path-cell">${escapeHtml(ev.rawPreview || ev.sourceFileId || '')}</td></tr>`).join('') || '<tr><td class="muted" colspan="7">No stored evidence rows for this system.</td></tr>'}</tbody>
           </table>
         </div>`;
+    }
+
+    function buildSystemParameterRows(summary) {
+      const rows = summary.signals.map(signal => {
+        const result = signalResult(signal);
+        return {
+          signal,
+          name: signal.signal || 'Unnamed parameter',
+          actual: signal.lastValue ?? signal.exampleValue ?? 'Unavailable',
+          expected: rulePlaceholder(signal, 'expected'),
+          state: signal.lastMachineState || summary.currentMachineState || 'Unavailable',
+          systemState: signal.lastSystemState || summary.latestSystemState || 'Unavailable',
+          result,
+          severity: statusLabel(result),
+          reason: result === 'ok' ? 'No issue detected from available result.' : `Evaluated result is ${statusLabel(result)}.`,
+          recommendedAction: recommendedAction(result, summary.system)
+        };
+      });
+      if (!rows.length && summary.latestSystemState) {
+        rows.push({ name: `${summary.system} state`, actual: summary.latestSystemState, expected: 'Healthy operating state', state: summary.currentMachineState || 'Unavailable', systemState: summary.latestSystemState, result: summary.status, severity: statusLabel(summary.status), reason: summary.summary, recommendedAction: recommendedAction(summary.status, summary.system) });
+      }
+      return rows;
+    }
+
+    function renderParameterCard(parameter) {
+      return `<article class="parameter-card status-${escapeHtml(parameter.result)}">
+        <h4 style="margin:0;"><span class="status-dot"></span>${escapeHtml(parameter.name)}</h4>
+        <div class="parameter-grid">
+          <span class="parameter-field">Actual value<strong>${escapeHtml(String(parameter.actual ?? 'Unavailable'))}</strong></span>
+          <span class="parameter-field">Expected value/range<strong>${escapeHtml(String(parameter.expected ?? 'Not evaluated'))}</strong></span>
+          <span class="parameter-field">Machine/system state<strong>${escapeHtml(parameter.state)} / ${escapeHtml(parameter.systemState)}</strong></span>
+          <span class="parameter-field">Result & severity<strong>${escapeHtml(statusLabel(parameter.result))} • ${escapeHtml(parameter.severity)}</strong></span>
+        </div>
+        <p class="panel-note" style="margin:0 0 8px;"><strong>Reason:</strong> ${escapeHtml(parameter.reason)}</p>
+        <p class="panel-note" style="margin:0;"><strong>Recommended action:</strong> ${escapeHtml(parameter.recommendedAction)}</p>
+      </article>`;
+    }
+
+    function renderSystemMiniTimeline(system) {
+      const segments = buildStateSegments(app.machineStateRows, STATE_TRACKS.includes(system) ? system : 'Machine');
+      if (!segments.length) return '<div class="empty-state">No MachineStates timeline data for this system.</div>';
+      const rendered = downsampleSegments(segments, 80);
+      const total = rendered.reduce((sum, segment) => sum + segmentWidthBasis(segment), 0) || 1;
+      return `<div class="mini-timeline" aria-label="${escapeHtml(system)} compact state timeline">${rendered.map(segment => `<span style="width:${Math.max(0.6, (segmentWidthBasis(segment) / total) * 100)}%; background:${stateColor(segment.state)}" title="${escapeHtml(segmentTooltip(segment))}"></span>`).join('')}</div>`;
     }
 
     function downsamplePoints(points, maxPoints) {
@@ -1429,10 +1821,39 @@
       el.classList.toggle('muted', value === 'No data');
     }
 
+    els.healthMapStage?.addEventListener('click', event => {
+      const hotspot = event.target.closest('[data-system]');
+      if (!hotspot) return;
+      app.selectedSystem = hotspot.dataset.system || app.selectedSystem;
+      renderHealthMap();
+    });
+
+    els.systemIssuePanel?.addEventListener('click', event => {
+      if (event.target.id !== 'openSystemDrilldown') return;
+      app.systemDrilldownOpen = true;
+      renderDrilldown();
+      els.drilldownSection.hidden = false;
+      els.drilldownSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    els.showAllSystemsButton?.addEventListener('click', () => {
+      app.healthFilter = 'all';
+      renderHealthMap();
+    });
+
+    els.showIssuesButton?.addEventListener('click', () => {
+      app.healthFilter = 'issues';
+      renderHealthMap();
+    });
+
     els.signalsBody.addEventListener('click', event => {
       const row = event.target.closest('[data-signal-key]');
       if (!row) return;
       app.selectedSignalKey = row.dataset.signalKey || '';
+      const profile = app.signalDiscovery.find(item => signalKey(item) === app.selectedSignalKey);
+      if (profile?.system) app.selectedSystem = profile.system;
+      app.systemDrilldownOpen = true;
+      renderHealthMap();
       renderDrilldown();
       els.drilldownSection.hidden = false;
       els.drilldownSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
