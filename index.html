@@ -3,299 +3,490 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PANDA Tool | Service Radar</title>
+  <title>PANDA Tool</title>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #05080c;
-      --line: rgba(154, 174, 198, 0.18);
-      --line-strong: rgba(154, 174, 198, 0.28);
-      --text: #f5f8fc;
-      --cyan: #35c8f2;
-      --cyan-soft: rgba(53, 200, 242, 0.12);
-      --red: #ff4f4f;
-      --muted: #9fb0c4;
-      --radius: 8px;
-      --shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
+      --bg: #0b1118;
+      --surface: #111923;
+      --surface-soft: #151f2b;
+      --surface-muted: #0f1720;
+      --border: #263443;
+      --border-soft: rgba(148, 163, 184, 0.22);
+      --text: #eef4fb;
+      --text-muted: #9fb0c3;
+      --text-faint: #748498;
+      --accent: #38c8f4;
+      --accent-soft: rgba(56, 200, 244, 0.12);
+      --shadow: 0 20px 54px rgba(0, 0, 0, 0.28);
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
     }
 
-    * { box-sizing: border-box; }
-    html { min-height: 100%; background: var(--bg); }
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      min-height: 100%;
+      background: var(--bg);
+    }
+
     body {
       min-height: 100vh;
       margin: 0;
       font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at 46% 8%, rgba(53, 200, 242, 0.08), transparent 34rem),
-        linear-gradient(180deg, #070b10 0%, #05080c 48%, #030509 100%);
-      letter-spacing: 0;
+        radial-gradient(circle at 18% 0%, rgba(56, 200, 244, 0.10), transparent 30rem),
+        linear-gradient(180deg, #0b1118 0%, #081019 100%);
     }
-    button { font: inherit; }
 
-    .app-shell { min-height: 100vh; display: grid; grid-template-rows: auto auto 1fr auto; }
-    .topbar {
-      height: 76px;
+    button {
+      font: inherit;
+    }
+
+    .app-shell {
+      min-height: 100vh;
       display: grid;
-      grid-template-columns: 370px 1fr auto;
+      grid-template-rows: auto auto 1fr auto;
+    }
+
+    .app-header {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto;
       align-items: center;
-      gap: 22px;
-      padding: 0 24px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(6, 10, 15, 0.94);
+      gap: 24px;
+      padding: 24px 32px 20px;
+      border-bottom: 1px solid var(--border-soft);
+      background: rgba(8, 16, 25, 0.88);
       backdrop-filter: blur(16px);
     }
 
-    .brand { display: flex; align-items: center; gap: 18px; min-width: 0; }
-    .launcher {
-      width: 28px;
-      height: 28px;
-      display: grid;
-      grid-template-columns: repeat(3, 4px);
-      grid-auto-rows: 4px;
-      gap: 5px;
-      opacity: 0.68;
-      flex: 0 0 auto;
+    .brand-block {
+      min-width: 0;
     }
-    .launcher span { width: 4px; height: 4px; border-radius: 50%; background: #c3cedb; }
-    .logo-lockup { display: flex; align-items: center; gap: 18px; min-width: 0; }
 
-    .landa-logo-img {
-      width: 112px;
-      height: 42px;
-      object-fit: contain;
-      object-position: left center;
-      display: block;
-      flex: 0 0 auto;
+    .eyebrow {
+      margin: 0 0 6px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
     }
-    .brand-divider { width: 1px; height: 44px; background: var(--line); flex: 0 0 auto; }
-    .product-title { min-width: 0; transform: translateY(-1px); }
-    .product-title strong { display: block; font-size: 22px; line-height: 1.08; letter-spacing: 0; }
-    .product-title span { display: block; margin-top: 5px; font-size: 12px; color: #d7e2ef; white-space: nowrap; }
 
-    .main-nav { display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 0; }
+    .product-name {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 44px);
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+
+    .product-subtitle {
+      margin: 10px 0 0;
+      color: var(--text-muted);
+      font-size: 15px;
+    }
+
+    .header-status {
+      justify-self: end;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 42px;
+      padding: 0 16px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text-muted);
+      background: var(--surface-muted);
+      white-space: nowrap;
+    }
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--text-faint);
+    }
+
+    .primary-nav {
+      display: flex;
+      gap: 8px;
+      padding: 12px 32px;
+      border-bottom: 1px solid var(--border-soft);
+      overflow-x: auto;
+      background: rgba(10, 17, 26, 0.78);
+    }
+
     .nav-item {
       border: 1px solid transparent;
-      border-radius: var(--radius);
-      color: #e9f1fa;
+      border-radius: 999px;
+      padding: 10px 15px;
+      color: var(--text-muted);
       background: transparent;
-      padding: 13px 17px;
       cursor: default;
       white-space: nowrap;
     }
-    .nav-item.is-active {
-      border-color: var(--line-strong);
-      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
-      box-shadow: inset 0 -2px 0 var(--cyan);
-      font-weight: 700;
+
+    .nav-item[aria-current="page"] {
+      border-color: rgba(56, 200, 244, 0.42);
+      color: var(--text);
+      background: var(--accent-soft);
     }
 
-    .header-actions { display: flex; align-items: center; gap: 10px; }
-    .meta-pill, .icon-button, .avatar {
-      border: 1px solid var(--line-strong);
-      background: #0d1520;
-      color: #eaf2fb;
-      border-radius: var(--radius);
-      min-height: 40px;
-    }
-    .meta-pill { display: inline-flex; align-items: center; padding: 0 14px; color: #c9d5e3; white-space: nowrap; }
-    .icon-button, .avatar { width: 42px; display: grid; place-items: center; }
-    .avatar { border-radius: 50%; font-size: 12px; font-weight: 700; }
-
-    .status-strip {
-      margin: 16px 24px 0;
+    .workspace {
       display: grid;
-      grid-template-columns: auto 1fr auto;
-      align-items: center;
-      gap: 16px;
-      min-height: 62px;
-      padding: 12px 16px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: rgba(10, 16, 24, 0.72);
+      gap: 18px;
+      padding: 24px 32px 26px;
     }
-    .mode-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 9px 15px;
-      border-radius: 999px;
-      border: 1px solid rgba(53, 200, 242, 0.42);
-      color: #e9fbff;
-      background: var(--cyan-soft);
-      font-weight: 800;
-      white-space: nowrap;
-    }
-    .mode-badge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 18px rgba(53, 200, 242, 0.75); }
-    .scan-progress { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; min-width: 0; }
-    .stage-label { color: #f2f7fc; font-size: 14px; font-weight: 700; white-space: nowrap; }
-    .progress-track { height: 8px; overflow: hidden; border-radius: 999px; background: #1a2531; }
-    .progress-fill { width: 0%; height: 100%; background: linear-gradient(90deg, var(--cyan), #75def7); }
-    .status-counts { display: flex; align-items: center; gap: 18px; color: #c4d0df; font-size: 12px; white-space: nowrap; }
-    .status-counts b { color: #fff; }
 
-    .workspace { display: grid; gap: 16px; padding: 16px 24px 18px; }
-    .kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 14px;
+    }
+
     .card {
-      border: 1px solid var(--line-strong);
-      border-radius: var(--radius);
-      background: linear-gradient(180deg, rgba(18, 28, 40, 0.86), rgba(8, 13, 19, 0.88));
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-lg);
+      background: linear-gradient(180deg, rgba(21, 31, 43, 0.96), rgba(13, 21, 31, 0.96));
       box-shadow: var(--shadow);
     }
-    .kpi-card { min-height: 112px; display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: 14px; padding: 18px; }
-    .kpi-icon {
-      width: 54px;
-      height: 54px;
-      border-radius: 50%;
+
+    .kpi-card {
+      min-height: 116px;
+      padding: 20px;
+      display: grid;
+      align-content: space-between;
+      gap: 16px;
+    }
+
+    .kpi-label {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .empty-value {
+      color: var(--text-faint);
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .main-panel,
+    .issue-panel {
+      min-height: 470px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 22px 24px 0;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+    }
+
+    .panel-note {
+      margin: 8px 0 0;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .panel-tag {
+      flex: 0 0 auto;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 7px 10px;
+      color: var(--text-faint);
+      background: rgba(255, 255, 255, 0.03);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .empty-stage {
+      min-height: 325px;
+      margin: 24px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
       display: grid;
       place-items: center;
-      border: 1px solid rgba(53, 200, 242, 0.62);
-      background: rgba(53, 200, 242, 0.12);
-      color: var(--cyan);
+      padding: 28px;
+      background:
+        linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+        rgba(8, 15, 23, 0.52);
+      background-size: 28px 28px;
+      text-align: center;
+    }
+
+    .empty-message {
+      max-width: 520px;
+    }
+
+    .empty-message strong {
+      display: block;
+      margin-bottom: 8px;
       font-size: 18px;
-      font-weight: 900;
-    }
-    .kpi-label { margin: 0 0 8px; color: #bfd0e3; font-size: 12px; font-weight: 900; text-transform: uppercase; }
-    .kpi-value { font-size: 30px; line-height: 1; font-weight: 850; color: #fff; }
-    .kpi-note { margin-top: 8px; color: var(--muted); font-size: 13px; }
-
-    .main-grid { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 14px; min-height: 520px; }
-    .machine-panel { position: relative; min-height: 520px; overflow: hidden; padding: 22px; }
-    .machine-panel::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background:
-        radial-gradient(ellipse at 45% 18%, rgba(148, 172, 196, 0.14), transparent 35%),
-        linear-gradient(180deg, rgba(36, 50, 64, 0.52), rgba(5, 8, 12, 0.18));
-      pointer-events: none;
-    }
-    .machine-panel::after {
-      content: "";
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 145px;
-      opacity: 0.42;
-      background:
-        linear-gradient(rgba(53, 200, 242, 0.15) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(53, 200, 242, 0.13) 1px, transparent 1px);
-      background-size: 44px 44px;
-      transform: perspective(360px) rotateX(58deg);
-      transform-origin: bottom;
-      pointer-events: none;
-    }
-    .panel-content { position: relative; z-index: 1; }
-    .panel-kicker { margin: 0; font-size: 13px; font-weight: 850; color: #f5f8fc; text-transform: uppercase; }
-    .machine-heading { display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
-    .machine-heading h1 { margin: 0; font-size: 28px; line-height: 1.15; }
-    .small-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 24px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line-strong); color: #b8c7d9; background: rgba(255, 255, 255, 0.04); font-size: 11px; font-weight: 800; }
-    .view-switch { display: inline-flex; margin-top: 18px; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; background: rgba(5, 8, 12, 0.48); }
-    .view-switch span { padding: 9px 12px; color: var(--muted); font-size: 13px; }
-    .view-switch span:first-child { color: var(--cyan); background: rgba(53, 200, 242, 0.14); }
-    .machine-empty-stage { position: absolute; left: 34px; right: 34px; bottom: 48px; height: 300px; display: grid; place-items: center; z-index: 1; }
-    .machine-placeholder {
-      width: min(980px, 88%);
-      height: 150px;
-      position: relative;
-      border: 1px solid rgba(180, 197, 218, 0.2);
-      border-radius: 6px;
-      background:
-        linear-gradient(90deg, rgba(218, 227, 237, 0.92) 0 11%, transparent 11% 36%, rgba(190, 204, 218, 0.38) 36% 100%),
-        linear-gradient(180deg, rgba(230, 237, 245, 0.92) 0 37%, rgba(47, 58, 70, 0.92) 37% 100%);
-      box-shadow: 0 24px 70px rgba(0,0,0,0.48), inset 0 0 42px rgba(255,255,255,0.06);
-    }
-    .machine-placeholder::before { content: ""; position: absolute; left: 50px; top: 34px; width: 34%; height: 52px; background: #050a0f; box-shadow: 520px 18px 0 -10px rgba(5, 10, 15, 0.88), 620px 10px 0 -18px rgba(53, 200, 242, 0.55); }
-    .machine-placeholder::after { content: "Machine visual pending"; position: absolute; right: 18px; bottom: 14px; color: rgba(232, 240, 250, 0.72); font-size: 12px; letter-spacing: 0; }
-    .empty-copy { position: absolute; inset: auto 38px 34px 38px; display: flex; align-items: center; justify-content: space-between; gap: 18px; z-index: 2; }
-    .empty-copy p { max-width: 680px; margin: 0; color: #aebdce; line-height: 1.5; }
-    .outline-button { border: 1px solid var(--line-strong); border-radius: var(--radius); color: #eef7ff; background: rgba(10, 16, 24, 0.74); padding: 10px 14px; white-space: nowrap; }
-
-    .issue-panel { min-height: 520px; display: grid; grid-template-rows: auto auto 1fr auto; overflow: hidden; }
-    .issue-header { display: flex; justify-content: space-between; gap: 12px; padding: 22px 18px 0; }
-    .issue-state { color: var(--red); font-size: 13px; font-weight: 900; }
-    .issue-title { padding: 22px 18px; border-bottom: 1px solid var(--line); }
-    .issue-title h2 { margin: 0 0 10px; font-size: 26px; line-height: 1.15; }
-    .issue-title p { margin: 0; color: #d8e3ef; line-height: 1.45; }
-    .details-empty { margin: 18px; padding: 20px; border: 1px dashed rgba(154, 174, 198, 0.32); border-radius: var(--radius); color: #b7c6d8; line-height: 1.55; background: rgba(255,255,255,0.02); }
-    .primary-action { margin: 0 18px 18px; border: 0; border-radius: var(--radius); padding: 13px 16px; background: linear-gradient(180deg, #42cdf5, #27aadc); color: #fff; font-weight: 850; }
-
-    .bottom-grid { display: grid; grid-template-columns: 1.05fr 1fr 0.95fr; gap: 14px; }
-    .bottom-panel { min-height: 150px; padding: 18px; }
-    .bottom-panel h3 { margin: 0 0 8px; font-size: 15px; text-transform: uppercase; }
-    .bottom-panel p { margin: 0; color: #a8b7c9; line-height: 1.45; }
-    .empty-line { margin-top: 16px; height: 42px; border-radius: 6px; border: 1px dashed rgba(154, 174, 198, 0.2); background: rgba(255, 255, 255, 0.02); }
-
-    .footer { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 0 24px; border-top: 1px solid var(--line); color: #99a8ba; font-size: 12px; background: rgba(3, 6, 10, 0.74); }
-    .footer-left, .footer-right { display: flex; align-items: center; gap: 18px; min-width: 0; }
-    .status-dot { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
-    .status-dot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #667386; }
-
-    @media (max-width: 1280px) {
-      .topbar { grid-template-columns: 335px 1fr; height: auto; padding: 16px 20px; }
-      .header-actions { grid-column: 1 / -1; justify-content: flex-end; }
-      .landa-logo-img { width: 104px; height: 39px; }
-      .brand-divider { height: 40px; }
-      .product-title strong { font-size: 20px; }
-      .product-title span { font-size: 11px; }
-      .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .main-grid { grid-template-columns: 1fr; }
-      .issue-panel { min-height: auto; }
     }
 
-    @media (max-width: 860px) {
-      .topbar, .status-strip, .scan-progress, .main-grid, .bottom-grid { grid-template-columns: 1fr; }
-      .main-nav { justify-content: flex-start; overflow-x: auto; }
-      .brand { gap: 14px; }
-      .logo-lockup { align-items: flex-start; flex-direction: column; gap: 8px; }
-      .brand-divider { display: none; }
-      .kpi-grid { grid-template-columns: 1fr; }
-      .status-counts { flex-wrap: wrap; }
-      .machine-panel { min-height: 560px; }
-      .machine-empty-stage { left: 18px; right: 18px; }
-      .machine-placeholder { width: 100%; }
-      .empty-copy { position: relative; inset: auto; margin-top: 360px; display: block; }
-      .footer { align-items: flex-start; flex-direction: column; padding: 14px 20px; }
+    .empty-message span {
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    .issue-panel {
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .issue-empty {
+      margin: 24px;
+      padding: 22px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-muted);
+      background: rgba(8, 15, 23, 0.52);
+      line-height: 1.55;
+    }
+
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 18px;
+    }
+
+    .bottom-panel {
+      min-height: 178px;
+      padding: 20px;
+    }
+
+    .bottom-panel h3 {
+      margin: 0 0 10px;
+      font-size: 15px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .bottom-panel p {
+      margin: 0;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .placeholder-line {
+      height: 42px;
+      margin-top: 18px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 44px;
+      padding: 0 32px;
+      border-top: 1px solid var(--border-soft);
+      color: var(--text-faint);
+      background: rgba(6, 12, 19, 0.92);
+      font-size: 12px;
+    }
+
+    .status-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 0;
+    }
+
+    @media (max-width: 1180px) {
+      .kpi-row {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .main-panel,
+      .issue-panel {
+        min-height: auto;
+      }
+    }
+
+    @media (max-width: 820px) {
+      .app-header,
+      .workspace,
+      .primary-nav,
+      .status-bar {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+
+      .app-header {
+        grid-template-columns: 1fr;
+      }
+
+      .header-status {
+        justify-self: start;
+      }
+
+      .kpi-row,
+      .bottom-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .panel-header {
+        display: block;
+      }
+
+      .panel-tag {
+        display: inline-flex;
+        margin-top: 14px;
+      }
+
+      .status-bar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding-top: 12px;
+        padding-bottom: 12px;
+      }
+
+      .status-group {
+        flex-wrap: wrap;
+      }
     }
   </style>
 </head>
 <body>
   <div class="app-shell">
-    <header class="topbar" aria-label="PANDA Tool header">
-      <div class="brand">
-        <div class="launcher" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-        <div class="logo-lockup">
-          <img class="landa-logo-img" src="data:image/png;base64,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" alt="Landa">
-          <div class="brand-divider" aria-hidden="true"></div>
-          <div class="product-title"><strong>PANDA Tool</strong><span>Proactive Analyzer Notification DA</span></div>
-        </div>
+    <header class="app-header">
+      <div class="brand-block" aria-label="PANDA Tool product identity">
+        <p class="eyebrow">Service Intelligence Foundation</p>
+        <h1 class="product-name">PANDA Tool</h1>
+        <p class="product-subtitle">Proactive Analyzer Notification DA</p>
       </div>
-      <nav class="main-nav" aria-label="Primary navigation">
-        <button class="nav-item is-active" type="button">Service Radar</button><button class="nav-item" type="button">Alerts</button><button class="nav-item" type="button">Analysis</button><button class="nav-item" type="button">Machines</button><button class="nav-item" type="button">Reports</button><button class="nav-item" type="button">Knowledge</button>
-      </nav>
-      <div class="header-actions" aria-label="Session status"><div class="meta-pill">No data range</div><button class="icon-button" type="button" aria-label="Notifications">!</button><div class="avatar" aria-label="Current user">JD</div></div>
+      <div class="header-status" aria-label="Application data status">
+        <span class="status-indicator" aria-hidden="true"></span>
+        <span>No data loaded</span>
+      </div>
     </header>
 
-    <section class="status-strip" aria-label="Scan status">
-      <div class="mode-badge">Idle</div><div class="scan-progress"><div class="stage-label">Idle / waiting for files</div><div class="progress-track" aria-label="Scan progress"><div class="progress-fill"></div></div><div>0%</div></div><div class="status-counts"><span>Focused files <b>0</b></span><span>Rules <b>0</b></span><span>Machines <b>0</b></span></div>
-    </section>
+    <nav class="primary-nav" aria-label="Primary navigation">
+      <button class="nav-item" type="button" aria-current="page">Service Radar</button>
+      <button class="nav-item" type="button">Alerts</button>
+      <button class="nav-item" type="button">Analysis</button>
+      <button class="nav-item" type="button">Machines</button>
+      <button class="nav-item" type="button">Reports</button>
+      <button class="nav-item" type="button">Knowledge</button>
+    </nav>
 
     <main class="workspace">
-      <section class="kpi-grid" aria-label="Key performance indicators">
-        <article class="card kpi-card"><div class="kpi-icon">M</div><div><p class="kpi-label">Machines scanned</p><div class="kpi-value">0</div><div class="kpi-note">No data</div></div></article>
-        <article class="card kpi-card"><div class="kpi-icon">F</div><div><p class="kpi-label">Focused log files parsed</p><div class="kpi-value">0</div><div class="kpi-note">No data</div></div></article>
-        <article class="card kpi-card"><div class="kpi-icon">R</div><div><p class="kpi-label">Rules loaded</p><div class="kpi-value">0</div><div class="kpi-note">Rules required</div></div></article>
-        <article class="card kpi-card"><div class="kpi-icon">!</div><div><p class="kpi-label">Real alerts</p><div class="kpi-value">0</div><div class="kpi-note">No alerts without Rules</div></div></article>
-        <article class="card kpi-card"><div class="kpi-icon">V</div><div><p class="kpi-label">Needs validation</p><div class="kpi-value">0</div><div class="kpi-note">Pending evidence</div></div></article>
+      <section class="kpi-row" aria-label="Service radar KPI placeholders">
+        <article class="card kpi-card">
+          <p class="kpi-label">Machines scanned</p>
+          <span class="empty-value">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Log files parsed</p>
+          <span class="empty-value">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Rules loaded</p>
+          <span class="empty-value">Rules required</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Real alerts</p>
+          <span class="empty-value">Pending</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Needs validation</p>
+          <span class="empty-value">Pending</span>
+        </article>
       </section>
-      <section class="main-grid" aria-label="Service radar workspace">
-        <article class="card machine-panel"><div class="panel-content"><p class="panel-kicker">Machine overview</p><div class="machine-heading"><h1>No machine selected</h1><span class="small-badge">No data</span></div><div class="view-switch" aria-label="View selector"><span>Grid</span><span>List</span></div></div><div class="machine-empty-stage" aria-hidden="true"><div class="machine-placeholder"></div></div><div class="empty-copy"><p>Upload logs and a PANDA Rules file in a later stage to populate real machine systems, evidence, rule matches, and confirmed alerts. This foundation intentionally contains no operational data.</p><button class="outline-button" type="button">Drill-down pending</button></div></article>
-        <aside class="card issue-panel" aria-label="Selected issue panel"><div class="issue-header"><div class="issue-state">No selected issue</div><span class="small-badge">Pending</span></div><div class="issue-title"><h2>Upload evidence to begin</h2><p>No real alerts are generated without matching rules and complete validation.</p></div><div class="details-empty">Stage 1 provides the dashboard structure only. File upload, parsing, discovery mode, rule matching, and alert evaluation will be added in later stages.</div><button class="primary-action" type="button">Open Drill-Down Workspace</button></aside>
+
+      <section class="dashboard-grid" aria-label="Main service radar dashboard">
+        <article class="card main-panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Machine / System Overview</h2>
+              <p class="panel-note">This area will show evidence-based machine and system status after real logs and rules are loaded in later stages.</p>
+            </div>
+            <span class="panel-tag">No data</span>
+          </div>
+          <div class="empty-stage" role="status" aria-live="polite">
+            <div class="empty-message">
+              <strong>Service radar awaiting input</strong>
+              <span>No machine systems, alerts, or health indicators are shown until they can be derived from uploaded operational data.</span>
+            </div>
+          </div>
+        </article>
+
+        <aside class="card issue-panel" aria-label="Selected issue details">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Selected Issue</h2>
+              <p class="panel-note">Evidence and service context will appear here only after a real finding exists.</p>
+            </div>
+            <span class="panel-tag">Pending</span>
+          </div>
+          <div class="issue-empty">
+            No active finding selected. Confirmed alerts and recommended service actions require parsed logs and uploaded rules.
+          </div>
+        </aside>
       </section>
-      <section class="bottom-grid" aria-label="Operational panels"><article class="card bottom-panel"><h3>State Machine Timeline</h3><p>No MachineStates parsed.</p><div class="empty-line" aria-hidden="true"></div></article><article class="card bottom-panel"><h3>Evidence Log</h3><p>No focused evidence loaded.</p><div class="empty-line" aria-hidden="true"></div></article><article class="card bottom-panel"><h3>Recommended Service Action</h3><p>Actions are available only when rules and validated evidence support them.</p><div class="empty-line" aria-hidden="true"></div></article></section>
+
+      <section class="bottom-grid" aria-label="Supporting analysis placeholders">
+        <article class="card bottom-panel">
+          <h3>State Machine Timeline</h3>
+          <p>No MachineStates data parsed.</p>
+          <div class="placeholder-line" aria-hidden="true"></div>
+        </article>
+        <article class="card bottom-panel">
+          <h3>Evidence Log</h3>
+          <p>No evidence records available.</p>
+          <div class="placeholder-line" aria-hidden="true"></div>
+        </article>
+        <article class="card bottom-panel">
+          <h3>Recommended Service Action</h3>
+          <p>No recommendation available. Rules and supporting evidence are required.</p>
+          <div class="placeholder-line" aria-hidden="true"></div>
+        </article>
+      </section>
     </main>
-    <footer class="footer"><div class="footer-left"><span class="status-dot">Data connection: No data</span><span class="status-dot">PANDA engine: Pending</span><span>Last data: No data</span></div><div class="footer-right"><span>Machine: No machine selected</span><span>Site: Pending</span><span>Service user: JD</span></div></footer>
+
+    <footer class="status-bar">
+      <div class="status-group">
+        <span>PANDA Tool Stage 1</span>
+        <span>Static browser foundation</span>
+      </div>
+      <div class="status-group" aria-label="Data readiness summary">
+        <span>Logs: No data</span>
+        <span>Rules: Rules required</span>
+        <span>Mode: Pending</span>
+      </div>
+    </footer>
   </div>
 </body>
 </html>
