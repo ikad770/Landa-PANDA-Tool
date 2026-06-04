@@ -126,6 +126,7 @@
     }
 
     .status-indicator.ready { background: var(--success); }
+    .status-indicator.warning { background: var(--warning); }
     .status-indicator.active { background: var(--accent); }
     .status-indicator.failed { background: var(--danger); }
 
@@ -665,6 +666,15 @@
     const UI_YIELD_EVERY_MS = 40;
     const MAX_POINTS_PER_SIGNAL = 5000;
 
+    const PIPELINE_STATUS = Object.freeze({
+      IDLE: 'idle',
+      SCANNING: 'scanning',
+      PARSING: 'parsing',
+      COMPLETED: 'completed',
+      COMPLETED_WITH_WARNINGS: 'completed_with_warnings',
+      FAILED: 'failed'
+    });
+
     const PIPELINE_GROUPS = [
       { key: 'archive', label: 'Archive', steps: [['rootZip', 'Root ZIP'], ['opcZip', 'opc.zip'], ['logsFolder', 'logs folder']] },
       { key: 'focused', label: 'Focused Sources', steps: [['machineStates', 'MachineStates'], ['alertsMonitoring', 'AlertsMonitoring'], ['fecNotifications', 'FECNotifications'], ['bssNotifications', 'BSSNotifications'], ['ipsNotifications', 'IPSNotifications']] },
@@ -680,8 +690,14 @@
     const app = {
       autocollectFile: null,
       rulesFile: null,
+      status: PIPELINE_STATUS.IDLE,
       progress: 0,
       pipelineGroups: new Map(),
+      counts: null,
+      focusedFiles: [],
+      evidencePreview: [],
+      signalProfiles: [],
+      machineStatesPreview: [],
       inventory: [],
       evidence: [],
       evidenceTotal: 0,
@@ -749,7 +765,13 @@
     function resetScanState() {
       if (app.worker) app.worker.terminate();
       app.worker = null;
+      app.status = PIPELINE_STATUS.IDLE;
       app.progress = 0;
+      app.counts = null;
+      app.focusedFiles = [];
+      app.evidencePreview = [];
+      app.signalProfiles = [];
+      app.machineStatesPreview = [];
       app.inventory = [];
       app.evidence = [];
       app.evidenceTotal = 0;
@@ -765,7 +787,10 @@
     }
 
     function setProgress(progress) {
-      const percent = Math.max(app.progress, Math.min(100, Math.round(progress.percent || 0)));
+      const requestedPercent = Math.min(100, Math.round(progress.percent || 0));
+      const isTerminal = [PIPELINE_STATUS.COMPLETED, PIPELINE_STATUS.COMPLETED_WITH_WARNINGS, PIPELINE_STATUS.FAILED].includes(app.status);
+      const cappedPercent = requestedPercent >= 100 && !isTerminal ? 99 : requestedPercent;
+      const percent = Math.max(app.progress, cappedPercent);
       app.progress = percent;
       els.progressBar.style.width = `${percent}%`;
       const rate = progress.rowsPerSecond ? ` • ${Math.round(progress.rowsPerSecond).toLocaleString()} rows/sec` : '';
@@ -783,9 +808,10 @@
       Object.entries(groups).forEach(([groupKey, incoming]) => {
         const group = app.pipelineGroups.get(groupKey);
         if (!group) return;
-        Object.assign(group, incoming);
-        if (incoming.steps) {
-          group.steps = group.steps.map(step => ({ ...step, ...(incoming.steps[step.key] || {}) }));
+        const { steps, ...groupFields } = incoming;
+        Object.assign(group, groupFields);
+        if (steps) {
+          group.steps = group.steps.map(step => ({ ...step, ...(steps[step.key] || {}) }));
         }
       });
       renderPipeline();
@@ -814,13 +840,18 @@
       `).join('');
     }
 
-    function renderAllData() {
+    function renderAll() {
       renderInventory();
       renderEvidence();
       renderSignals();
       renderDiagnostics();
       renderTimeline();
       renderKpis();
+      renderPipeline();
+    }
+
+    function renderAllData() {
+      renderAll();
     }
 
     function renderInventory() {
@@ -887,13 +918,19 @@
     }
 
     function renderDiagnostics() {
-      els.diagnosticsTag.textContent = `${app.diagnostics.length} issues`;
-      if (!app.diagnostics.length) {
+      const warnings = countDiagnostics('warning');
+      const errors = countDiagnostics('error');
+      els.diagnosticsTag.textContent = `${warnings} warnings • ${errors} errors`;
+      if (!app.diagnostics.length && app.status === PIPELINE_STATUS.IDLE) {
         els.diagnosticsBody.innerHTML = '<tr><td class="muted" colspan="5">No diagnostics yet.</td></tr>';
         return;
       }
+      const summary = diagnosticStatusSummary();
+      const firstFive = app.diagnostics.slice(0, 5).map(item => `${item.level}: ${item.stage} — ${item.message}`).join(' | ') || 'No diagnostics.';
       const rows = app.diagnostics.slice(0, MAX_RENDER_ROWS);
-      els.diagnosticsBody.innerHTML = `${renderLimitRow(rows.length, app.diagnostics.length, 5)}${rows.map(item => `
+      els.diagnosticsBody.innerHTML = `
+        <tr><td colspan="5"><strong>${escapeHtml(summary)}</strong> • Warnings: ${warnings} • Errors: ${errors}<br><span class="muted">First diagnostics: ${escapeHtml(firstFive)}</span></td></tr>
+        ${renderLimitRow(rows.length, app.diagnostics.length, 5)}${rows.map(item => `
         <tr>
           <td>${escapeHtml(item.level)}</td>
           <td>${escapeHtml(item.stage)}</td>
@@ -901,6 +938,15 @@
           <td>${escapeHtml(item.message)}</td>
           <td class="path-cell">${escapeHtml(item.technicalDetails || '')}</td>
         </tr>`).join('')}`;
+    }
+
+    function diagnosticStatusSummary() {
+      if (app.status === PIPELINE_STATUS.FAILED) return 'Failed';
+      if (app.status === PIPELINE_STATUS.COMPLETED_WITH_WARNINGS) return 'Completed with warnings';
+      if (app.status === PIPELINE_STATUS.COMPLETED) return 'Completed successfully';
+      if (app.status === PIPELINE_STATUS.PARSING) return 'Parsing';
+      if (app.status === PIPELINE_STATUS.SCANNING) return 'Scanning';
+      return 'Not started';
     }
 
     function renderTimeline() {
@@ -926,10 +972,13 @@
     }
 
     function renderKpis() {
-      setKpi(els.kpiFiles, app.inventory.length ? app.inventory.length : 'No data');
-      setKpi(els.kpiEvidence, app.evidenceTotal ? app.evidenceTotal.toLocaleString() : 'No data');
-      setKpi(els.kpiSignals, app.signalDiscovery.length ? app.signalDiscovery.length : 'No data');
-      setKpi(els.kpiStates, app.machineStateRows.length ? app.machineStateRows.length : 'No data');
+      const showNoData = app.status === PIPELINE_STATUS.IDLE && !app.counts;
+      const counts = app.counts || computeCounts();
+      setKpi(els.kpiFiles, showNoData ? 'No data' : counts.focusedFilesParsed.toLocaleString());
+      setKpi(els.kpiEvidence, showNoData ? 'No data' : counts.evidenceRecords.toLocaleString());
+      setKpi(els.kpiSignals, showNoData ? 'No data' : counts.signalsDiscovered.toLocaleString());
+      setKpi(els.kpiStates, showNoData ? 'No data' : counts.machineStateRows.toLocaleString());
+      setKpi(els.kpiRules, showNoData && !app.rulesSummary ? 'No data' : counts.rulesLoaded.toLocaleString());
     }
 
     function setKpi(el, value) {
@@ -960,6 +1009,7 @@
     async function analyzeAutocollect() {
       if (!app.autocollectFile) return;
       resetScanState();
+      app.status = PIPELINE_STATUS.SCANNING;
       els.analyzeButton.disabled = true;
       setHeader('Analyzing autocollect ZIP', 'active');
       els.modeTag.textContent = 'Analyzing';
@@ -981,43 +1031,131 @@
       const message = event.data || {};
       if (message.type === 'progress') {
         setProgress(message.progress || {});
+        if (message.progress?.stage && /parsing|finalization|signal discovery/i.test(message.progress.stage)) app.status = PIPELINE_STATUS.PARSING;
         updatePipelineFromWorker(message.pipeline);
         return;
       }
-      if (message.type === 'partial') {
-        app.inventory = message.inventory || app.inventory;
-        app.evidence = message.evidencePreview || app.evidence;
+      if (message.type === 'partial' || message.type === 'partialSummary') {
+        app.focusedFiles = message.focusedFiles || message.inventory || app.focusedFiles;
+        app.evidencePreview = message.evidencePreview || app.evidencePreview;
+        app.signalProfiles = message.signalProfiles || app.signalProfiles;
+        app.machineStatesPreview = message.machineStatesPreview || message.machineStateRows || app.machineStatesPreview;
+        app.inventory = app.focusedFiles;
+        app.evidence = app.evidencePreview;
         app.evidenceTotal = message.evidenceTotal || app.evidenceTotal;
-        app.signalDiscovery = message.signalProfiles || app.signalDiscovery;
-        app.machineStateRows = message.machineStateRows || app.machineStateRows;
+        app.signalDiscovery = app.signalProfiles;
+        app.machineStateRows = app.machineStatesPreview;
         app.diagnostics = message.diagnostics || app.diagnostics;
+        app.counts = normalizeCounts(message.counts, { evidenceTotal: app.evidenceTotal });
         updatePipelineFromWorker(message.pipeline);
-        renderAllData();
+        renderAll();
         return;
       }
       if (message.type === 'complete') {
-        app.inventory = message.result.inventory || [];
-        app.evidence = message.result.evidencePreview || [];
-        app.evidenceTotal = message.result.evidenceTotal || 0;
-        app.signalDiscovery = message.result.signalProfiles || [];
-        app.machineStateRows = message.result.machineStateRows || [];
-        app.timeSeriesBySignal = message.result.timeSeriesBySignal || {};
-        app.diagnostics = message.result.diagnostics || [];
-        app.archiveSummary = message.result.archiveSummary || null;
-        updatePipelineFromWorker(message.result.pipeline);
-        setProgress({ percent: 100, stage: 'Pipeline complete', filesParsed: app.inventory.length, totalFiles: app.inventory.length, rowsParsed: app.evidenceTotal, warnings: countDiagnostics('warning'), errors: countDiagnostics('error') });
-        els.pipelineTag.textContent = 'Complete';
-        els.modeTag.textContent = 'Complete';
-        els.footerMode.textContent = 'Mode: Pipeline complete';
-        els.footerLogs.textContent = `Logs: ${app.inventory.length} focused files, ${app.evidenceTotal.toLocaleString()} evidence rows`;
-        setHeader('Log extraction complete', 'ready');
-        renderAllData();
-        els.analyzeButton.disabled = false;
-        app.worker?.terminate();
-        app.worker = null;
+        finalizePipeline(message.result);
         return;
       }
       if (message.type === 'error') failPipeline(new Error(message.message || 'Pipeline failed.'), message.diagnostics, message.pipeline);
+    }
+
+    function finalizePipeline(result) {
+      if (!result) {
+        failPipeline(new Error('Worker completed without result payload'), [{ level: 'error', stage: 'Pipeline finalization', filePath: '', message: 'Worker completed without result payload', technicalDetails: 'The worker posted a complete message without a result object.' }]);
+        return;
+      }
+      const normalized = normalizePipelineResult(result);
+      app.focusedFiles = normalized.focusedFiles;
+      app.evidencePreview = normalized.evidencePreview;
+      app.signalProfiles = normalized.signalProfiles;
+      app.machineStatesPreview = normalized.machineStatesPreview;
+      app.inventory = app.focusedFiles;
+      app.evidence = app.evidencePreview;
+      app.signalDiscovery = app.signalProfiles;
+      app.machineStateRows = app.machineStatesPreview;
+      app.evidenceTotal = normalized.counts.evidenceRecords;
+      app.counts = normalized.counts;
+      app.diagnostics = normalized.diagnostics;
+      app.timeSeriesBySignal = normalized.timeSeriesBySignal;
+      app.archiveSummary = normalized.archiveSummary;
+      updatePipelineFromWorker(normalized.pipeline);
+      finalizePipelineCards();
+      app.status = normalized.diagnostics.some(item => item.level === 'error')
+        ? PIPELINE_STATUS.FAILED
+        : (normalized.diagnostics.some(item => item.level === 'warning') ? PIPELINE_STATUS.COMPLETED_WITH_WARNINGS : PIPELINE_STATUS.COMPLETED);
+      if (app.status !== PIPELINE_STATUS.FAILED && app.counts.focusedFilesParsed === 0) app.status = PIPELINE_STATUS.COMPLETED_WITH_WARNINGS;
+      setProgress({ percent: 100, stage: diagnosticStatusSummary(), filesParsed: app.counts.focusedFilesParsed, totalFiles: app.counts.focusedFilesParsed, rowsParsed: app.counts.evidenceRecords, warnings: countDiagnostics('warning'), errors: countDiagnostics('error') });
+      els.pipelineTag.textContent = app.status === PIPELINE_STATUS.COMPLETED ? 'Complete' : (app.status === PIPELINE_STATUS.COMPLETED_WITH_WARNINGS ? 'Complete with warnings' : 'Failed');
+      els.modeTag.textContent = els.pipelineTag.textContent;
+      els.footerMode.textContent = `Mode: ${els.pipelineTag.textContent}`;
+      els.footerLogs.textContent = `Logs: ${app.counts.focusedFilesParsed.toLocaleString()} focused files, ${app.counts.evidenceRecords.toLocaleString()} evidence rows`;
+      setHeader(app.status === PIPELINE_STATUS.COMPLETED ? 'Log extraction complete' : (app.status === PIPELINE_STATUS.COMPLETED_WITH_WARNINGS ? 'Log extraction complete with warnings' : 'Pipeline failed'), app.status === PIPELINE_STATUS.FAILED ? 'failed' : (app.status === PIPELINE_STATUS.COMPLETED_WITH_WARNINGS ? 'warning' : 'ready'));
+      console.log('[PANDA] Pipeline complete', result.counts, result);
+      renderAll();
+      els.analyzeButton.disabled = false;
+      app.worker?.terminate();
+      app.worker = null;
+    }
+
+    function normalizePipelineResult(result) {
+      const focusedFiles = Array.isArray(result.focusedFiles) ? result.focusedFiles : (Array.isArray(result.inventory) ? result.inventory : []);
+      const evidencePreview = Array.isArray(result.evidencePreview) ? result.evidencePreview : [];
+      const signalProfiles = Array.isArray(result.signalProfiles) ? result.signalProfiles : [];
+      const machineStatesPreview = Array.isArray(result.machineStatesPreview) ? result.machineStatesPreview : (Array.isArray(result.machineStateRows) ? result.machineStateRows : []);
+      const diagnostics = Array.isArray(result.diagnostics) ? result.diagnostics : [];
+      const counts = normalizeCounts(result.counts, { focusedFiles, evidencePreview, signalProfiles, machineStatesPreview, evidenceTotal: result.evidenceTotal });
+      return { focusedFiles, evidencePreview, signalProfiles, machineStatesPreview, counts, diagnostics, timeSeriesBySignal: result.timeSeriesBySignal || {}, archiveSummary: result.archiveSummary || null, pipeline: result.pipeline };
+    }
+
+    function normalizeCounts(counts, fallback = {}) {
+      const source = counts || {};
+      const focusedFiles = fallback.focusedFiles || app.focusedFiles || app.inventory || [];
+      const evidencePreview = fallback.evidencePreview || app.evidencePreview || app.evidence || [];
+      const signalProfiles = fallback.signalProfiles || app.signalProfiles || app.signalDiscovery || [];
+      const machineStatesPreview = fallback.machineStatesPreview || app.machineStatesPreview || app.machineStateRows || [];
+      return {
+        focusedFilesParsed: numberOrDefault(source.focusedFilesParsed, focusedFiles.length),
+        evidenceRecords: numberOrDefault(source.evidenceRecords, numberOrDefault(fallback.evidenceTotal, evidencePreview.length)),
+        signalsDiscovered: numberOrDefault(source.signalsDiscovered, signalProfiles.length),
+        machineStateRows: numberOrDefault(source.machineStateRows, machineStatesPreview.length),
+        rulesLoaded: app.rulesSummary ? numberOrDefault(app.rulesSummary.parsedCount, 0) : numberOrDefault(source.rulesLoaded, 0)
+      };
+    }
+
+    function computeCounts() {
+      return normalizeCounts(app.counts);
+    }
+
+    function numberOrDefault(value, fallback) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : Number(fallback || 0);
+    }
+
+    function finalizePipelineCards() {
+      const archive = app.pipelineGroups.get('archive');
+      const focused = app.pipelineGroups.get('focused');
+      const parsing = app.pipelineGroups.get('parsing');
+      if (archive) {
+        const opc = archive.steps.find(step => step.key === 'opcZip');
+        const logs = archive.steps.find(step => step.key === 'logsFolder');
+        archive.status = opc?.status === 'failed' ? 'failed' : (logs?.status === 'warning' || logs?.status === 'failed' ? 'warning' : 'done');
+        archive.message = archive.status === 'done' ? 'Root ZIP and opc.zip opened.' : archive.message;
+      }
+      if (focused) {
+        const doneCount = focused.steps.filter(step => step.status === 'done').length;
+        const warningCount = focused.steps.filter(step => step.status === 'warning').length;
+        focused.status = doneCount ? (warningCount ? 'warning' : 'done') : 'failed';
+        focused.warnings = Math.max(focused.warnings || 0, warningCount);
+        focused.errors = focused.status === 'failed' ? Math.max(1, focused.errors || 0) : (focused.errors || 0);
+        focused.message = doneCount ? (warningCount ? 'Focused sources found with some expected folders missing.' : 'Focused sources found.') : 'No focused sources found.';
+      }
+      if (parsing) {
+        const failedSteps = parsing.steps.filter(step => step.status === 'failed').length;
+        const warningSteps = parsing.steps.filter(step => step.status === 'warning').length;
+        const parsed = app.counts?.focusedFilesParsed || 0;
+        parsing.status = failedSteps ? 'failed' : (warningSteps || countDiagnostics('warning') ? 'warning' : 'done');
+        if (!parsed && focused?.status === 'failed') parsing.status = 'failed';
+        parsing.message = parsing.status === 'done' ? 'Parse completed.' : (parsing.status === 'warning' ? 'Parse completed with warnings.' : 'Parsing could not run.');
+      }
     }
 
     function countDiagnostics(level) {
@@ -1026,7 +1164,10 @@
 
     function failPipeline(error, diagnostics = null, pipeline = null) {
       const message = error instanceof Error ? error.message : String(error);
-      if (diagnostics) app.diagnostics = diagnostics;
+      app.status = PIPELINE_STATUS.FAILED;
+      app.diagnostics = diagnostics ? diagnostics.slice() : app.diagnostics.slice();
+      if (!app.diagnostics.some(item => item.level === 'error' && item.message === message)) app.diagnostics.push({ level: 'error', stage: 'Pipeline failure', filePath: '', message, technicalDetails: error?.stack || '' });
+      app.counts = computeCounts();
       updatePipelineFromWorker(pipeline);
       setProgress({ percent: 100, stage: `Pipeline stopped: ${message}`, filesParsed: app.inventory.length, totalFiles: app.inventory.length, rowsParsed: app.evidenceTotal, warnings: countDiagnostics('warning'), errors: Math.max(1, countDiagnostics('error')) });
       els.pipelineTag.textContent = 'Failed';
@@ -1036,7 +1177,7 @@
       els.analyzeButton.disabled = false;
       app.worker?.terminate();
       app.worker = null;
-      renderAllData();
+      renderAll();
       console.error(error);
     }
 
@@ -1059,6 +1200,7 @@
         }
         const expectedColumns = headers.filter(header => EXPECTED_RULE_COLUMNS.some(expected => header.toLowerCase().includes(expected.toLowerCase())));
         app.rulesSummary = { parsedCount: rows.length, expectedColumns };
+        app.counts = normalizeCounts(app.counts);
         els.rulesTag.textContent = `${rows.length} rules`;
         els.kpiRules.textContent = `${rows.length} rules`;
         els.kpiRules.classList.remove('muted');
@@ -1073,7 +1215,7 @@
     function createLogWorker() {
       const workerCode = String.raw`
         importScripts('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
-        try { importScripts('https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js'); } catch (error) {}
+        importScripts('https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js');
         const MAX_RENDER_ROWS = ${MAX_RENDER_ROWS};
         const MAX_EVIDENCE_ROWS_STORED = ${MAX_EVIDENCE_ROWS_STORED};
         const MAX_RAW_LINE_LENGTH = ${MAX_RAW_LINE_LENGTH};
@@ -1086,7 +1228,7 @@
         const STAGE_RANGES = {
           root: [0, 5], opc: [5, 15], index: [15, 25], internal: [25, 40],
           MachineStates: [40, 55], AlertsMonitoring: [55, 65], FECNotifications: [65, 78],
-          BSSNotifications: [78, 90], IPSNotifications: [90, 97], finalize: [97, 100]
+          BSSNotifications: [78, 90], IPSNotifications: [90, 97], finalize: [97, 99]
         };
         const ctx = newContext();
 
@@ -1122,7 +1264,12 @@
 
           updateStage('archive', 'opcZip', 'active', 'Searching root ZIP paths for opc.zip...', 0);
           const opcEntry = rootEntries.find(file => !file.dir && basename(file.name).toLowerCase() === 'opc.zip');
-          if (!opcEntry) throw new Error('opc.zip not found inside the uploaded autocollect ZIP.');
+          if (!opcEntry) {
+            updateStage('archive', 'opcZip', 'failed', 'opc.zip missing.', 0, 0, 1);
+            ctx.pipeline.archive.status = 'failed';
+            addDiagnostic('error', 'opc.zip detection/extraction', '', 'opc.zip not found', 'opc.zip was not found inside the uploaded autocollect ZIP.');
+            throw new Error('opc.zip not found inside the uploaded autocollect ZIP.');
+          }
           updateStage('archive', 'opcZip', 'active', 'Opening opc.zip...', 1);
           const opcZip = await JSZip.loadAsync(await opcEntry.async('arraybuffer'));
           const opcFiles = Object.values(opcZip.files).filter(file => !file.dir);
@@ -1132,18 +1279,24 @@
           updateStage('archive', 'logsFolder', 'active', 'Scanning paths only; contents are not parsed in Phase A.', 0);
           const paths = opcFiles.map(file => normalizePath(file.name));
           const hasLogs = paths.some(path => path.includes('logs/'));
-          if (!hasLogs) throw new Error('logs folder not found inside opc.zip.');
-          updateStage('archive', 'logsFolder', 'done', 'logs folder detected.', paths.filter(path => path.includes('logs/')).length);
-          ctx.pipeline.archive.status = 'done'; ctx.pipeline.archive.count = opcFiles.length; ctx.pipeline.archive.message = 'Archive index scan complete.';
+          if (!hasLogs) {
+            updateStage('archive', 'logsFolder', 'warning', 'logs folder missing.', 0, 1, 0);
+            addDiagnostic('warning', 'logs folder and focused file indexing', 'logs/', 'logs folder missing', 'logs/ was not found inside opc.zip.');
+          } else {
+            updateStage('archive', 'logsFolder', 'done', 'logs folder detected.', paths.filter(path => path.includes('logs/')).length);
+          }
+          ctx.pipeline.archive.status = hasLogs ? 'done' : 'warning'; ctx.pipeline.archive.count = opcFiles.length; ctx.pipeline.archive.message = hasLogs ? 'Archive index scan complete.' : 'opc.zip opened, but logs folder was not found.';
 
           const directFocused = findFocusedFiles(opcFiles);
           updateFocusedFolderSteps(paths);
           const internalZipItems = directFocused.filter(item => item.fileType === 'zip');
           const estimatedTextFiles = directFocused.filter(item => item.fileType !== 'zip').length;
           ctx.archiveSummary = { totalEntries: rootEntries.length + opcFiles.length, focusedCandidates: directFocused.length, internalZipCandidates: internalZipItems.length, estimatedCsvTxtFiles: estimatedTextFiles };
-          ctx.pipeline.focused.status = directFocused.length ? 'done' : 'warning';
+          ctx.pipeline.focused.status = directFocused.length ? 'done' : 'failed';
           ctx.pipeline.focused.count = directFocused.length;
+          ctx.pipeline.focused.errors = directFocused.length ? ctx.pipeline.focused.errors : 1;
           ctx.pipeline.focused.message = directFocused.length ? 'Focused candidates indexed.' : 'No focused candidates found.';
+          if (!directFocused.length) addDiagnostic('warning', 'logs folder and focused file indexing', '', 'no focused source folders found', 'No MachineStates, AlertsMonitoring, FECNotifications, BSSNotifications, or IPSNotifications focused files were found.');
           addMissingFolderDiagnostics(paths);
           sendProgress();
 
@@ -1172,6 +1325,9 @@
             await parseSource(sourceType, files, parseQueue.length);
           }
           updateStage('parsing', 'csvTxtParsing', parseQueue.length ? 'done' : 'warning', parseQueue.length ? 'Focused CSV/TXT files parsed with safe limits.' : 'No focused CSV/TXT files were available to parse.', parseQueue.length);
+          if (!parseQueue.length) {
+            addDiagnostic('warning', 'CSV/TXT parsing', '', 'zero focused files parsed', 'opc.zip found: yes; logs folder found: ' + (hasLogs ? 'yes' : 'no') + '; focused source folders found: ' + (directFocused.length ? 'yes' : 'no') + '.');
+          }
 
           progress('finalize', 'signal discovery/model finalization', '', ctx.progress.filesParsed, parseQueue.length, ctx.progress.rowsParsed);
           updateStage('parsing', 'stateContext', ctx.machineStateRows.length ? 'done' : 'warning', ctx.machineStateRows.length ? 'MachineStates context attached during evidence parsing.' : 'No MachineStates found; state context is missing for evidence rows.', ctx.machineStateRows.length);
@@ -1360,14 +1516,24 @@
         }
 
         function buildResult(signalProfiles) {
+          const focusedFiles = ctx.inventory;
+          const machineStatesPreview = ctx.machineStateRows.slice(0, MAX_RENDER_ROWS);
           return {
             archiveSummary: ctx.archiveSummary,
-            inventory: ctx.inventory,
+            focusedFiles,
+            inventory: focusedFiles,
             evidencePreview: ctx.evidencePreview.slice(0, MAX_EVIDENCE_ROWS_STORED),
             evidenceTotal: ctx.evidenceTotal,
             signalProfiles,
-            machineStateRows: ctx.machineStateRows.slice(0, MAX_RENDER_ROWS),
+            machineStatesPreview,
+            machineStateRows: machineStatesPreview,
             timeSeriesBySignal: ctx.timeSeriesBySignal,
+            counts: {
+              focusedFilesParsed: focusedFiles.length,
+              evidenceRecords: ctx.evidenceTotal,
+              signalsDiscovered: signalProfiles.length,
+              machineStateRows: ctx.machineStateRows.length,
+            },
             diagnostics: ctx.diagnostics,
             pipeline: ctx.pipeline
           };
@@ -1495,7 +1661,7 @@
           if (!group) return;
           const step = group.steps[stepKey];
           if (step) Object.assign(step, { status, message, count, warnings, errors });
-          group.status = status === 'failed' ? 'failed' : (status === 'active' ? 'active' : group.status === 'active' ? 'active' : status);
+          group.status = status === 'failed' ? 'failed' : (status === 'active' ? 'active' : (group.status === 'failed' ? 'failed' : status));
           group.count = Math.max(group.count || 0, count || 0);
           group.warnings += warnings;
           group.errors += errors;
@@ -1513,7 +1679,7 @@
           sendProgress();
         }
         function sendProgress() { self.postMessage({ type: 'progress', progress: ctx.progress, pipeline: ctx.pipeline }); }
-        function sendPartial() { self.postMessage({ type: 'partial', inventory: ctx.inventory, evidencePreview: ctx.evidencePreview.slice(0, MAX_RENDER_ROWS), evidenceTotal: ctx.evidenceTotal, signalProfiles: finalizeProfiles().slice(0, MAX_RENDER_ROWS), machineStateRows: ctx.machineStateRows.slice(0, MAX_RENDER_ROWS), diagnostics: ctx.diagnostics, pipeline: ctx.pipeline }); }
+        function sendPartial() { const signalProfiles = finalizeProfiles().slice(0, MAX_RENDER_ROWS); const machineStatesPreview = ctx.machineStateRows.slice(0, MAX_RENDER_ROWS); self.postMessage({ type: 'partialSummary', focusedFiles: ctx.inventory, inventory: ctx.inventory, evidencePreview: ctx.evidencePreview.slice(0, MAX_RENDER_ROWS), evidenceTotal: ctx.evidenceTotal, signalProfiles, machineStatesPreview, machineStateRows: machineStatesPreview, counts: { focusedFilesParsed: ctx.inventory.length, evidenceRecords: ctx.evidenceTotal, signalsDiscovered: signalProfiles.length, machineStateRows: ctx.machineStateRows.length }, diagnostics: ctx.diagnostics, pipeline: ctx.pipeline }); }
         async function yieldIfNeeded(force = false) { const now = Date.now(); if (force || now - ctx.lastUi >= UI_YIELD_EVERY_MS) { ctx.lastUi = now; await new Promise(resolve => setTimeout(resolve, 0)); } }
         function addDiagnostic(level, stage, filePath, message, technicalDetails) { ctx.diagnostics.push({ level, stage, filePath, message, technicalDetails }); }
         function countDiagnostics(level) { return ctx.diagnostics.filter(item => item.level === level).length; }
