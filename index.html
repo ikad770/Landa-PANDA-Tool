@@ -6,6 +6,7 @@
   <title>PANDA Tool</title>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
     :root {
       color-scheme: dark;
@@ -277,28 +278,62 @@
       margin: 8px 0 0;
       color: var(--text-muted);
       font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .render-note {
+      margin: 0 0 10px;
+      color: var(--text-faint);
+      font-size: 12px;
     }
 
     .pipeline-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
+      gap: 12px;
       padding: 20px 24px 24px;
     }
 
-    .pipeline-step {
+    .pipeline-group {
       border: 1px solid var(--border);
       border-left-width: 4px;
-      border-radius: var(--radius-sm);
-      padding: 12px;
+      border-radius: var(--radius-md);
       background: rgba(8, 15, 23, 0.52);
+      overflow: hidden;
     }
 
-    .pipeline-step.waiting { border-left-color: var(--text-faint); }
-    .pipeline-step.active { border-left-color: var(--accent); box-shadow: 0 0 0 1px rgba(56, 200, 244, 0.18); }
-    .pipeline-step.done { border-left-color: var(--success); }
-    .pipeline-step.warning { border-left-color: var(--warning); }
-    .pipeline-step.failed { border-left-color: var(--danger); }
+    .pipeline-group.waiting { border-left-color: var(--text-faint); }
+    .pipeline-group.active { border-left-color: var(--accent); box-shadow: 0 0 0 1px rgba(56, 200, 244, 0.18); }
+    .pipeline-group.done { border-left-color: var(--success); }
+    .pipeline-group.warning { border-left-color: var(--warning); }
+    .pipeline-group.failed { border-left-color: var(--danger); }
+
+    .pipeline-group summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 14px;
+    }
+
+    .pipeline-group summary::-webkit-details-marker { display: none; }
+
+    .pipeline-details {
+      display: grid;
+      gap: 8px;
+      padding: 0 14px 14px;
+    }
+
+    .pipeline-step {
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .pipeline-step.waiting { color: var(--text-faint); }
+    .pipeline-step.active { border-color: rgba(56, 200, 244, 0.45); }
+    .pipeline-step.done { border-color: rgba(68, 208, 123, 0.45); }
+    .pipeline-step.warning { border-color: rgba(247, 201, 72, 0.58); }
+    .pipeline-step.failed { border-color: rgba(255, 107, 107, 0.65); }
 
     .step-top {
       display: flex;
@@ -569,6 +604,22 @@
         </div>
       </section>
 
+      <section class="card" aria-label="Diagnostics">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Diagnostics</h2>
+            <p class="panel-note">Warnings and errors are captured per file or stage so one bad file does not crash the whole log pipeline.</p>
+          </div>
+          <span id="diagnosticsTag" class="panel-tag">0 issues</span>
+        </div>
+        <div class="panel-body table-wrap">
+          <table>
+            <thead><tr><th>Level</th><th>Stage</th><th>File</th><th>Message</th><th>Technical Details</th></tr></thead>
+            <tbody id="diagnosticsBody"><tr><td class="muted" colspan="5">No diagnostics yet.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="card" aria-label="MachineStates timeline foundation">
         <div class="panel-header">
           <div>
@@ -606,45 +657,41 @@
   </div>
 
   <script>
-    const PIPELINE_STEPS = [
-      ['waitingZip', 'Waiting for autocollect ZIP'],
-      ['rootLoaded', 'Root ZIP loaded'],
-      ['opcDetected', 'opc.zip detected'],
-      ['opcExtracted', 'opc.zip extracted'],
-      ['logsDetected', 'logs folder detected'],
-      ['fecDetected', 'FECNotifications folder detected'],
-      ['llciDetected', 'LLCINotifications folder detected'],
-      ['bssDetected', 'BSS folder detected'],
-      ['ipsDetected', 'IPS folder detected'],
-      ['machineStatesDetected', 'MachineStates folder detected'],
-      ['alertsDetected', 'AlertsMonitoring file detected'],
-      ['internalZipsDetected', 'Internal ZIPs detected'],
-      ['internalZipsExtracted', 'Internal ZIPs extracted'],
-      ['csvParsed', 'CSV files parsed'],
-      ['txtParsed', 'TXT logs parsed'],
-      ['evidenceBuilt', 'Evidence model built'],
-      ['signalDiscoveryBuilt', 'Signal discovery built'],
-      ['readyForRules', 'Ready for Rules evaluation']
+    const MAX_RENDER_ROWS = 300;
+    const MAX_EVIDENCE_ROWS_STORED = 50000;
+    const MAX_RAW_LINE_LENGTH = 500;
+    const MAX_FILE_PARSE_ROWS = 250000;
+    const ROW_BATCH_SIZE = 1000;
+    const UI_YIELD_EVERY_MS = 40;
+    const MAX_POINTS_PER_SIGNAL = 5000;
+
+    const PIPELINE_GROUPS = [
+      { key: 'archive', label: 'Archive', steps: [['rootZip', 'Root ZIP'], ['opcZip', 'opc.zip'], ['logsFolder', 'logs folder']] },
+      { key: 'focused', label: 'Focused Sources', steps: [['machineStates', 'MachineStates'], ['alertsMonitoring', 'AlertsMonitoring'], ['fecNotifications', 'FECNotifications'], ['bssNotifications', 'BSSNotifications'], ['ipsNotifications', 'IPSNotifications']] },
+      { key: 'parsing', label: 'Parsing', steps: [['internalZips', 'Internal ZIPs'], ['csvTxtParsing', 'CSV/TXT parsing'], ['stateContext', 'State context mapping'], ['signalDiscovery', 'Signal discovery']] }
     ];
 
     const EXPECTED_RULE_COLUMNS = [
       'Expected ON', 'Expected Standby', 'Expected Ready', 'Expected Prepare2Print',
       'Expected Printing', 'Expected PrintEnd', 'Expected Recovery', 'Expected Error'
     ];
-
     const MACHINE_STATE_SYSTEMS = ['BSS', 'IPS', 'PSS', 'Dryer', 'IPU', 'Ventilation', 'CWS', 'IRD', 'DFES', 'DPS', 'QCS', 'ICS', 'ECS', 'MSPS', 'ITS'];
 
     const app = {
       autocollectFile: null,
       rulesFile: null,
       progress: 0,
-      pipeline: new Map(),
+      pipelineGroups: new Map(),
       inventory: [],
       evidence: [],
+      evidenceTotal: 0,
       signalDiscovery: [],
       machineStateRows: [],
       timeSeriesBySignal: {},
-      rulesSummary: null
+      diagnostics: [],
+      archiveSummary: null,
+      rulesSummary: null,
+      worker: null
     };
 
     const els = {
@@ -662,11 +709,13 @@
       signalsBody: document.getElementById('signalsBody'),
       timelineBody: document.getElementById('timelineBody'),
       rulesBody: document.getElementById('rulesBody'),
+      diagnosticsBody: document.getElementById('diagnosticsBody'),
       inventoryTag: document.getElementById('inventoryTag'),
       evidenceTag: document.getElementById('evidenceTag'),
       signalsTag: document.getElementById('signalsTag'),
       timelineTag: document.getElementById('timelineTag'),
       rulesTag: document.getElementById('rulesTag'),
+      diagnosticsTag: document.getElementById('diagnosticsTag'),
       kpiFiles: document.getElementById('kpiFiles'),
       kpiEvidence: document.getElementById('kpiEvidence'),
       kpiSignals: document.getElementById('kpiSignals'),
@@ -681,60 +730,87 @@
     };
 
     function initializePipeline() {
-      app.pipeline.clear();
-      PIPELINE_STEPS.forEach(([key, label]) => {
-        app.pipeline.set(key, { key, label, status: 'waiting', count: null, message: 'Waiting.' });
+      app.pipelineGroups.clear();
+      PIPELINE_GROUPS.forEach(group => {
+        app.pipelineGroups.set(group.key, {
+          key: group.key,
+          label: group.label,
+          status: 'waiting',
+          count: 0,
+          warnings: 0,
+          errors: 0,
+          message: 'Waiting.',
+          steps: group.steps.map(([key, label]) => ({ key, label, status: 'waiting', count: 0, warnings: 0, errors: 0, message: 'Waiting.' }))
+        });
       });
-      updateStep('waitingZip', 'waiting', 'Select a Landa autocollect ZIP to begin.');
       renderPipeline();
-    }
-
-    function updateStep(key, status, message, count = null) {
-      const step = app.pipeline.get(key);
-      if (!step) return;
-      step.status = status;
-      step.message = message;
-      step.count = count;
-      renderPipeline();
-    }
-
-    function setActiveStep(key, message) {
-      updateStep(key, 'active', message);
-    }
-
-    function setProgress(percent, message) {
-      app.progress = Math.max(app.progress, Math.min(100, Math.round(percent)));
-      els.progressBar.style.width = app.progress + '%';
-      if (message) els.scanStage.textContent = message;
-    }
-
-    function setHeader(statusText, indicatorClass = '') {
-      els.headerStatusText.textContent = statusText;
-      els.statusIndicator.className = 'status-indicator ' + indicatorClass;
     }
 
     function resetScanState() {
+      if (app.worker) app.worker.terminate();
+      app.worker = null;
       app.progress = 0;
       app.inventory = [];
       app.evidence = [];
+      app.evidenceTotal = 0;
       app.signalDiscovery = [];
       app.machineStateRows = [];
       app.timeSeriesBySignal = {};
+      app.diagnostics = [];
+      app.archiveSummary = null;
       els.progressBar.style.width = '0%';
+      els.scanStage.textContent = 'Waiting for autocollect ZIP.';
       initializePipeline();
       renderAllData();
     }
 
+    function setProgress(progress) {
+      const percent = Math.max(app.progress, Math.min(100, Math.round(progress.percent || 0)));
+      app.progress = percent;
+      els.progressBar.style.width = `${percent}%`;
+      const rate = progress.rowsPerSecond ? ` • ${Math.round(progress.rowsPerSecond).toLocaleString()} rows/sec` : '';
+      const file = progress.currentFile ? ` • ${basename(progress.currentFile)}` : '';
+      els.scanStage.textContent = `${percent}% — ${progress.stage || 'Working'}${file} • files ${progress.filesParsed || 0}/${progress.totalFiles || 0} • rows ${(progress.rowsParsed || 0).toLocaleString()}${rate} • warnings ${progress.warnings || 0} • errors ${progress.errors || 0}`;
+    }
+
+    function setHeader(statusText, indicatorClass = '') {
+      els.headerStatusText.textContent = statusText;
+      els.statusIndicator.className = `status-indicator ${indicatorClass}`;
+    }
+
+    function updatePipelineFromWorker(groups) {
+      if (!groups) return;
+      Object.entries(groups).forEach(([groupKey, incoming]) => {
+        const group = app.pipelineGroups.get(groupKey);
+        if (!group) return;
+        Object.assign(group, incoming);
+        if (incoming.steps) {
+          group.steps = group.steps.map(step => ({ ...step, ...(incoming.steps[step.key] || {}) }));
+        }
+      });
+      renderPipeline();
+    }
+
     function renderPipeline() {
-      els.pipelineGrid.innerHTML = Array.from(app.pipeline.values()).map(step => `
-        <article class="pipeline-step ${escapeHtml(step.status)}">
-          <div class="step-top">
-            <span>${escapeHtml(step.label)}</span>
-            <span class="step-status">${escapeHtml(step.status)}</span>
+      els.pipelineGrid.innerHTML = Array.from(app.pipelineGroups.values()).map(group => `
+        <details class="pipeline-group ${escapeHtml(group.status)}" open>
+          <summary>
+            <div class="step-top">
+              <span>${escapeHtml(group.label)}</span>
+              <span class="step-status">${escapeHtml(group.status)}</span>
+            </div>
+            <div class="step-count">Count: ${escapeHtml(String(group.count || 0))} • Warnings: ${escapeHtml(String(group.warnings || 0))} • Errors: ${escapeHtml(String(group.errors || 0))}</div>
+            <div class="step-message">${escapeHtml(group.message || '')}</div>
+          </summary>
+          <div class="pipeline-details">
+            ${group.steps.map(step => `
+              <article class="pipeline-step ${escapeHtml(step.status)}">
+                <div class="step-top"><span>${escapeHtml(step.label)}</span><span class="step-status">${escapeHtml(step.status)}</span></div>
+                <div class="step-count">Count: ${escapeHtml(String(step.count || 0))} • Warnings: ${escapeHtml(String(step.warnings || 0))} • Errors: ${escapeHtml(String(step.errors || 0))}</div>
+                <div class="step-message">${escapeHtml(step.message || '')}</div>
+              </article>`).join('')}
           </div>
-          ${step.count === null ? '' : `<div class="step-count">Count: ${escapeHtml(String(step.count))}</div>`}
-          <div class="step-message">${escapeHtml(step.message)}</div>
-        </article>
+        </details>
       `).join('');
     }
 
@@ -742,6 +818,7 @@
       renderInventory();
       renderEvidence();
       renderSignals();
+      renderDiagnostics();
       renderTimeline();
       renderKpis();
     }
@@ -752,26 +829,26 @@
         els.inventoryBody.innerHTML = '<tr><td class="muted" colspan="6">No focused files parsed.</td></tr>';
         return;
       }
-      els.inventoryBody.innerHTML = app.inventory.map(file => `
+      const rows = app.inventory.slice(0, MAX_RENDER_ROWS);
+      els.inventoryBody.innerHTML = `${renderLimitRow(rows.length, app.inventory.length, 6)}${rows.map(file => `
         <tr>
           <td>${escapeHtml(file.sourceType)}</td>
           <td>${escapeHtml(file.sourceGroup)}</td>
           <td>${escapeHtml(file.fileType)}</td>
-          <td>${escapeHtml(String(file.rowCount))}</td>
+          <td>${escapeHtml(String(file.rowCount ?? 0))}${file.truncated ? ' (truncated)' : ''}</td>
           <td>${escapeHtml(file.parseStatus)}</td>
           <td class="path-cell">${escapeHtml(file.path)}</td>
-        </tr>
-      `).join('');
+        </tr>`).join('')}`;
     }
 
     function renderEvidence() {
-      els.evidenceTag.textContent = `${app.evidence.length} rows`;
-      const rows = app.evidence.slice(0, 250);
-      if (!rows.length) {
+      els.evidenceTag.textContent = `${app.evidenceTotal.toLocaleString()} rows`;
+      if (!app.evidence.length) {
         els.evidenceBody.innerHTML = '<tr><td class="muted" colspan="10">No evidence records available.</td></tr>';
         return;
       }
-      els.evidenceBody.innerHTML = rows.map(ev => `
+      const rows = app.evidence.slice(0, MAX_RENDER_ROWS);
+      els.evidenceBody.innerHTML = `${renderLimitRow(rows.length, app.evidenceTotal, 10)}${rows.map(ev => `
         <tr>
           <td>${escapeHtml(ev.timestamp || '')}</td>
           <td>${escapeHtml(ev.sourceType || '')}</td>
@@ -782,9 +859,8 @@
           <td>${escapeHtml(ev.machineState || '')}</td>
           <td>${escapeHtml(ev.systemState || '')}</td>
           <td>${escapeHtml(ev.stateContextStatus || '')}</td>
-          <td class="path-cell">${escapeHtml(ev.sourceFile || '')}</td>
-        </tr>
-      `).join('');
+          <td class="path-cell">${escapeHtml(ev.sourceFileId || '')}</td>
+        </tr>`).join('')}`;
     }
 
     function renderSignals() {
@@ -793,7 +869,8 @@
         els.signalsBody.innerHTML = '<tr><td class="muted" colspan="11">No signals discovered.</td></tr>';
         return;
       }
-      els.signalsBody.innerHTML = app.signalDiscovery.slice(0, 250).map(signal => `
+      const rows = app.signalDiscovery.slice(0, MAX_RENDER_ROWS);
+      els.signalsBody.innerHTML = `${renderLimitRow(rows.length, app.signalDiscovery.length, 11)}${rows.map(signal => `
         <tr>
           <td>${escapeHtml(signal.system)}</td>
           <td>${escapeHtml(signal.sourceType)}</td>
@@ -805,9 +882,25 @@
           <td>${formatNumber(signal.avg)}</td>
           <td>${escapeHtml(signal.firstTimestamp || '')}</td>
           <td>${escapeHtml(signal.lastTimestamp || '')}</td>
-          <td>${escapeHtml(signal.stateCoveragePercentage + '%')}</td>
-        </tr>
-      `).join('');
+          <td>${escapeHtml(String(signal.stateCoveragePercent ?? 0))}%</td>
+        </tr>`).join('')}`;
+    }
+
+    function renderDiagnostics() {
+      els.diagnosticsTag.textContent = `${app.diagnostics.length} issues`;
+      if (!app.diagnostics.length) {
+        els.diagnosticsBody.innerHTML = '<tr><td class="muted" colspan="5">No diagnostics yet.</td></tr>';
+        return;
+      }
+      const rows = app.diagnostics.slice(0, MAX_RENDER_ROWS);
+      els.diagnosticsBody.innerHTML = `${renderLimitRow(rows.length, app.diagnostics.length, 5)}${rows.map(item => `
+        <tr>
+          <td>${escapeHtml(item.level)}</td>
+          <td>${escapeHtml(item.stage)}</td>
+          <td class="path-cell">${escapeHtml(item.filePath || '')}</td>
+          <td>${escapeHtml(item.message)}</td>
+          <td class="path-cell">${escapeHtml(item.technicalDetails || '')}</td>
+        </tr>`).join('')}`;
     }
 
     function renderTimeline() {
@@ -816,21 +909,25 @@
         els.timelineBody.innerHTML = '<div class="empty-state">No MachineStates data parsed.</div>';
         return;
       }
-      const rows = app.machineStateRows.slice(0, 80);
-      els.timelineBody.innerHTML = `<div class="timeline-wrap">${rows.map(row => `
+      const rows = app.machineStateRows.slice(0, Math.min(80, MAX_RENDER_ROWS));
+      els.timelineBody.innerHTML = `<p class="render-note">Showing ${rows.length} of ${app.machineStateRows.length} MachineStates rows.</p><div class="timeline-wrap">${rows.map(row => `
         <article class="state-segment">
           <div class="state-time">${escapeHtml(row.timestamp || '')}</div>
           <div class="state-grid">
             <span>Machine</span><strong>${escapeHtml(row.machineState || '')}</strong>
-            ${MACHINE_STATE_SYSTEMS.map(system => `<span>${escapeHtml(system)}</span><strong>${escapeHtml(row.systemStates[system] || '')}</strong>`).join('')}
+            ${MACHINE_STATE_SYSTEMS.map(system => `<span>${escapeHtml(system)}</span><strong>${escapeHtml(row.systemStates?.[system] || '')}</strong>`).join('')}
           </div>
-        </article>
-      `).join('')}</div>`;
+        </article>`).join('')}</div>`;
+    }
+
+    function renderLimitRow(showing, total, colspan) {
+      if (total <= showing) return '';
+      return `<tr><td class="muted" colspan="${colspan}">Showing ${showing} of ${total.toLocaleString()} rows. Full data is summarized in signal profiles.</td></tr>`;
     }
 
     function renderKpis() {
       setKpi(els.kpiFiles, app.inventory.length ? app.inventory.length : 'No data');
-      setKpi(els.kpiEvidence, app.evidence.length ? app.evidence.length : 'No data');
+      setKpi(els.kpiEvidence, app.evidenceTotal ? app.evidenceTotal.toLocaleString() : 'No data');
       setKpi(els.kpiSignals, app.signalDiscovery.length ? app.signalDiscovery.length : 'No data');
       setKpi(els.kpiStates, app.machineStateRows.length ? app.machineStateRows.length : 'No data');
     }
@@ -846,7 +943,6 @@
       els.analyzeButton.disabled = !app.autocollectFile;
       if (app.autocollectFile) {
         resetScanState();
-        updateStep('waitingZip', 'done', `Selected ${app.autocollectFile.name}.`, 1);
         setHeader('Autocollect ZIP selected', 'active');
         els.modeTag.textContent = 'Ready to analyze';
         els.footerMode.textContent = 'Mode: Ready to analyze';
@@ -859,7 +955,7 @@
       if (app.rulesFile) await parseRulesPlaceholder(app.rulesFile);
     });
 
-    els.analyzeButton.addEventListener('click', () => analyzeAutocollect().catch(error => failPipeline(error)));
+    els.analyzeButton.addEventListener('click', () => analyzeAutocollect());
 
     async function analyzeAutocollect() {
       if (!app.autocollectFile) return;
@@ -869,626 +965,583 @@
       els.modeTag.textContent = 'Analyzing';
       els.pipelineTag.textContent = 'Running';
       els.footerMode.textContent = 'Mode: Analyzing';
-      updateStep('waitingZip', 'done', `Selected ${app.autocollectFile.name}.`, 1);
-      setActiveStep('rootLoaded', 'Opening root autocollect ZIP...');
-      setProgress(4, 'Opening root autocollect ZIP...');
-
-      const rootZip = await JSZip.loadAsync(await app.autocollectFile.arrayBuffer());
-      updateStep('rootLoaded', 'done', 'Root autocollect ZIP opened.', Object.keys(rootZip.files).length);
-      setActiveStep('opcDetected', 'Scanning root ZIP paths for opc.zip...');
-      setProgress(10, 'Scanning root ZIP paths for opc.zip...');
-
-      const opcEntry = findOpcZip(rootZip);
-      if (!opcEntry) throw new Error('opc.zip was not found inside the uploaded autocollect ZIP.');
-      updateStep('opcDetected', 'done', `Found ${opcEntry.name}.`, 1);
-      setActiveStep('opcExtracted', 'Extracting opc.zip contents...');
-      setProgress(16, 'Extracting opc.zip...');
-
-      const opcZip = await JSZip.loadAsync(await opcEntry.async('arraybuffer'));
-      updateStep('opcExtracted', 'done', 'opc.zip opened successfully.', Object.keys(opcZip.files).length);
-      setActiveStep('logsDetected', 'Scanning opc.zip paths for logs/...');
-      setProgress(22, 'Scanning opc.zip paths for focused logs...');
-
-      const opcFiles = Object.values(opcZip.files).filter(file => !file.dir);
-      const hasLogs = opcFiles.some(file => normalizePath(file.name).includes('logs/'));
-      if (!hasLogs) throw new Error('logs/ folder was not found inside opc.zip.');
-      updateStep('logsDetected', 'done', 'logs/ folder detected in opc.zip.');
-
-      setActiveStep('fecDetected', 'Checking focused folders and files...');
-      setActiveStep('llciDetected', 'Checking focused folders and files...');
-      setActiveStep('bssDetected', 'Checking focused folders and files...');
-      setActiveStep('ipsDetected', 'Checking focused folders and files...');
-      setActiveStep('machineStatesDetected', 'Checking focused folders and files...');
-      setActiveStep('alertsDetected', 'Checking focused AlertsMonitoring file names...');
-      const directFocused = findFocusedFiles(opcFiles);
-      const focusedPaths = opcFiles.map(file => normalizePath(file.name));
-      updateFolderSteps(focusedPaths);
-      setProgress(34, 'Locating focused folders, AlertsMonitoring, and focused internal ZIPs...');
-
-      setActiveStep('internalZipsDetected', 'Looking for internal ZIPs under focused folders...');
-      const internalZipEntries = directFocused.filter(item => item.fileType === 'zip');
-      updateStep(
-        'internalZipsDetected',
-        internalZipEntries.length ? 'done' : 'warning',
-        internalZipEntries.length ? 'Focused internal ZIP files found.' : 'No focused internal ZIP files found; direct focused files will still be parsed.',
-        internalZipEntries.length
-      );
-      setProgress(43, 'Opening internal ZIPs from focused notification folders...');
-
-      setActiveStep('internalZipsExtracted', 'Opening focused internal ZIPs...');
-      const extractedFocused = [];
-      for (const item of directFocused) {
-        if (item.fileType === 'zip') {
-          const nestedFiles = await extractFocusedInternalZip(item);
-          extractedFocused.push(...nestedFiles);
-        } else {
-          extractedFocused.push(item);
-        }
+      try {
+        app.worker = createLogWorker();
+        app.worker.onmessage = handleWorkerMessage;
+        app.worker.onerror = event => failPipeline(new Error(event.message || 'Worker failed.'));
+        setProgress({ percent: 1, stage: 'Root ZIP loading', filesParsed: 0, totalFiles: 0, rowsParsed: 0, warnings: 0, errors: 0 });
+        const buffer = await app.autocollectFile.arrayBuffer();
+        app.worker.postMessage({ type: 'analyze', name: app.autocollectFile.name, buffer }, [buffer]);
+      } catch (error) {
+        failPipeline(error);
       }
-
-      updateStep(
-        'internalZipsExtracted',
-        internalZipEntries.length ? 'done' : 'warning',
-        internalZipEntries.length ? 'Focused internal ZIPs opened and scanned.' : 'No internal ZIP extraction was needed.',
-        extractedFocused.filter(item => item.extractedFrom).length
-      );
-      setProgress(55, 'Parsing focused CSV and TXT log files...');
-
-      setActiveStep('csvParsed', 'Parsing focused CSV files...');
-      setActiveStep('txtParsed', 'Parsing focused TXT logs best effort...');
-      let csvCount = 0;
-      let txtCount = 0;
-      for (const item of extractedFocused) {
-        if (item.fileType === 'csv') {
-          await parseCsvFile(item);
-          csvCount += 1;
-        } else if (item.fileType === 'txt') {
-          await parseTxtFile(item);
-          txtCount += 1;
-        }
-      }
-
-      updateStep('csvParsed', csvCount ? 'done' : 'warning', csvCount ? 'Focused CSV files parsed.' : 'No focused CSV files were available to parse.', csvCount);
-      updateStep('txtParsed', txtCount ? 'done' : 'warning', txtCount ? 'Focused TXT logs parsed best effort.' : 'No AlertsMonitoring TXT log was available.', txtCount);
-      setProgress(72, 'Attaching MachineStates context to normalized evidence...');
-
-      setActiveStep('evidenceBuilt', 'Attaching MachineStates context and building normalized evidence...');
-      app.machineStateRows.sort((a, b) => (a.timeMs ?? Number.POSITIVE_INFINITY) - (b.timeMs ?? Number.POSITIVE_INFINITY));
-      attachStateContext();
-      updateStep('evidenceBuilt', app.evidence.length ? 'done' : 'warning', app.evidence.length ? 'Normalized evidence records built.' : 'No evidence rows were extracted from focused sources.', app.evidence.length);
-      setProgress(84, 'Building grouped signal discovery and time-series model...');
-
-      setActiveStep('signalDiscoveryBuilt', 'Grouping normalized evidence into discovered signals...');
-      buildSignalDiscovery();
-      buildTimeSeriesBySignal();
-      updateStep('signalDiscoveryBuilt', app.signalDiscovery.length ? 'done' : 'warning', app.signalDiscovery.length ? 'Signal discovery table built.' : 'No signals were discovered.', app.signalDiscovery.length);
-      setProgress(96, 'Preparing for later Rules evaluation...');
-
-      setActiveStep('readyForRules', 'Preparing handoff to later Rules evaluation...');
-      updateStep('readyForRules', 'done', 'Pipeline complete. Rules evaluation is intentionally deferred to a later stage.', app.rulesSummary?.parsedCount ?? 0);
-      setProgress(100, 'Pipeline complete. Ready for state-dependent Rules evaluation in a later stage.');
-      els.pipelineTag.textContent = 'Complete';
-      els.modeTag.textContent = 'Complete';
-      els.footerMode.textContent = 'Mode: Pipeline complete';
-      els.footerLogs.textContent = `Logs: ${app.inventory.length} focused files, ${app.evidence.length} evidence rows`;
-      setHeader('Log extraction complete', 'ready');
-      renderAllData();
-      els.analyzeButton.disabled = false;
     }
 
-    function failPipeline(error) {
+    function handleWorkerMessage(event) {
+      const message = event.data || {};
+      if (message.type === 'progress') {
+        setProgress(message.progress || {});
+        updatePipelineFromWorker(message.pipeline);
+        return;
+      }
+      if (message.type === 'partial') {
+        app.inventory = message.inventory || app.inventory;
+        app.evidence = message.evidencePreview || app.evidence;
+        app.evidenceTotal = message.evidenceTotal || app.evidenceTotal;
+        app.signalDiscovery = message.signalProfiles || app.signalDiscovery;
+        app.machineStateRows = message.machineStateRows || app.machineStateRows;
+        app.diagnostics = message.diagnostics || app.diagnostics;
+        updatePipelineFromWorker(message.pipeline);
+        renderAllData();
+        return;
+      }
+      if (message.type === 'complete') {
+        app.inventory = message.result.inventory || [];
+        app.evidence = message.result.evidencePreview || [];
+        app.evidenceTotal = message.result.evidenceTotal || 0;
+        app.signalDiscovery = message.result.signalProfiles || [];
+        app.machineStateRows = message.result.machineStateRows || [];
+        app.timeSeriesBySignal = message.result.timeSeriesBySignal || {};
+        app.diagnostics = message.result.diagnostics || [];
+        app.archiveSummary = message.result.archiveSummary || null;
+        updatePipelineFromWorker(message.result.pipeline);
+        setProgress({ percent: 100, stage: 'Pipeline complete', filesParsed: app.inventory.length, totalFiles: app.inventory.length, rowsParsed: app.evidenceTotal, warnings: countDiagnostics('warning'), errors: countDiagnostics('error') });
+        els.pipelineTag.textContent = 'Complete';
+        els.modeTag.textContent = 'Complete';
+        els.footerMode.textContent = 'Mode: Pipeline complete';
+        els.footerLogs.textContent = `Logs: ${app.inventory.length} focused files, ${app.evidenceTotal.toLocaleString()} evidence rows`;
+        setHeader('Log extraction complete', 'ready');
+        renderAllData();
+        els.analyzeButton.disabled = false;
+        app.worker?.terminate();
+        app.worker = null;
+        return;
+      }
+      if (message.type === 'error') failPipeline(new Error(message.message || 'Pipeline failed.'), message.diagnostics, message.pipeline);
+    }
+
+    function countDiagnostics(level) {
+      return app.diagnostics.filter(item => item.level === level).length;
+    }
+
+    function failPipeline(error, diagnostics = null, pipeline = null) {
       const message = error instanceof Error ? error.message : String(error);
-      setProgress(100, `Pipeline stopped: ${message}`);
+      if (diagnostics) app.diagnostics = diagnostics;
+      updatePipelineFromWorker(pipeline);
+      setProgress({ percent: 100, stage: `Pipeline stopped: ${message}`, filesParsed: app.inventory.length, totalFiles: app.inventory.length, rowsParsed: app.evidenceTotal, warnings: countDiagnostics('warning'), errors: Math.max(1, countDiagnostics('error')) });
       els.pipelineTag.textContent = 'Failed';
       els.modeTag.textContent = 'Failed';
       els.footerMode.textContent = 'Mode: Failed';
       setHeader('Pipeline failed', 'failed');
-      const activeStep = Array.from(app.pipeline.values()).find(step => step.status === 'active');
-      if (activeStep) updateStep(activeStep.key, 'failed', message);
-      else updateStep('readyForRules', 'failed', message);
       els.analyzeButton.disabled = false;
+      app.worker?.terminate();
+      app.worker = null;
       renderAllData();
       console.error(error);
     }
 
-    function findOpcZip(zip) {
-      return Object.values(zip.files).find(file => !file.dir && basename(file.name).toLowerCase() === 'opc.zip');
-    }
-
-    function updateFolderSteps(paths) {
-      const fec = paths.filter(path => isUnder(path, 'logs/fecnotifications/'));
-      const llci = paths.filter(path => isUnder(path, 'logs/llcinotifications/'));
-      const bss = paths.filter(path => isUnder(path, 'logs/llcinotifications/bss/'));
-      const ips = paths.filter(path => isUnder(path, 'logs/llcinotifications/ips/'));
-      const states = paths.filter(path => isUnder(path, 'logs/machinestates/'));
-      const alerts = paths.filter(path => isAlertsPath(path));
-      updateStep('fecDetected', fec.length ? 'done' : 'warning', fec.length ? 'FECNotifications folder content detected.' : 'FECNotifications folder was not found.', fec.length);
-      updateStep('llciDetected', llci.length ? 'done' : 'warning', llci.length ? 'LLCINotifications folder content detected.' : 'LLCINotifications folder was not found.', llci.length);
-      updateStep('bssDetected', bss.length ? 'done' : 'warning', bss.length ? 'BSS folder content detected.' : 'LLCINotifications/BSS folder was not found.', bss.length);
-      updateStep('ipsDetected', ips.length ? 'done' : 'warning', ips.length ? 'IPS folder content detected.' : 'LLCINotifications/IPS folder was not found.', ips.length);
-      updateStep('machineStatesDetected', states.length ? 'done' : 'warning', states.length ? 'MachineStates folder content detected.' : 'MachineStates folder was not found.', states.length);
-      updateStep('alertsDetected', alerts.length ? 'done' : 'warning', alerts.length ? 'AlertsMonitoring TXT file detected.' : 'AlertsMonitoring.txt / AletrsMonitoring.txt was not found.', alerts.length);
-    }
-
-    function findFocusedFiles(files, inheritedSource = null, extractedFrom = '') {
-      return files
-        .map(file => createFocusedItem(file, inheritedSource, extractedFrom))
-        .filter(Boolean)
-        .filter(item => ['csv', 'txt', 'zip'].includes(item.fileType));
-    }
-
-    function createFocusedItem(file, inheritedSource, extractedFrom) {
-      const normalizedPath = normalizePath(file.name);
-      const displayPath = String(file.name || '');
-      const mapped = inheritedSource || mapSource(normalizedPath);
-      if (!mapped) return null;
-      const ext = extension(normalizedPath);
-      if (!['csv', 'txt', 'zip'].includes(ext)) return null;
-      return {
-        file,
-        path: extractedFrom ? `${extractedFrom} -> ${displayPath}` : displayPath,
-        sourceType: mapped.sourceType,
-        sourceGroup: mapped.sourceGroup,
-        fileType: ext,
-        isNestedZip: Boolean(extractedFrom) || ext === 'zip',
-        extractedFrom
-      };
-    }
-
-    async function extractFocusedInternalZip(item) {
-      try {
-        const nestedZip = await JSZip.loadAsync(await item.file.async('arraybuffer'));
-        const nestedFiles = Object.values(nestedZip.files).filter(file => !file.dir);
-        return findFocusedFiles(nestedFiles, { sourceType: item.sourceType, sourceGroup: item.sourceGroup }, item.path)
-          .filter(nested => nested.fileType !== 'zip');
-      } catch (error) {
-        addInventory(item, 0, [], 'failed: unable to open internal ZIP');
-        return [];
-      }
-    }
-
-    async function parseCsvFile(item) {
-      try {
-        const text = await item.file.async('string');
-        const parsed = parseCsv(text);
-        const headers = parsed.headers;
-        const rows = parsed.rows;
-        addInventory(item, rows.length, headers, rows.length ? 'parsed' : 'warning: no rows');
-        if (item.sourceType === 'MachineStates') {
-          rows.forEach(row => app.machineStateRows.push(normalizeMachineStateRow(row, item.path)));
-        } else {
-          rows.forEach(row => {
-            const evidence = normalizeCsvEvidence(row, item);
-            if (evidence) app.evidence.push(evidence);
-          });
-        }
-      } catch (error) {
-        addInventory(item, 0, [], 'failed: csv parse error');
-        console.error(error);
-      }
-    }
-
-    async function parseTxtFile(item) {
-      try {
-        const text = await item.file.async('string');
-        const events = parseAlertsText(text, item);
-        addInventory(item, events.length, [], 'partial');
-        app.evidence.push(...events);
-      } catch (error) {
-        addInventory(item, 0, [], 'failed: txt parse error');
-        console.error(error);
-      }
-    }
-
-    function addInventory(item, rowCount, headers, parseStatus) {
-      app.inventory.push({
-        id: `file-${app.inventory.length + 1}`,
-        path: item.path,
-        sourceType: item.sourceType,
-        sourceGroup: item.sourceGroup,
-        fileType: item.fileType,
-        isNestedZip: item.isNestedZip,
-        extractedFrom: item.extractedFrom,
-        rowCount,
-        headers,
-        parseStatus
-      });
-    }
-
-    function normalizeCsvEvidence(row, item) {
-      if (item.sourceType === 'FECNotifications') {
-        const value = firstValue(row, ['SetPoint', 'Status']);
-        const signal = firstValue(row, ['PSSID', 'Type']) || 'FEC signal';
-        return createEvidence({
-          timestamp: firstValue(row, ['Timestamp', 'Time']),
-          sourceFile: item.path,
-          sourceType: 'FECNotifications',
-          system: 'FEC',
-          signal,
-          value,
-          state: firstValue(row, ['State', 'PSCState']),
-          isAlertLike: isTruthy(firstValue(row, ['HasErrors', 'HasWarnings'])),
-          raw: row
-        });
-      }
-      if (item.sourceType === 'BSSNotifications') {
-        const component = firstValue(row, ['Component']);
-        const subComponent = firstValue(row, ['SubComponent']);
-        const parameterType = firstValue(row, ['ParameterType']);
-        return createEvidence({
-          timestamp: firstValue(row, ['Timestamp', 'Time']),
-          sourceFile: item.path,
-          sourceType: 'BSSNotifications',
-          system: 'BSS',
-          component,
-          subComponent,
-          signal: compactJoin([component, subComponent, parameterType], ' / ') || 'BSS signal',
-          value: firstValue(row, ['Value']),
-          isAlertLike: isTruthy(firstValue(row, ['IsAlert'])),
-          raw: row
-        });
-      }
-      if (item.sourceType === 'IPSNotifications') {
-        const keyName = firstValue(row, ['KeyName']);
-        const parameterType = firstValue(row, ['ParameterType']);
-        return createEvidence({
-          timestamp: firstValue(row, ['Timestamp', 'Time']),
-          sourceFile: item.path,
-          sourceType: 'IPSNotifications',
-          system: 'IPS',
-          signal: compactJoin([keyName, parameterType], ' / ') || 'IPS signal',
-          value: firstValue(row, ['Value']),
-          isAlertLike: isTruthy(firstValue(row, ['IsAlert'])),
-          raw: row
-        });
-      }
-      return null;
-    }
-
-    function createEvidence(fields) {
-      const numericValue = toNumber(fields.value);
-      return {
-        id: `ev-${app.evidence.length + 1}`,
-        timestamp: fields.timestamp || '',
-        sourceFile: fields.sourceFile || '',
-        sourceType: fields.sourceType || '',
-        system: fields.system || '',
-        component: fields.component || '',
-        subComponent: fields.subComponent || '',
-        signal: fields.signal || '',
-        value: fields.value ?? '',
-        numericValue,
-        unit: '',
-        machineState: '',
-        systemState: fields.state || '',
-        stateContextStatus: 'pending',
-        isAlertLike: Boolean(fields.isAlertLike),
-        raw: fields.raw
-      };
-    }
-
-    function normalizeMachineStateRow(row, sourceFile) {
-      const timestamp = firstValue(row, ['Time', 'Timestamp']);
-      const systemStates = {};
-      MACHINE_STATE_SYSTEMS.forEach(system => { systemStates[system] = firstValue(row, [system]) || ''; });
-      return {
-        id: `state-${app.machineStateRows.length + 1}`,
-        timestamp,
-        timeMs: parseTime(timestamp),
-        sourceFile,
-        machineState: firstValue(row, ['Machine']) || '',
-        systemStates,
-        raw: row
-      };
-    }
-
-    function parseAlertsText(text, item) {
-      const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-      return lines.map((line, index) => {
-        const timestamp = extractTimestamp(line);
-        const subsystem = extractKeyValue(line, ['subsystem', 'system']) || 'Alerts';
-        const alertName = extractKeyValue(line, ['alert name', 'name', 'title']) || 'AlertMonitoring event';
-        const alertId = extractKeyValue(line, ['alert id', 'id']);
-        const alertStatus = extractKeyValue(line, ['status']);
-        const levelType = extractKeyValue(line, ['level', 'type']);
-        const origin = extractKeyValue(line, ['origin']);
-        const hardware = extractKeyValue(line, ['hardware']);
-        const body = extractKeyValue(line, ['message', 'body']) || line;
-        return createEvidence({
-          timestamp,
-          sourceFile: item.path,
-          sourceType: 'AlertsMonitoring',
-          system: subsystem,
-          signal: compactJoin([alertId, alertName], ' / '),
-          value: compactJoin([alertStatus, levelType, origin, hardware, body], ' | '),
-          isAlertLike: true,
-          raw: { lineNumber: index + 1, text: line, timestamp, subsystem, alertName, alertId, alertStatus, levelType, origin, hardware, body }
-        });
-      });
-    }
-
-    function attachStateContext() {
-      app.evidence.forEach(evidence => {
-        const state = getStateAt(evidence.timestamp, evidence.system);
-        if (!state) {
-          evidence.stateContextStatus = 'missing';
-          return;
-        }
-        evidence.machineState = state.machineState || '';
-        evidence.systemState = state.systemState || evidence.systemState || '';
-        evidence.stateContextStatus = state.inferred ? 'inferred' : 'matched';
-      });
-    }
-
-    function getStateAt(timestamp, system) {
-      if (!app.machineStateRows.length) return null;
-      const timeMs = parseTime(timestamp);
-      const normalizedSystem = normalizeSystemForState(system);
-      if (Number.isNaN(timeMs)) {
-        const fallback = app.machineStateRows[0];
-        return { machineState: fallback.machineState, systemState: fallback.systemStates[normalizedSystem] || '', inferred: true, raw: fallback };
-      }
-      let match = null;
-      for (const row of app.machineStateRows) {
-        if (Number.isNaN(row.timeMs)) continue;
-        if (row.timeMs <= timeMs) match = row;
-        if (row.timeMs > timeMs) break;
-      }
-      if (!match) return null;
-      return { machineState: match.machineState, systemState: match.systemStates[normalizedSystem] || '', inferred: false, raw: match };
-    }
-
-    function buildSignalDiscovery() {
-      const groups = new Map();
-      app.evidence.forEach(evidence => {
-        const key = [evidence.system, evidence.sourceType, evidence.signal].join('||');
-        if (!groups.has(key)) {
-          groups.set(key, {
-            system: evidence.system,
-            sourceType: evidence.sourceType,
-            signal: evidence.signal,
-            count: 0,
-            numericCount: 0,
-            numericSum: 0,
-            min: null,
-            max: null,
-            firstTimestamp: evidence.timestamp,
-            lastTimestamp: evidence.timestamp,
-            exampleValue: evidence.value,
-            exampleRaw: evidence.raw,
-            stateCovered: 0
-          });
-        }
-        const group = groups.get(key);
-        group.count += 1;
-        if (typeof evidence.numericValue === 'number') {
-          group.numericCount += 1;
-          group.numericSum += evidence.numericValue;
-          group.min = group.min === null ? evidence.numericValue : Math.min(group.min, evidence.numericValue);
-          group.max = group.max === null ? evidence.numericValue : Math.max(group.max, evidence.numericValue);
-        }
-        if (evidence.timestamp && compareTimestamp(evidence.timestamp, group.firstTimestamp) < 0) group.firstTimestamp = evidence.timestamp;
-        if (evidence.timestamp && compareTimestamp(evidence.timestamp, group.lastTimestamp) > 0) group.lastTimestamp = evidence.timestamp;
-        if (['matched', 'inferred'].includes(evidence.stateContextStatus)) group.stateCovered += 1;
-      });
-      app.signalDiscovery = Array.from(groups.values()).map(group => ({
-        ...group,
-        avg: group.numericCount ? group.numericSum / group.numericCount : null,
-        stateCoveragePercentage: group.count ? Math.round((group.stateCovered / group.count) * 100) : 0
-      })).sort((a, b) => b.count - a.count);
-    }
-
-    function buildTimeSeriesBySignal() {
-      app.timeSeriesBySignal = {};
-      app.evidence.forEach(evidence => {
-        const key = [evidence.system, evidence.signal].join('||');
-        if (!app.timeSeriesBySignal[key]) {
-          app.timeSeriesBySignal[key] = { system: evidence.system, signal: evidence.signal, points: [] };
-        }
-        app.timeSeriesBySignal[key].points.push({
-          timestamp: evidence.timestamp,
-          value: evidence.numericValue ?? evidence.value,
-          machineState: evidence.machineState,
-          systemState: evidence.systemState,
-          sourceFile: evidence.sourceFile,
-          raw: evidence.raw
-        });
-      });
-      Object.values(app.timeSeriesBySignal).forEach(series => {
-        series.points.sort((a, b) => compareTimestamp(a.timestamp, b.timestamp));
-      });
-    }
-
     async function parseRulesPlaceholder(file) {
-      if (!window.XLSX) {
-        app.rulesSummary = { parsedCount: 0, expectedColumns: [], status: 'SheetJS unavailable' };
-        renderRules();
-        return;
-      }
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-      const sheet = workbook.Sheets['PANDA Rules Template'];
-      if (!sheet) {
-        app.rulesSummary = { parsedCount: 0, expectedColumns: [], status: 'PANDA Rules Template sheet not found' };
-        renderRules();
-        return;
-      }
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-      const required = ['System', 'Subsystem', 'Component', 'Log Signal Name', 'Log Source'];
-      const headerIndex = rows.findIndex(row => required.every(name => row.map(String).includes(name)));
-      if (headerIndex === -1) {
-        app.rulesSummary = { parsedCount: 0, expectedColumns: [], status: 'Required header row not found' };
-        renderRules();
-        return;
-      }
-      const headers = rows[headerIndex].map(String);
-      const expectedColumns = EXPECTED_RULE_COLUMNS.filter(column => headers.includes(column));
-      const parsedCount = rows.slice(headerIndex + 1).filter(row => row.some(cell => String(cell).trim())).length;
-      app.rulesSummary = { parsedCount, expectedColumns, status: 'parsed placeholder only' };
-      renderRules();
-    }
-
-    function renderRules() {
-      const summary = app.rulesSummary;
-      if (!summary) return;
-      els.rulesTag.textContent = summary.status;
-      els.kpiRules.textContent = String(summary.parsedCount);
-      els.kpiRules.classList.remove('muted');
-      els.footerRules.textContent = `Rules: ${summary.parsedCount} parsed placeholder rows`;
-      els.rulesBody.innerHTML = `
-        <div class="empty-state">
-          <strong>${escapeHtml(summary.status)}</strong><br>
-          Rules parsed count: ${escapeHtml(String(summary.parsedCount))}<br>
-          Expected-by-state columns detected: ${summary.expectedColumns.length ? escapeHtml(summary.expectedColumns.join(', ')) : 'None'}<br>
-          No confirmed alert evaluation has been run.
-        </div>`;
-    }
-
-    function parseCsv(text) {
-      const rows = [];
-      let row = [];
-      let cell = '';
-      let inQuotes = false;
-      for (let i = 0; i < text.length; i += 1) {
-        const char = text[i];
-        const next = text[i + 1];
-        if (inQuotes) {
-          if (char === '"' && next === '"') {
-            cell += '"';
-            i += 1;
-          } else if (char === '"') {
-            inQuotes = false;
-          } else {
-            cell += char;
-          }
-        } else if (char === '"') {
-          inQuotes = true;
-        } else if (char === ',') {
-          row.push(cell);
-          cell = '';
-        } else if (char === '\n') {
-          row.push(cell);
-          rows.push(row);
-          row = [];
-          cell = '';
-        } else if (char === '\r') {
-          continue;
+      try {
+        const buffer = await file.arrayBuffer();
+        let rows = [];
+        let headers = [];
+        if (file.name.toLowerCase().endsWith('.csv')) {
+          const parsed = Papa.parse(new TextDecoder().decode(buffer), { header: true, skipEmptyLines: true });
+          rows = parsed.data || [];
+          headers = parsed.meta?.fields || [];
         } else {
-          cell += char;
+          const workbook = XLSX.read(buffer, { type: 'array' });
+          const sheetName = workbook.SheetNames.includes('PANDA Rules Template') ? 'PANDA Rules Template' : workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+          headers = (rawRows[0] || []).map(value => String(value || '').trim());
+          rows = rawRows.slice(1).filter(row => row.some(value => String(value ?? '').trim() !== ''));
         }
+        const expectedColumns = headers.filter(header => EXPECTED_RULE_COLUMNS.some(expected => header.toLowerCase().includes(expected.toLowerCase())));
+        app.rulesSummary = { parsedCount: rows.length, expectedColumns };
+        els.rulesTag.textContent = `${rows.length} rules`;
+        els.kpiRules.textContent = `${rows.length} rules`;
+        els.kpiRules.classList.remove('muted');
+        els.footerRules.textContent = `Rules: ${rows.length} parsed, ${expectedColumns.length} state columns`;
+        els.rulesBody.innerHTML = `<div class="empty-state">Rules placeholder parsed ${rows.length} rows and detected ${expectedColumns.length} expected-by-state columns. Full alert evaluation is intentionally not implemented yet.<br>Columns: ${escapeHtml(expectedColumns.join(', ') || 'None')}</div>`;
+      } catch (error) {
+        els.rulesTag.textContent = 'Rules failed';
+        els.rulesBody.innerHTML = `<div class="empty-state">Rules placeholder parse failed: ${escapeHtml(error.message || String(error))}</div>`;
       }
-      if (cell.length || row.length) {
-        row.push(cell);
-        rows.push(row);
-      }
-      const nonEmptyRows = rows.filter(csvRow => csvRow.some(value => String(value).trim() !== ''));
-      const headers = (nonEmptyRows.shift() || []).map(header => String(header).trim());
-      const objects = nonEmptyRows.map(csvRow => {
-        const object = {};
-        headers.forEach((header, index) => { object[header] = csvRow[index] ?? ''; });
-        return object;
-      });
-      return { headers, rows: objects };
     }
 
-    function mapSource(path) {
-      const normalized = normalizePath(path);
-      if (isUnder(normalized, 'logs/fecnotifications/')) return { sourceType: 'FECNotifications', sourceGroup: 'FECNotifications' };
-      if (isUnder(normalized, 'logs/llcinotifications/bss/')) return { sourceType: 'BSSNotifications', sourceGroup: 'LLCINotifications/BSS' };
-      if (isUnder(normalized, 'logs/llcinotifications/ips/')) return { sourceType: 'IPSNotifications', sourceGroup: 'LLCINotifications/IPS' };
-      if (isUnder(normalized, 'logs/machinestates/')) return { sourceType: 'MachineStates', sourceGroup: 'MachineStates' };
-      if (isAlertsPath(normalized)) return { sourceType: 'AlertsMonitoring', sourceGroup: 'AlertsMonitoring' };
-      return null;
-    }
+    function createLogWorker() {
+      const workerCode = String.raw`
+        importScripts('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+        try { importScripts('https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js'); } catch (error) {}
+        const MAX_RENDER_ROWS = ${MAX_RENDER_ROWS};
+        const MAX_EVIDENCE_ROWS_STORED = ${MAX_EVIDENCE_ROWS_STORED};
+        const MAX_RAW_LINE_LENGTH = ${MAX_RAW_LINE_LENGTH};
+        const MAX_FILE_PARSE_ROWS = ${MAX_FILE_PARSE_ROWS};
+        const ROW_BATCH_SIZE = ${ROW_BATCH_SIZE};
+        const UI_YIELD_EVERY_MS = ${UI_YIELD_EVERY_MS};
+        const MAX_POINTS_PER_SIGNAL = ${MAX_POINTS_PER_SIGNAL};
+        const MACHINE_STATE_SYSTEMS = ${JSON.stringify(MACHINE_STATE_SYSTEMS)};
+        const SOURCE_ORDER = ['MachineStates', 'AlertsMonitoring', 'FECNotifications', 'BSSNotifications', 'IPSNotifications'];
+        const STAGE_RANGES = {
+          root: [0, 5], opc: [5, 15], index: [15, 25], internal: [25, 40],
+          MachineStates: [40, 55], AlertsMonitoring: [55, 65], FECNotifications: [65, 78],
+          BSSNotifications: [78, 90], IPSNotifications: [90, 97], finalize: [97, 100]
+        };
+        const ctx = newContext();
 
-    function isAlertsPath(path) {
-      const normalized = normalizePath(path);
-      return normalized.endsWith('logs/alertsmonitoring.txt') || normalized.endsWith('logs/aletrsmonitoring.txt');
-    }
+        self.onmessage = event => {
+          if (event.data?.type === 'analyze') analyze(event.data.buffer, event.data.name).catch(error => fatal(error));
+        };
 
-    function isUnder(path, prefix) {
-      return normalizePath(path).includes(prefix.toLowerCase());
-    }
+        function newContext() {
+          return {
+            inventory: [], evidencePreview: [], evidenceTotal: 0, machineStateRows: [], diagnostics: [],
+            profiles: new Map(), timeSeriesBySignal: {}, stateMissingCount: 0,
+            progress: { percent: 0, stage: 'Waiting', currentFile: '', filesParsed: 0, totalFiles: 0, rowsParsed: 0, rowsPerSecond: 0, warnings: 0, errors: 0 },
+            pipeline: initPipeline(), lastUi: 0, startMs: Date.now()
+          };
+        }
 
-    function normalizePath(path) {
-      return String(path || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase();
+        function initPipeline() {
+          return {
+            archive: { status: 'waiting', count: 0, warnings: 0, errors: 0, message: 'Waiting.', steps: { rootZip: step(), opcZip: step(), logsFolder: step() } },
+            focused: { status: 'waiting', count: 0, warnings: 0, errors: 0, message: 'Waiting.', steps: { machineStates: step(), alertsMonitoring: step(), fecNotifications: step(), bssNotifications: step(), ipsNotifications: step() } },
+            parsing: { status: 'waiting', count: 0, warnings: 0, errors: 0, message: 'Waiting.', steps: { internalZips: step(), csvTxtParsing: step(), stateContext: step(), signalDiscovery: step() } }
+          };
+        }
+        function step() { return { status: 'waiting', count: 0, warnings: 0, errors: 0, message: 'Waiting.' }; }
+
+        async function analyze(buffer, fileName) {
+          updateStage('archive', 'rootZip', 'active', 'Opening root autocollect ZIP...', 0);
+          progress('root', 'Root ZIP loading', fileName, 0, 1, 0);
+          const rootZip = await JSZip.loadAsync(buffer);
+          const rootEntries = Object.values(rootZip.files);
+          updateStage('archive', 'rootZip', 'done', 'Root ZIP opened.', rootEntries.length);
+          progress('opc', 'opc.zip detection/extraction', 'opc.zip', 0, 1, 0);
+
+          updateStage('archive', 'opcZip', 'active', 'Searching root ZIP paths for opc.zip...', 0);
+          const opcEntry = rootEntries.find(file => !file.dir && basename(file.name).toLowerCase() === 'opc.zip');
+          if (!opcEntry) throw new Error('opc.zip not found inside the uploaded autocollect ZIP.');
+          updateStage('archive', 'opcZip', 'active', 'Opening opc.zip...', 1);
+          const opcZip = await JSZip.loadAsync(await opcEntry.async('arraybuffer'));
+          const opcFiles = Object.values(opcZip.files).filter(file => !file.dir);
+          updateStage('archive', 'opcZip', 'done', 'opc.zip opened.', opcFiles.length);
+
+          progress('index', 'logs folder and focused file indexing', '', 0, 1, 0);
+          updateStage('archive', 'logsFolder', 'active', 'Scanning paths only; contents are not parsed in Phase A.', 0);
+          const paths = opcFiles.map(file => normalizePath(file.name));
+          const hasLogs = paths.some(path => path.includes('logs/'));
+          if (!hasLogs) throw new Error('logs folder not found inside opc.zip.');
+          updateStage('archive', 'logsFolder', 'done', 'logs folder detected.', paths.filter(path => path.includes('logs/')).length);
+          ctx.pipeline.archive.status = 'done'; ctx.pipeline.archive.count = opcFiles.length; ctx.pipeline.archive.message = 'Archive index scan complete.';
+
+          const directFocused = findFocusedFiles(opcFiles);
+          updateFocusedFolderSteps(paths);
+          const internalZipItems = directFocused.filter(item => item.fileType === 'zip');
+          const estimatedTextFiles = directFocused.filter(item => item.fileType !== 'zip').length;
+          ctx.archiveSummary = { totalEntries: rootEntries.length + opcFiles.length, focusedCandidates: directFocused.length, internalZipCandidates: internalZipItems.length, estimatedCsvTxtFiles: estimatedTextFiles };
+          ctx.pipeline.focused.status = directFocused.length ? 'done' : 'warning';
+          ctx.pipeline.focused.count = directFocused.length;
+          ctx.pipeline.focused.message = directFocused.length ? 'Focused candidates indexed.' : 'No focused candidates found.';
+          addMissingFolderDiagnostics(paths);
+          sendProgress();
+
+          progress('internal', 'internal ZIP extraction/indexing', '', 0, Math.max(1, internalZipItems.length), 0);
+          updateStage('parsing', 'internalZips', 'active', 'Opening focused internal ZIPs and indexing paths only.', internalZipItems.length);
+          const focusedFiles = [];
+          let openedInternal = 0;
+          for (const item of directFocused) {
+            if (item.fileType === 'zip') {
+              const nested = await extractFocusedInternalZip(item);
+              focusedFiles.push(...nested);
+              openedInternal += 1;
+              progress('internal', 'internal ZIP extraction/indexing', item.path, openedInternal, Math.max(1, internalZipItems.length), 0);
+            } else {
+              focusedFiles.push(item);
+            }
+            await yieldIfNeeded();
+          }
+          updateStage('parsing', 'internalZips', internalZipItems.length ? 'done' : 'warning', internalZipItems.length ? 'Focused internal ZIPs opened and indexed.' : 'No internal ZIP extraction was needed.', focusedFiles.filter(item => item.extractedFrom).length);
+
+          const parseQueue = orderFocusedFiles(focusedFiles.filter(item => item.fileType === 'csv' || item.fileType === 'txt'));
+          ctx.progress.totalFiles = parseQueue.length;
+          updateStage('parsing', 'csvTxtParsing', 'active', 'Parsing focused files source by source with row caps.', parseQueue.length);
+          for (const sourceType of SOURCE_ORDER) {
+            const files = parseQueue.filter(item => item.sourceType === sourceType);
+            await parseSource(sourceType, files, parseQueue.length);
+          }
+          updateStage('parsing', 'csvTxtParsing', parseQueue.length ? 'done' : 'warning', parseQueue.length ? 'Focused CSV/TXT files parsed with safe limits.' : 'No focused CSV/TXT files were available to parse.', parseQueue.length);
+
+          progress('finalize', 'signal discovery/model finalization', '', ctx.progress.filesParsed, parseQueue.length, ctx.progress.rowsParsed);
+          updateStage('parsing', 'stateContext', ctx.machineStateRows.length ? 'done' : 'warning', ctx.machineStateRows.length ? 'MachineStates context attached during evidence parsing.' : 'No MachineStates found; state context is missing for evidence rows.', ctx.machineStateRows.length);
+          if (!ctx.machineStateRows.length) addDiagnostic('warning', 'State context mapping', '', 'no MachineStates found', 'Evidence rows cannot be matched to machine/system state.');
+          if (ctx.stateMissingCount) addDiagnostic('warning', 'State context mapping', '', 'state context missing for evidence rows', ctx.stateMissingCount + ' evidence rows had no prior MachineStates timestamp.');
+          const signalProfiles = finalizeProfiles();
+          updateStage('parsing', 'signalDiscovery', signalProfiles.length ? 'done' : 'warning', signalProfiles.length ? 'Streaming signal profiles finalized.' : 'No signals discovered.', signalProfiles.length);
+          ctx.pipeline.parsing.status = ctx.diagnostics.some(d => d.level === 'error') ? 'warning' : 'done';
+          ctx.pipeline.parsing.count = ctx.progress.rowsParsed;
+          ctx.pipeline.parsing.warnings = countDiagnostics('warning');
+          ctx.pipeline.parsing.errors = countDiagnostics('error');
+          ctx.pipeline.parsing.message = 'Focused parse complete; final alert engine not run.';
+          sendProgress();
+          self.postMessage({ type: 'complete', result: buildResult(signalProfiles) });
+        }
+
+        async function parseSource(sourceType, files, totalFiles) {
+          const range = STAGE_RANGES[sourceType];
+          if (!files.length) {
+            progress(sourceType, sourceType + ' parsing', '', ctx.progress.filesParsed, totalFiles, ctx.progress.rowsParsed);
+            return;
+          }
+          for (const item of files) {
+            const beforeRows = ctx.progress.rowsParsed;
+            const started = Date.now();
+            progress(sourceType, sourceType + ' parsing', item.path, ctx.progress.filesParsed, totalFiles, beforeRows);
+            if (item.fileType === 'csv') await parseCsvFile(item); else await parseTxtFile(item);
+            ctx.progress.filesParsed += 1;
+            const elapsed = Math.max(1, Date.now() - started);
+            ctx.progress.rowsPerSecond = ((ctx.progress.rowsParsed - beforeRows) / elapsed) * 1000;
+            progress(sourceType, sourceType + ' parsing', item.path, ctx.progress.filesParsed, totalFiles, ctx.progress.rowsParsed);
+            sendPartial();
+            await yieldIfNeeded(true);
+          }
+        }
+
+        async function extractFocusedInternalZip(item) {
+          try {
+            const nestedZip = await JSZip.loadAsync(await item.file.async('arraybuffer'));
+            const nestedFiles = Object.values(nestedZip.files).filter(file => !file.dir);
+            return findFocusedFiles(nestedFiles, { sourceType: item.sourceType, sourceGroup: item.sourceGroup }, item.path).filter(nested => nested.fileType !== 'zip');
+          } catch (error) {
+            addDiagnostic('error', 'internal ZIP extraction/indexing', item.path, 'internal ZIP failed to open', error.message || String(error));
+            addInventory(item, 0, [], 'failed', false);
+            updateStage('parsing', 'internalZips', 'warning', 'One or more focused internal ZIPs failed to open.', 0, 0, 1);
+            return [];
+          }
+        }
+
+        async function parseCsvFile(item) {
+          let rowCount = 0;
+          let headers = [];
+          let truncated = false;
+          try {
+            const text = await item.file.async('string');
+            await parseCsvIncremental(text, (row, meta) => {
+              if (!headers.length && meta?.fields) headers = meta.fields;
+              rowCount += 1;
+              ctx.progress.rowsParsed += 1;
+              if (item.sourceType === 'MachineStates') {
+                ctx.machineStateRows.push(normalizeMachineStateRow(row, item.path));
+              } else {
+                const ev = normalizeCsvEvidence(row, item);
+                if (ev) storeEvidence(ev);
+              }
+              if (rowCount >= MAX_FILE_PARSE_ROWS) { truncated = true; return false; }
+              if (rowCount % ROW_BATCH_SIZE === 0) sendProgress();
+              return true;
+            }, error => addDiagnostic('warning', 'CSV/TXT parsing', item.path, 'CSV parser error', error.message || String(error)));
+            if (item.sourceType === 'MachineStates') ctx.machineStateRows.sort((a, b) => (a.timeMs || Infinity) - (b.timeMs || Infinity));
+            if (truncated) addDiagnostic('warning', 'CSV/TXT parsing', item.path, 'file truncated because row limit reached', 'Stopped after ' + MAX_FILE_PARSE_ROWS + ' rows. Aggregates and stored preview remain safe.');
+            addInventory(item, rowCount, headers, truncated ? 'truncated' : (rowCount ? 'parsed' : 'warning: no rows'), truncated);
+          } catch (error) {
+            addDiagnostic('error', 'CSV/TXT parsing', item.path, 'CSV parser error', error.message || String(error));
+            addInventory(item, rowCount, headers, 'failed', truncated);
+          }
+        }
+
+        async function parseCsvIncremental(text, onRow, onError) {
+          if (self.Papa) {
+            let stopped = false;
+            await new Promise(resolve => {
+              Papa.parse(text, {
+                header: true, skipEmptyLines: true,
+                step: (results, parser) => {
+                  if (stopped) return;
+                  const keepGoing = onRow(results.data, results.meta || {});
+                  if (keepGoing === false) { stopped = true; parser.abort(); }
+                },
+                error: error => { onError(error); resolve(); },
+                complete: results => { (results.errors || []).slice(0, 10).forEach(onError); resolve(); }
+              });
+            });
+            return;
+          }
+          const lines = text.split(/\r?\n/);
+          const headers = parseCsvLine(lines.shift() || '').map(h => h.trim());
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const values = parseCsvLine(line);
+            const row = {};
+            headers.forEach((header, index) => { row[header] = values[index] || ''; });
+            const keepGoing = await onRow(row, { fields: headers });
+            if (keepGoing === false) break;
+          }
+        }
+
+        async function parseTxtFile(item) {
+          let rowCount = 0;
+          let truncated = false;
+          try {
+            const text = await item.file.async('string');
+            const lines = text.split(/\r?\n/);
+            for (const rawLine of lines) {
+              const line = rawLine.trim();
+              if (!line) continue;
+              rowCount += 1;
+              ctx.progress.rowsParsed += 1;
+              const ev = normalizeAlertLine(line, item, rowCount);
+              storeEvidence(ev);
+              if (rowCount >= MAX_FILE_PARSE_ROWS) { truncated = true; break; }
+              if (rowCount % ROW_BATCH_SIZE === 0) { await yieldIfNeeded(); sendProgress(); }
+            }
+            if (truncated) addDiagnostic('warning', 'CSV/TXT parsing', item.path, 'file truncated because row limit reached', 'Stopped after ' + MAX_FILE_PARSE_ROWS + ' text lines.');
+            addInventory(item, rowCount, [], truncated ? 'truncated' : (rowCount ? 'parsed' : 'warning: no rows'), truncated);
+          } catch (error) {
+            addDiagnostic('error', 'CSV/TXT parsing', item.path, 'unsupported encoding / unreadable text', error.message || String(error));
+            addInventory(item, rowCount, [], 'failed', truncated);
+          }
+        }
+
+        function storeEvidence(evidence) {
+          const state = getStateAt(evidence.timestamp, evidence.system);
+          evidence.machineState = state.machineState;
+          evidence.systemState = state.systemState || evidence.systemState;
+          evidence.stateContextStatus = state.status;
+          if (state.status === 'missing') ctx.stateMissingCount += 1;
+          ctx.evidenceTotal += 1;
+          updateSignalProfile(evidence);
+          updateTimeSeries(evidence);
+          if (ctx.evidencePreview.length < Math.min(MAX_RENDER_ROWS, MAX_EVIDENCE_ROWS_STORED)) ctx.evidencePreview.push(evidence);
+          else if (ctx.evidencePreview.length < MAX_EVIDENCE_ROWS_STORED && ctx.evidenceTotal <= MAX_EVIDENCE_ROWS_STORED) ctx.evidencePreview.push(evidence);
+          else if (ctx.evidenceTotal === MAX_EVIDENCE_ROWS_STORED + 1) addDiagnostic('warning', 'CSV/TXT parsing', '', 'detailed evidence storage cap reached', 'Stored preview is capped at ' + MAX_EVIDENCE_ROWS_STORED + ' compact evidence rows; signal profiles continue streaming.');
+        }
+
+        function updateSignalProfile(ev) {
+          const key = [ev.system, ev.sourceType, ev.signal].join('||');
+          let profile = ctx.profiles.get(key);
+          if (!profile) {
+            profile = { system: ev.system, sourceType: ev.sourceType, signal: ev.signal, count: 0, numericCount: 0, min: null, max: null, sum: 0, avg: null, firstTimestamp: ev.timestamp, lastTimestamp: ev.timestamp, exampleValue: ev.value, exampleRawPreview: ev.rawPreview, stateCoverageCount: 0, stateCoveragePercent: 0 };
+            ctx.profiles.set(key, profile);
+          }
+          profile.count += 1;
+          if (ev.numericValue !== null) {
+            profile.numericCount += 1;
+            profile.min = profile.min === null ? ev.numericValue : Math.min(profile.min, ev.numericValue);
+            profile.max = profile.max === null ? ev.numericValue : Math.max(profile.max, ev.numericValue);
+            profile.sum += ev.numericValue;
+            profile.avg = profile.sum / profile.numericCount;
+          }
+          if (!profile.firstTimestamp || compareTimestamp(ev.timestamp, profile.firstTimestamp) < 0) profile.firstTimestamp = ev.timestamp;
+          if (!profile.lastTimestamp || compareTimestamp(ev.timestamp, profile.lastTimestamp) > 0) profile.lastTimestamp = ev.timestamp;
+          if (ev.stateContextStatus === 'matched' || ev.stateContextStatus === 'inferred') profile.stateCoverageCount += 1;
+          profile.stateCoveragePercent = Math.round((profile.stateCoverageCount / profile.count) * 100);
+        }
+
+        function updateTimeSeries(ev) {
+          if (ev.numericValue === null) return;
+          const key = [ev.system, ev.sourceType, ev.signal].join('||');
+          let series = ctx.timeSeriesBySignal[key];
+          if (!series) series = ctx.timeSeriesBySignal[key] = { key, system: ev.system, sourceType: ev.sourceType, signal: ev.signal, totalCount: 0, points: [], min: ev.numericValue, max: ev.numericValue };
+          series.totalCount += 1;
+          series.min = Math.min(series.min, ev.numericValue);
+          series.max = Math.max(series.max, ev.numericValue);
+          const point = { timestamp: ev.timestamp, value: ev.numericValue };
+          if (series.points.length < MAX_POINTS_PER_SIGNAL) series.points.push(point);
+          else {
+            series.points[series.points.length - 1] = point;
+            const slot = 1 + (series.totalCount % (MAX_POINTS_PER_SIGNAL - 2));
+            if (slot > 0 && slot < series.points.length - 1) series.points[slot] = point;
+          }
+        }
+
+        function finalizeProfiles() {
+          return Array.from(ctx.profiles.values()).sort((a, b) => b.count - a.count).slice(0, 10000);
+        }
+
+        function buildResult(signalProfiles) {
+          return {
+            archiveSummary: ctx.archiveSummary,
+            inventory: ctx.inventory,
+            evidencePreview: ctx.evidencePreview.slice(0, MAX_EVIDENCE_ROWS_STORED),
+            evidenceTotal: ctx.evidenceTotal,
+            signalProfiles,
+            machineStateRows: ctx.machineStateRows.slice(0, MAX_RENDER_ROWS),
+            timeSeriesBySignal: ctx.timeSeriesBySignal,
+            diagnostics: ctx.diagnostics,
+            pipeline: ctx.pipeline
+          };
+        }
+
+        function addInventory(item, rowCount, headers, parseStatus, truncated) {
+          ctx.inventory.push({ id: 'file-' + (ctx.inventory.length + 1), path: item.path, sourceType: item.sourceType, sourceGroup: item.sourceGroup, fileType: item.fileType, isNestedZip: item.isNestedZip, extractedFrom: item.extractedFrom, rowCount, headers: (headers || []).slice(0, 80), parseStatus, truncated: Boolean(truncated) });
+        }
+
+        function normalizeCsvEvidence(row, item) {
+          if (item.sourceType === 'FECNotifications') {
+            const value = firstValue(row, ['SetPoint', 'Status', 'Value']);
+            const signal = firstValue(row, ['PSSID', 'Type', 'Signal', 'Name']) || 'FEC signal';
+            return createEvidence({ timestamp: firstValue(row, ['Timestamp', 'Time', 'DateTime']), sourceFileId: item.path, sourceType: 'FECNotifications', system: 'FEC', signal, value, systemState: firstValue(row, ['State', 'PSCState']), isAlertLike: isTruthy(firstValue(row, ['HasErrors', 'HasWarnings', 'IsAlert'])), rawPreview: previewRow(row) });
+          }
+          if (item.sourceType === 'BSSNotifications') {
+            const component = firstValue(row, ['Component']);
+            const subComponent = firstValue(row, ['SubComponent']);
+            const parameterType = firstValue(row, ['ParameterType', 'Signal']);
+            return createEvidence({ timestamp: firstValue(row, ['Timestamp', 'Time', 'DateTime']), sourceFileId: item.path, sourceType: 'BSSNotifications', system: 'BSS', component, subComponent, signal: compactJoin([component, subComponent, parameterType], ' / ') || 'BSS signal', value: firstValue(row, ['Value', 'Status']), isAlertLike: isTruthy(firstValue(row, ['IsAlert', 'HasErrors', 'HasWarnings'])), rawPreview: previewRow(row) });
+          }
+          if (item.sourceType === 'IPSNotifications') {
+            const keyName = firstValue(row, ['KeyName', 'Component']);
+            const parameterType = firstValue(row, ['ParameterType', 'Signal']);
+            return createEvidence({ timestamp: firstValue(row, ['Timestamp', 'Time', 'DateTime']), sourceFileId: item.path, sourceType: 'IPSNotifications', system: 'IPS', component: keyName, signal: compactJoin([keyName, parameterType], ' / ') || 'IPS signal', value: firstValue(row, ['Value', 'Status']), isAlertLike: isTruthy(firstValue(row, ['IsAlert', 'HasErrors', 'HasWarnings'])), rawPreview: previewRow(row) });
+          }
+          return null;
+        }
+
+        function createEvidence(fields) {
+          const value = fields.value ?? '';
+          return { id: 'ev-' + (ctx.evidenceTotal + 1), timestamp: fields.timestamp || '', sourceFileId: fields.sourceFileId || '', sourceType: fields.sourceType || '', system: fields.system || '', component: fields.component || '', subComponent: fields.subComponent || '', signal: fields.signal || '', value, numericValue: toNumber(value), unit: fields.unit || '', machineState: '', systemState: fields.systemState || '', stateContextStatus: 'pending', isAlertLike: Boolean(fields.isAlertLike), rawPreview: trimRaw(fields.rawPreview || '') };
+        }
+
+        function normalizeMachineStateRow(row, sourceFileId) {
+          const timestamp = firstValue(row, ['Time', 'Timestamp', 'DateTime']);
+          const systemStates = {};
+          MACHINE_STATE_SYSTEMS.forEach(system => { systemStates[system] = firstValue(row, [system]) || ''; });
+          return { id: 'state-' + (ctx.machineStateRows.length + 1), timestamp, timeMs: parseTime(timestamp), sourceFileId, machineState: firstValue(row, ['Machine', 'MachineState']) || '', systemStates, rawPreview: previewRow(row) };
+        }
+
+        function normalizeAlertLine(line, item, lineNumber) {
+          const timestamp = extractTimestamp(line);
+          const subsystem = extractKeyValue(line, ['subsystem', 'system']) || 'Alerts';
+          const alertName = extractKeyValue(line, ['alert name', 'name', 'title']) || 'AlertMonitoring event';
+          const alertId = extractKeyValue(line, ['alert id', 'id']);
+          const alertStatus = extractKeyValue(line, ['status']);
+          const levelType = extractKeyValue(line, ['level', 'type']);
+          const origin = extractKeyValue(line, ['origin']);
+          const hardware = extractKeyValue(line, ['hardware']);
+          const body = extractKeyValue(line, ['message', 'body']) || line;
+          return createEvidence({ timestamp, sourceFileId: item.path + ':' + lineNumber, sourceType: 'AlertsMonitoring', system: subsystem, signal: compactJoin([alertId, alertName], ' / '), value: compactJoin([alertStatus, levelType, origin, hardware, body], ' | '), isAlertLike: true, rawPreview: trimRaw(line) });
+        }
+
+        function getStateAt(timestamp, system) {
+          if (!ctx.machineStateRows.length) return { machineState: '', systemState: '', matchedTimestamp: '', status: 'missing' };
+          const timeMs = parseTime(timestamp);
+          const normalizedSystem = normalizeSystemForState(system);
+          if (Number.isNaN(timeMs)) {
+            const fallback = ctx.machineStateRows[0];
+            return { machineState: fallback.machineState, systemState: fallback.systemStates[normalizedSystem] || '', matchedTimestamp: fallback.timestamp, status: 'inferred' };
+          }
+          let match = null;
+          for (const row of ctx.machineStateRows) {
+            if (Number.isNaN(row.timeMs)) continue;
+            if (row.timeMs <= timeMs) match = row;
+            if (row.timeMs > timeMs) break;
+          }
+          if (!match) return { machineState: '', systemState: '', matchedTimestamp: '', status: 'missing' };
+          return { machineState: match.machineState || '', systemState: match.systemStates[normalizedSystem] || '', matchedTimestamp: match.timestamp, status: 'matched' };
+        }
+
+        function findFocusedFiles(files, inheritedSource = null, extractedFrom = '') {
+          return files.map(file => createFocusedItem(file, inheritedSource, extractedFrom)).filter(Boolean).filter(item => ['csv', 'txt', 'zip'].includes(item.fileType));
+        }
+        function createFocusedItem(file, inheritedSource, extractedFrom) {
+          const normalizedPath = normalizePath(file.name);
+          const displayPath = String(file.name || '');
+          const mapped = inheritedSource || mapSource(normalizedPath);
+          if (!mapped) return null;
+          const ext = extension(normalizedPath);
+          if (!['csv', 'txt', 'zip'].includes(ext)) return null;
+          return { file, path: extractedFrom ? extractedFrom + ' -> ' + displayPath : displayPath, sourceType: mapped.sourceType, sourceGroup: mapped.sourceGroup, fileType: ext, isNestedZip: Boolean(extractedFrom) || ext === 'zip', extractedFrom };
+        }
+        function mapSource(path) {
+          const normalized = normalizePath(path);
+          if (isUnder(normalized, 'logs/fecnotifications/')) return { sourceType: 'FECNotifications', sourceGroup: 'FECNotifications' };
+          if (isUnder(normalized, 'logs/llcinotifications/bss/')) return { sourceType: 'BSSNotifications', sourceGroup: 'LLCINotifications/BSS' };
+          if (isUnder(normalized, 'logs/llcinotifications/ips/')) return { sourceType: 'IPSNotifications', sourceGroup: 'LLCINotifications/IPS' };
+          if (isUnder(normalized, 'logs/machinestates/')) return { sourceType: 'MachineStates', sourceGroup: 'MachineStates' };
+          if (isAlertsPath(normalized)) return { sourceType: 'AlertsMonitoring', sourceGroup: 'AlertsMonitoring' };
+          return null;
+        }
+        function orderFocusedFiles(files) { return files.sort((a, b) => SOURCE_ORDER.indexOf(a.sourceType) - SOURCE_ORDER.indexOf(b.sourceType) || a.path.localeCompare(b.path)); }
+        function updateFocusedFolderSteps(paths) {
+          const counts = {
+            machineStates: paths.filter(path => isUnder(path, 'logs/machinestates/')).length,
+            alertsMonitoring: paths.filter(path => isAlertsPath(path)).length,
+            fecNotifications: paths.filter(path => isUnder(path, 'logs/fecnotifications/')).length,
+            bssNotifications: paths.filter(path => isUnder(path, 'logs/llcinotifications/bss/')).length,
+            ipsNotifications: paths.filter(path => isUnder(path, 'logs/llcinotifications/ips/')).length
+          };
+          Object.entries(counts).forEach(([key, count]) => updateStage('focused', key, count ? 'done' : 'warning', count ? 'Focused source content detected.' : 'Focused source missing.', count));
+        }
+        function addMissingFolderDiagnostics(paths) {
+          const checks = [
+            ['logs/FECNotifications/', paths.some(path => isUnder(path, 'logs/fecnotifications/'))],
+            ['logs/LLCINotifications/BSS/', paths.some(path => isUnder(path, 'logs/llcinotifications/bss/'))],
+            ['logs/LLCINotifications/IPS/', paths.some(path => isUnder(path, 'logs/llcinotifications/ips/'))],
+            ['logs/MachineStates/', paths.some(path => isUnder(path, 'logs/machinestates/'))],
+            ['logs/AlertsMonitoring.txt or logs/AletrsMonitoring.txt', paths.some(path => isAlertsPath(path))]
+          ];
+          let missing = 0;
+          checks.forEach(([label, found]) => {
+            if (!found) {
+              missing += 1;
+              addDiagnostic('warning', 'logs folder and focused file indexing', label, 'focused folder missing', label + ' was not found in opc.zip.');
+            }
+          });
+          ctx.pipeline.focused.warnings = missing;
+          if (missing) ctx.pipeline.focused.status = 'warning';
+        }
+        function updateStage(groupKey, stepKey, status, message, count = 0, warnings = 0, errors = 0) {
+          const group = ctx.pipeline[groupKey];
+          if (!group) return;
+          const step = group.steps[stepKey];
+          if (step) Object.assign(step, { status, message, count, warnings, errors });
+          group.status = status === 'failed' ? 'failed' : (status === 'active' ? 'active' : group.status === 'active' ? 'active' : status);
+          group.count = Math.max(group.count || 0, count || 0);
+          group.warnings += warnings;
+          group.errors += errors;
+          group.message = message;
+        }
+        function progress(stageKey, stage, currentFile, completed, total, rowsParsed) {
+          const [start, end] = STAGE_RANGES[stageKey] || [ctx.progress.percent, ctx.progress.percent];
+          const ratio = total ? Math.min(1, completed / total) : 0;
+          ctx.progress.percent = Math.max(ctx.progress.percent, Math.round(start + ((end - start) * ratio)));
+          ctx.progress.stage = stage;
+          ctx.progress.currentFile = currentFile || '';
+          ctx.progress.rowsParsed = rowsParsed || ctx.progress.rowsParsed;
+          ctx.progress.warnings = countDiagnostics('warning');
+          ctx.progress.errors = countDiagnostics('error');
+          sendProgress();
+        }
+        function sendProgress() { self.postMessage({ type: 'progress', progress: ctx.progress, pipeline: ctx.pipeline }); }
+        function sendPartial() { self.postMessage({ type: 'partial', inventory: ctx.inventory, evidencePreview: ctx.evidencePreview.slice(0, MAX_RENDER_ROWS), evidenceTotal: ctx.evidenceTotal, signalProfiles: finalizeProfiles().slice(0, MAX_RENDER_ROWS), machineStateRows: ctx.machineStateRows.slice(0, MAX_RENDER_ROWS), diagnostics: ctx.diagnostics, pipeline: ctx.pipeline }); }
+        async function yieldIfNeeded(force = false) { const now = Date.now(); if (force || now - ctx.lastUi >= UI_YIELD_EVERY_MS) { ctx.lastUi = now; await new Promise(resolve => setTimeout(resolve, 0)); } }
+        function addDiagnostic(level, stage, filePath, message, technicalDetails) { ctx.diagnostics.push({ level, stage, filePath, message, technicalDetails }); }
+        function countDiagnostics(level) { return ctx.diagnostics.filter(item => item.level === level).length; }
+        function fatal(error) { addDiagnostic('error', 'Fatal pipeline failure', '', error.message || String(error), error.stack || ''); self.postMessage({ type: 'error', message: error.message || String(error), diagnostics: ctx.diagnostics, pipeline: ctx.pipeline }); }
+        function firstValue(row, keys) { for (const key of keys) if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return String(row[key]).trim(); const lowerMap = Object.fromEntries(Object.entries(row).map(([key, value]) => [key.toLowerCase(), value])); for (const key of keys) { const value = lowerMap[key.toLowerCase()]; if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim(); } return ''; }
+        function compactJoin(values, separator) { return values.map(value => String(value || '').trim()).filter(Boolean).join(separator); }
+        function toNumber(value) { const text = String(value ?? '').trim(); if (!text) return null; const number = Number(text.replace(/,/g, '')); return Number.isFinite(number) ? number : null; }
+        function isTruthy(value) { return ['true', '1', 'yes', 'y', 'error', 'warning'].includes(String(value || '').trim().toLowerCase()); }
+        function previewRow(row) { return trimRaw(Object.entries(row).slice(0, 12).map(([key, value]) => key + '=' + value).join(' | ')); }
+        function trimRaw(value) { const text = String(value ?? ''); return text.length > MAX_RAW_LINE_LENGTH ? text.slice(0, MAX_RAW_LINE_LENGTH) + '…' : text; }
+        function parseTime(value) { const text = String(value || '').trim(); if (!text) return Number.NaN; const direct = Date.parse(text); if (!Number.isNaN(direct)) return direct; const normalized = text.replace(/^(\d{4}-\d{2}-\d{2})[ _](\d{2}-\d{2}-\d{2})/, '$1T$2').replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3'); const retry = Date.parse(normalized); return Number.isNaN(retry) ? Number.NaN : retry; }
+        function compareTimestamp(left, right) { const leftMs = parseTime(left); const rightMs = parseTime(right); if (!Number.isNaN(leftMs) && !Number.isNaN(rightMs)) return leftMs - rightMs; return String(left || '').localeCompare(String(right || '')); }
+        function normalizeSystemForState(system) { if (system === 'FEC') return 'PSS'; if (MACHINE_STATE_SYSTEMS.includes(system)) return system; return system; }
+        function extractTimestamp(text) { const match = String(text).match(/\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?|\d{2}[-/]\d{2}[-/]\d{4}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?/); return match ? match[0] : ''; }
+        function extractKeyValue(text, keys) { for (const key of keys) { const pattern = new RegExp(escapeRegex(key) + '\\s*[:=]\\s*([^|;,]+)', 'i'); const match = String(text).match(pattern); if (match) return match[1].trim(); } return ''; }
+        function escapeRegex(text) { return String(text).replace(/[.*+?^\${}()|[\]\\]/g, '\\$&'); }
+        function parseCsvLine(line) { const cells = []; let cell = ''; let inQuotes = false; for (let i = 0; i < line.length; i += 1) { const char = line[i]; const next = line[i + 1]; if (inQuotes) { if (char === '"' && next === '"') { cell += '"'; i += 1; } else if (char === '"') inQuotes = false; else cell += char; } else if (char === '"') inQuotes = true; else if (char === ',') { cells.push(cell); cell = ''; } else cell += char; } cells.push(cell); return cells; }
+        function isAlertsPath(path) { const normalized = normalizePath(path); return normalized.endsWith('logs/alertsmonitoring.txt') || normalized.endsWith('logs/aletrsmonitoring.txt'); }
+        function isUnder(path, prefix) { return normalizePath(path).includes(prefix.toLowerCase()); }
+        function normalizePath(path) { return String(path || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase(); }
+        function basename(path) { return String(path || '').replace(/\\/g, '/').split('/').pop(); }
+        function extension(path) { const name = basename(path).toLowerCase(); const dot = name.lastIndexOf('.'); return dot === -1 ? '' : name.slice(dot + 1); }
+      `;
+      return new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'text/javascript' })));
     }
 
     function basename(path) {
       return String(path || '').replace(/\\/g, '/').split('/').pop();
-    }
-
-    function extension(path) {
-      const name = basename(path).toLowerCase();
-      const dot = name.lastIndexOf('.');
-      return dot === -1 ? '' : name.slice(dot + 1);
-    }
-
-    function firstValue(row, keys) {
-      for (const key of keys) {
-        if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return String(row[key]).trim();
-      }
-      const lowerMap = Object.fromEntries(Object.entries(row).map(([key, value]) => [key.toLowerCase(), value]));
-      for (const key of keys) {
-        const value = lowerMap[key.toLowerCase()];
-        if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
-      }
-      return '';
-    }
-
-    function compactJoin(values, separator) {
-      return values.map(value => String(value || '').trim()).filter(Boolean).join(separator);
-    }
-
-    function toNumber(value) {
-      const text = String(value ?? '').trim();
-      if (!text) return null;
-      const number = Number(text.replace(/,/g, ''));
-      return Number.isFinite(number) ? number : null;
-    }
-
-    function isTruthy(value) {
-      return ['true', '1', 'yes', 'y', 'error', 'warning'].includes(String(value || '').trim().toLowerCase());
-    }
-
-    function parseTime(value) {
-      const text = String(value || '').trim();
-      if (!text) return Number.NaN;
-      const direct = Date.parse(text);
-      if (!Number.isNaN(direct)) return direct;
-      const normalized = text.replace(/^(\d{4}-\d{2}-\d{2})[ _](\d{2}-\d{2}-\d{2})/, '$1T$2').replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3');
-      const retry = Date.parse(normalized);
-      return Number.isNaN(retry) ? Number.NaN : retry;
-    }
-
-    function compareTimestamp(left, right) {
-      const leftMs = parseTime(left);
-      const rightMs = parseTime(right);
-      if (!Number.isNaN(leftMs) && !Number.isNaN(rightMs)) return leftMs - rightMs;
-      return String(left || '').localeCompare(String(right || ''));
-    }
-
-    function normalizeSystemForState(system) {
-      if (system === 'FEC') return 'PSS';
-      if (MACHINE_STATE_SYSTEMS.includes(system)) return system;
-      return system;
-    }
-
-    function extractTimestamp(text) {
-      const match = String(text).match(/\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?|\d{2}[-/]\d{2}[-/]\d{4}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?/);
-      return match ? match[0] : '';
-    }
-
-    function extractKeyValue(text, keys) {
-      for (const key of keys) {
-        const pattern = new RegExp(`${escapeRegex(key)}\\s*[:=]\\s*([^|;,]+)`, 'i');
-        const match = String(text).match(pattern);
-        if (match) return match[1].trim();
-      }
-      return '';
-    }
-
-    function escapeRegex(text) {
-      return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
     function escapeHtml(value) {
