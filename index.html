@@ -562,7 +562,7 @@
     }
 
 
-    .health-map-card { min-height: 620px; }
+    .health-map-card { min-height: 560px; }
 
     .health-map-layout {
       display: grid;
@@ -592,7 +592,7 @@
 
     .health-map-stage {
       position: relative;
-      min-height: 520px;
+      min-height: 450px;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       overflow: hidden;
@@ -654,7 +654,7 @@
     }
 
     .issue-panel {
-      min-height: 520px;
+      min-height: 450px;
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       padding: 18px;
@@ -676,13 +676,13 @@
 
     .radar-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
     .deviation-heatmap { width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(8, 15, 23, 0.52); padding: 12px; }
-    .heatmap-grid { display: grid; grid-template-columns: 112px repeat(var(--bucket-count), minmax(34px, 1fr)); gap: 4px; min-width: max(860px, calc(112px + var(--bucket-count) * 42px)); }
-    .heatmap-label, .heatmap-cell, .state-cell { min-height: 34px; border: 1px solid var(--border-soft); border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 4px; font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.025); }
+    .heatmap-grid { display: grid; grid-template-columns: 82px repeat(var(--bucket-count), minmax(24px, 1fr)); gap: 4px; min-width: max(620px, calc(82px + var(--bucket-count) * 28px)); }
+    .heatmap-label, .heatmap-cell, .state-cell { min-height: 26px; border: 1px solid var(--border-soft); border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 4px; font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.025); }
     .heatmap-label { justify-content: flex-start; font-weight: 800; color: var(--text); position: sticky; left: 0; z-index: 2; background: #101925; }
     .heatmap-cell { cursor: pointer; color: #06111a; font-weight: 900; text-shadow: 0 1px 10px rgba(255,255,255,0.2); }
     .heatmap-cell.is-selected { outline: 2px solid var(--accent); outline-offset: 1px; }
     .heatmap-cell.status-no_rule, .heatmap-cell.status-no_data { color: var(--text-muted); text-shadow: none; }
-    .state-cell { min-height: 22px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .state-cell { min-height: 18px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .debug-explorer { border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: rgba(8, 15, 23, 0.52); }
     .debug-explorer > summary { cursor: pointer; padding: 18px 24px; font-weight: 800; color: var(--text); }
     .debug-explorer > .debug-body { display: grid; gap: 18px; padding: 0 0 18px; }
@@ -764,34 +764,11 @@
     </nav>
 
     <main class="workspace">
-      <section class="kpi-row" aria-label="Service radar KPIs">
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems OK</p>
-          <span id="kpiFiles" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems Warning</p>
-          <span id="kpiEvidence" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems Critical</p>
-          <span id="kpiSignals" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Needs Validation</p>
-          <span id="kpiStates" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Time Range</p>
-          <span id="kpiRules" class="kpi-value muted">No rules</span>
-        </article>
-      </section>
-
       <section class="card control-panel" aria-label="Data upload controls">
         <div class="panel-header">
           <div>
-            <h2 class="panel-title">Data / Log Upload Pipeline</h2>
-            <p class="panel-note">Load a Landa autocollect ZIP and the Rules Excel, then evaluate BSS / BCU values from BSSNotifications against state-dependent rule expectations.</p>
+            <h2 class="panel-title">Analysis Status Bar</h2>
+            <p class="panel-note">Load logs and rules, then review the service decision below: affected system, deviated value, expected value, machine state, and recommended action.</p>
           </div>
           <span id="modeTag" class="panel-tag">Waiting</span>
         </div>
@@ -817,8 +794,8 @@
       <section class="card health-map-card" aria-label="Machine-centered system health map">
         <div class="panel-header">
           <div>
-            <h2 class="panel-title">Machine System Health Map</h2>
-            <p class="panel-note">Primary view: machine-centered hotspots show which systems are OK, need validation, or have issues. Raw tables remain secondary below.</p>
+            <h2 class="panel-title">Machine Health Map</h2>
+            <p class="panel-note">Service decision view: select the hotspot to see which system has a problem and what service should do.</p>
           </div>
           <span id="healthMapTag" class="panel-tag">0 issues</span>
         </div>
@@ -840,19 +817,48 @@
       <section class="card" aria-label="Deviation Timeline Heatmap">
         <div class="panel-header">
           <div>
-            <h2 class="panel-title">Deviation Timeline</h2>
-            <p class="panel-note">Rows are machine systems and columns are adaptive time buckets. Cell color is the worst state-dependent rule result in that bucket; the Machine State strip shows the operating context.</p>
+            <h2 class="panel-title">Compact Deviation Timeline</h2>
+            <p class="panel-note">Compact status buckets show when evaluated values deviated and the machine state context.</p>
           </div>
           <span id="deviationTimelineTag" class="panel-tag">No buckets</span>
         </div>
         <div id="deviationTimelineBody" class="panel-body"><div class="empty-state">Upload logs and rules to build the deviation radar timeline.</div></div>
       </section>
 
+      <details class="debug-explorer">
+        <summary>Debug / Data Explorer (collapsed)</summary>
+        <div class="debug-body">
+
+      <section class="kpi-row" aria-label="Service radar KPIs">
+        <article class="card kpi-card">
+          <p class="kpi-label">Systems OK</p>
+          <span id="kpiFiles" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Systems Warning</p>
+          <span id="kpiEvidence" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Systems Critical</p>
+          <span id="kpiSignals" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Needs Validation</p>
+          <span id="kpiStates" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Time Range</p>
+          <span id="kpiRules" class="kpi-value muted">No rules</span>
+        </article>
+      </section>
+
+
+
       <section class="card" aria-label="BSS BCU health summary">
         <div class="panel-header">
           <div>
-            <h2 class="panel-title">BSS / BCU Health Summary</h2>
-            <p class="panel-note">Primary MVP evaluation: Rules Excel rows for System = BSS and Log Source = BSSNotifications are checked against LLCINotifications/BSS/BSSNotifications values. AlertsMonitoring is secondary context only and does not drive these value checks.</p>
+            <h2 class="panel-title">BSS / BCU Evaluation Data</h2>
+            <p class="panel-note">Debug-only rule evaluation details. The service decision stays in the map and attention card above.</p>
           </div>
           <span id="bssHealthTag" class="panel-tag">Waiting for rules/logs</span>
         </div>
@@ -871,10 +877,6 @@
         <div id="drilldownBody" class="panel-body"><div class="empty-state">Click a signal profile to investigate it.</div></div>
       </section>
 
-
-      <details class="debug-explorer">
-        <summary>Debug / Data Explorer (collapsed)</summary>
-        <div class="debug-body">
 
       <section class="card" aria-label="Log extraction pipeline">
         <div class="panel-header">
@@ -1372,6 +1374,7 @@
         subsystem: 'BCU',
         component: rule.component || ev?.component || '',
         signal,
+        signalName: rule.signalName || '',
         matchedSignal: ev ? (ev.fullSignal || ev.signal || compactJoin([ev.component, ev.subComponent, ev.parameterType], ' / ')) : '',
         actualValue: numericActual,
         actualDisplay: numericActual !== null && numericActual !== undefined ? numericActual : (ev?.value ?? 'Unavailable'),
@@ -1406,10 +1409,11 @@
     function bssEvidenceMatchesRule(ev, signalName) {
       const needle = normalizeSignalText(signalName);
       if (!needle) return false;
-      const primaryHaystack = normalizeSignalText([ev.subComponent, ev.fullSignal, ev.rawPreview].join(' '));
+      const haystackText = [ev.component, ev.subComponent, ev.parameterType, ev.signal, ev.fullSignal, ev.rawPreview].join(' ');
+      const primaryHaystack = normalizeSignalText(haystackText);
       const compactNeedle = compactSignalText(signalName);
-      const compactPrimary = compactSignalText([ev.subComponent, ev.fullSignal, ev.rawPreview].join(' '));
-      return primaryHaystack.includes(needle) || compactPrimary.includes(compactNeedle);
+      const compactPrimary = compactSignalText(haystackText);
+      return primaryHaystack.includes(needle) || needle.includes(primaryHaystack) || compactPrimary.includes(compactNeedle) || (compactPrimary.length > 3 && compactNeedle.includes(compactPrimary));
     }
 
     function selectRuleState(ev) {
@@ -1653,21 +1657,30 @@
       }
       const hasIssue = ISSUE_STATUSES.has(summary.status);
       const problem = summary.topProblem;
+      const mismatch = summary.mismatch;
       els.systemIssuePanel.innerHTML = `
         <div class="status-${escapeHtml(summary.status)}">
-          <h3 class="issue-card-title"><span class="status-dot"></span>${escapeHtml(summary.system)}</h3>
-          <p class="issue-card-subtitle">${escapeHtml(hasIssue ? (problem?.title || `${summary.system} requires attention`) : `${summary.system} is ${statusLabel(summary.status)}.`)}</p>
+          <h3 class="issue-card-title"><span class="status-dot"></span>What Requires Attention — ${escapeHtml(summary.system)}</h3>
+          <p class="issue-card-subtitle">${escapeHtml(mismatch ? 'BSS rules loaded, but BSSNotifications values were not matched.' : (hasIssue ? (problem?.title || `${summary.system} requires attention`) : `${summary.system} is ${statusLabel(summary.status)}.`))}</p>
+          ${mismatch ? renderBssMismatchSummary(mismatch) : `
           <div class="issue-fields">
-            <div class="issue-field"><strong>Top issue</strong>${escapeHtml(problem?.summary || summary.health?.topIssue || summary.summary)}</div>
-            <div class="issue-field"><strong>Worst signal</strong>${escapeHtml(summary.health?.worstSignal || problem?.point?.signal || 'Unavailable')}</div>
-            <div class="issue-field"><strong>Actual value</strong>${escapeHtml(String(summary.health?.latestActual ?? problem?.point?.actualDisplay ?? 'Unavailable'))}</div>
-            <div class="issue-field"><strong>Expected range</strong>${escapeHtml(summary.health?.expectedRange || problem?.actualExpected || summary.actualExpectedPreview || 'Not evaluated')}</div>
-            <div class="issue-field"><strong>Machine state</strong>${escapeHtml(summary.health?.machineState || problem?.machineState || summary.currentMachineState || 'Unavailable')}</div>
-            <div class="issue-field"><strong>First deviation time</strong>${escapeHtml(summary.health?.firstDeviationTime || 'None')}</div>
-            <div class="issue-field"><strong>Last deviation time</strong>${escapeHtml(summary.health?.lastDeviationTime || 'None')}</div>
-            <div class="issue-field"><strong>Recommended action</strong>${escapeHtml(problem?.recommendedAction || summary.health?.recommendedAction || recommendedAction(summary.status, summary.system))}</div>
-          </div>
-          <button id="openSystemDrilldown" class="primary" type="button">Open Drill-Down</button>
+            <div class="issue-field"><strong>Which system has a problem?</strong>${escapeHtml(summary.system)}</div>
+            <div class="issue-field"><strong>What value deviated?</strong>${escapeHtml(String(summary.health?.latestActual ?? problem?.point?.actualDisplay ?? 'Unavailable'))}</div>
+            <div class="issue-field"><strong>What was expected?</strong>${escapeHtml(summary.health?.expectedRange || problem?.actualExpected || summary.actualExpectedPreview || 'Not evaluated')}</div>
+            <div class="issue-field"><strong>During which machine state?</strong>${escapeHtml(summary.health?.machineState || problem?.machineState || summary.currentMachineState || 'Unavailable')}</div>
+            <div class="issue-field"><strong>What action should service take?</strong>${escapeHtml(problem?.recommendedAction || summary.health?.recommendedAction || recommendedAction(summary.status, summary.system))}</div>
+          </div>`}
+          <button id="openSystemDrilldown" class="primary" type="button">Open Debug Drill-Down</button>
+        </div>`;
+    }
+
+
+    function renderBssMismatchSummary(mismatch) {
+      return `
+        <div class="issue-fields">
+          <div class="issue-field"><strong>First 5 Excel rule signals</strong>${escapeHtml(mismatch.ruleSignals.join(', ') || 'None')}</div>
+          <div class="issue-field"><strong>First 5 BSS parsed signals</strong>${escapeHtml(mismatch.parsedSignals.join(', ') || 'None')}</div>
+          <div class="issue-field"><strong>Suggested mismatch reason</strong>${escapeHtml(mismatch.reason)}</div>
         </div>`;
     }
 
@@ -1696,13 +1709,29 @@
         const status = health?.status || 'no_data';
         return { system: 'BSS', status, topProblem: null, signals, evidence, latestSystemState, currentMachineState, confidence: 'Low', summary: health?.topIssue || 'BSS requires Rules Excel evaluation from BSSNotifications.', actualExpectedPreview: 'BSS evaluation waits for Rules Excel rows and BSSNotifications values.' };
       }
+      const mismatch = buildBssMismatchSummary(evaluation, signals);
       const issue = evaluation.evaluatedPoints.find(item => ISSUE_STATUSES.has(item.result)) || evaluation.evaluatedPoints.find(item => item.result === 'no_data') || evaluation.evaluatedPoints[0] || null;
       const topProblem = issue ? {
-        system: 'BSS', status: issue.result, title: `${issue.signal || 'BSS signal'} ${statusLabel(issue.result)}`, summary: issue.reason,
+        system: 'BSS', status: issue.result, title: `${issue.signal || 'BSS signal'} ${statusLabel(issue.result)}`, summary: mismatch ? 'BSS rules loaded, but BSSNotifications values were not matched.' : issue.reason,
         confidence: issue.result === 'no_data' ? 'Medium' : 'High', actualExpected: `Actual: ${issue.actualDisplay ?? 'Unavailable'} • Expected: ${compactJoin([issue.expectedForState, issue.expectedRange], ' • ') || 'Not evaluated'}`,
         recommendedAction: issue.recommendedAction, machineState: issue.machineState, point: issue
       } : null;
-      return { system: 'BSS', status: evaluation.overallStatus, topProblem, signals, evidence, latestSystemState, currentMachineState, confidence: 'High', summary: `BSS/BCU rule evaluation from BSSNotifications: ${evaluation.signalsFound} of ${evaluation.rulesTotal} rule signals matched; ${evaluation.evaluatedValues} timestamped numeric values evaluated by Machine State.`, actualExpectedPreview: topProblem?.actualExpected || `Overall: ${statusLabel(evaluation.overallStatus)}`, bssEvaluation: evaluation, health };
+      return { system: 'BSS', status: evaluation.overallStatus, topProblem, signals, evidence, latestSystemState, currentMachineState, confidence: 'High', summary: `BSS/BCU rule evaluation from BSSNotifications: ${evaluation.signalsFound} of ${evaluation.rulesTotal} rule signals matched; ${evaluation.evaluatedValues} timestamped numeric values evaluated by Machine State.`, actualExpectedPreview: topProblem?.actualExpected || `Overall: ${statusLabel(evaluation.overallStatus)}`, bssEvaluation: evaluation, health, mismatch };
+    }
+
+
+    function buildBssMismatchSummary(evaluation, signals) {
+      if (!evaluation?.rulesTotal || evaluation.signalsFound > 0) return null;
+      const parsedSignals = (signals || []).map(signal => signal.signal).filter(Boolean).slice(0, 5);
+      if (!parsedSignals.length) return null;
+      const ruleSignals = (app.rulesSummary?.bssRules || []).map(rule => rule.signalName).filter(Boolean).slice(0, 5);
+      const ruleCompact = new Set(ruleSignals.map(compactSignalText));
+      const parsedCompact = new Set(parsedSignals.map(compactSignalText));
+      const shared = [...ruleCompact].filter(value => parsedCompact.has(value));
+      const reason = shared.length
+        ? 'Signal text overlaps, but matching may require Component/SubComponent/ParameterType mapping or state-specific rule names.'
+        : 'Rule Log Signal Name likely does not match BSS SubComponent, ParameterType, full Component/SubComponent/ParameterType, or raw BSS row text.';
+      return { ruleSignals, parsedSignals, reason };
     }
 
     function buildSystemProblems(system, signals, evidence, latestSystemState, currentMachineState) {
@@ -2947,25 +2976,34 @@
 
         async function parseCsvFile(item) {
           let rowCount = 0;
+          let evidenceCount = 0;
+          let skippedRows = 0;
           let headers = [];
           let truncated = false;
           try {
             const text = await item.file.async('string');
-            await parseCsvIncremental(text, (row, meta) => {
+            const csvPlan = item.sourceType === 'BSSNotifications' ? inspectBssCsv(text, item) : null;
+            const parserText = csvPlan ? csvPlan.text : text;
+            const parserOptions = csvPlan ? { delimiter: csvPlan.delimiter } : {};
+            if (csvPlan) addBssParserDiagnostics(item, csvPlan);
+            await parseCsvIncremental(parserText, (row, meta) => {
               if (!headers.length && meta?.fields) headers = meta.fields;
               rowCount += 1;
               ctx.progress.rowsParsed += 1;
               if (item.sourceType === 'MachineStates') {
                 ctx.machineStateRows.push(normalizeMachineStateRow(row, item.path));
+                evidenceCount += 1;
               } else {
                 const ev = normalizeCsvEvidence(row, item);
-                if (ev) storeEvidence(ev);
+                if (ev) { storeEvidence(ev); evidenceCount += 1; }
+                else skippedRows += 1;
               }
               if (rowCount >= MAX_FILE_PARSE_ROWS) { truncated = true; return false; }
               if (rowCount % ROW_BATCH_SIZE === 0) sendProgress();
               return true;
-            }, error => addDiagnostic('warning', 'CSV/TXT parsing', item.path, 'CSV parser error', error.message || String(error)));
+            }, error => addDiagnostic('warning', 'CSV/TXT parsing', item.path, 'CSV parser error', error.message || String(error)), parserOptions);
             if (item.sourceType === 'MachineStates') ctx.machineStateRows.sort((a, b) => (a.timeMs || Infinity) - (b.timeMs || Infinity));
+            if (item.sourceType === 'BSSNotifications') addBssParseResultDiagnostics(item, rowCount, evidenceCount, skippedRows, headers, csvPlan);
             if (truncated) addDiagnostic('warning', 'CSV/TXT parsing', item.path, 'file truncated because row limit reached', 'Stopped after ' + MAX_FILE_PARSE_ROWS + ' rows. Aggregates and stored preview remain safe.');
             addInventory(item, rowCount, headers, truncated ? 'truncated' : (rowCount ? 'parsed' : 'warning: no rows'), truncated);
           } catch (error) {
@@ -2974,12 +3012,12 @@
           }
         }
 
-        async function parseCsvIncremental(text, onRow, onError) {
+        async function parseCsvIncremental(text, onRow, onError, options = {}) {
           if (self.Papa) {
             let stopped = false;
             await new Promise(resolve => {
               Papa.parse(text, {
-                header: true, skipEmptyLines: true,
+                header: true, skipEmptyLines: true, delimiter: options.delimiter || '', transformHeader: header => String(header || '').trim(),
                 step: (results, parser) => {
                   if (stopped) return;
                   const keepGoing = onRow(results.data, results.meta || {});
@@ -2992,10 +3030,11 @@
             return;
           }
           const lines = text.split(/\r?\n/);
-          const headers = parseCsvLine(lines.shift() || '').map(h => h.trim());
+          const delimiter = options.delimiter || ',';
+          const headers = parseCsvLine(lines.shift() || '', delimiter).map(h => h.trim());
           for (const line of lines) {
             if (!line.trim()) continue;
-            const values = parseCsvLine(line);
+            const values = parseCsvLine(line, delimiter);
             const row = {};
             headers.forEach((header, index) => { row[header] = values[index] || ''; });
             const keepGoing = await onRow(row, { fields: headers });
@@ -3111,6 +3150,54 @@
           ctx.inventory.push({ id: 'file-' + (ctx.inventory.length + 1), path: item.path, sourceType: item.sourceType, sourceGroup: item.sourceGroup, fileType: item.fileType, isNestedZip: item.isNestedZip, extractedFrom: item.extractedFrom, rowCount, headers: (headers || []).slice(0, 80), parseStatus, truncated: Boolean(truncated) });
         }
 
+        function inspectBssCsv(text, item) {
+          const rawLines = String(text || '').split(/\r?\n/);
+          const previewLines = rawLines.slice(0, 3).map(line => trimRaw(line));
+          const expectedHeaders = ['Timestamp', 'Action', 'MessageType', 'LLCIKey', 'MachineType', 'Component', 'SubComponent', 'ParameterType', 'Value', 'IsAlert'];
+          const delimiters = [',', ';', '\t', '|'];
+          let best = { score: -1, headerIndex: -1, delimiter: ',', headers: [], previewLines, reason: '' };
+          const maxHeaderScan = Math.min(rawLines.length, 25);
+          for (let i = 0; i < maxHeaderScan; i += 1) {
+            const line = rawLines[i] || '';
+            if (!line.trim()) continue;
+            for (const delimiter of delimiters) {
+              const headers = parseCsvLine(line, delimiter).map(header => String(header || '').trim());
+              const normalized = new Set(headers.map(normalizeLooseHeader));
+              const score = expectedHeaders.reduce((sum, header) => sum + (normalized.has(normalizeLooseHeader(header)) ? 1 : 0), 0);
+              const hasValueSignal = normalized.has('value') && (normalized.has('subcomponent') || normalized.has('parametertype') || normalized.has('component'));
+              const weightedScore = score + (hasValueSignal ? 3 : 0) + (headers.length > 1 ? 1 : 0);
+              if (weightedScore > best.score) best = { score: weightedScore, headerIndex: i, delimiter, headers, previewLines, reason: '' };
+            }
+          }
+          if (best.score < 4) {
+            best.reason = 'No header row with BSSNotifications columns was found in the first 25 non-empty CSV lines.';
+            return { ...best, text: '', expectedHeaders };
+          }
+          const missing = expectedHeaders.filter(header => !new Set(best.headers.map(normalizeLooseHeader)).has(normalizeLooseHeader(header)));
+          best.reason = missing.length ? 'Header row found, but expected columns are missing or named differently: ' + missing.join(', ') + '.' : 'Header row found with expected BSSNotifications columns.';
+          best.text = rawLines.slice(best.headerIndex).join('\n');
+          best.expectedHeaders = expectedHeaders;
+          return best;
+        }
+
+        function addBssParserDiagnostics(item, plan) {
+          addDiagnostic(plan.text ? 'info' : 'warning', 'BSSNotifications parser', item.path, 'header row detected', plan.headerIndex >= 0 ? 'line ' + (plan.headerIndex + 1) + '; delimiter ' + delimiterLabel(plan.delimiter) : 'none');
+          addDiagnostic(plan.text ? 'info' : 'warning', 'BSSNotifications parser', item.path, 'column names found', plan.headers.join(', ') || 'None');
+          addDiagnostic('info', 'BSSNotifications parser', item.path, 'first 3 raw lines preview', plan.previewLines.join(' || ') || 'File is empty.');
+          if (!plan.text || /missing|No header/i.test(plan.reason)) addDiagnostic('warning', 'BSSNotifications parser', item.path, 'why parser skipped rows', plan.reason);
+        }
+
+        function addBssParseResultDiagnostics(item, rowCount, evidenceCount, skippedRows, headers, plan) {
+          const details = 'rows parsed: ' + rowCount + '; BSS evidence rows created: ' + evidenceCount + '; rows skipped: ' + skippedRows;
+          addDiagnostic(evidenceCount ? 'info' : 'warning', 'BSSNotifications parser', item.path, 'BSSNotifications parse result', details);
+          if (rowCount && !evidenceCount) {
+            const headerList = (headers.length ? headers : plan?.headers || []).join(', ') || 'None';
+            addDiagnostic('warning', 'BSSNotifications parser', item.path, 'why parser skipped rows', 'Rows were parsed but none had enough BSS signal/value fields to create evidence. Columns found: ' + headerList + '.');
+          }
+        }
+
+        function delimiterLabel(delimiter) { return delimiter === '\t' ? 'tab' : (delimiter || 'auto'); }
+
         function normalizeCsvEvidence(row, item) {
           if (item.sourceType === 'FECNotifications') {
             const value = firstValue(row, ['SetPoint', 'Status', 'Value']);
@@ -3118,12 +3205,15 @@
             return createEvidence({ timestamp: firstValue(row, ['Timestamp', 'Time', 'DateTime']), sourceFileId: item.path, sourceType: 'FECNotifications', system: 'FEC', signal, value, systemState: firstValue(row, ['State', 'PSCState']), isAlertLike: isTruthy(firstValue(row, ['HasErrors', 'HasWarnings', 'IsAlert'])), rawPreview: previewRow(row) });
           }
           if (item.sourceType === 'BSSNotifications') {
-            const component = firstValue(row, ['Component']);
-            const subComponent = firstValue(row, ['SubComponent']);
-            const parameterType = firstValue(row, ['ParameterType', 'Signal']);
-            const value = firstValue(row, ['Value', 'Status']);
+            const component = firstValue(row, ['Component', 'Comp', 'Unit']);
+            const subComponent = firstValue(row, ['SubComponent', 'Sub Component', 'Subcomponent', 'LLCIKey', 'Key']);
+            const parameterType = firstValue(row, ['ParameterType', 'Parameter Type', 'Parameter', 'Signal', 'MessageType']);
+            const value = firstValue(row, ['Value', 'ActualValue', 'Actual Value', 'Status']);
+            const timestamp = firstValue(row, ['Timestamp', 'Time', 'DateTime', 'Date Time']);
+            const rawPreview = previewRow(row);
             const fullSignal = compactJoin([component, subComponent, parameterType], ' / ');
-            return createEvidence({ timestamp: firstValue(row, ['Timestamp', 'Time', 'DateTime']), sourceFileId: item.path, sourceType: 'BSSNotifications', system: 'BSS', subsystem: 'BCU', component, subComponent, parameterType, signal: subComponent || fullSignal || 'BSS signal', fullSignal, value, isAlertLike: isTruthy(firstValue(row, ['IsAlert', 'HasErrors', 'HasWarnings'])), rawPreview: previewRow(row) });
+            if (!fullSignal && !value && !timestamp) return null;
+            return createEvidence({ timestamp, sourceFileId: item.path, sourceType: 'BSSNotifications', system: 'BSS', subsystem: 'BCU', component, subComponent, parameterType, signal: subComponent || parameterType || fullSignal || 'BSS signal', fullSignal: fullSignal || compactJoin([subComponent, parameterType], ' / '), value, isAlertLike: isTruthy(firstValue(row, ['IsAlert', 'Is Alert', 'HasErrors', 'HasWarnings'])), rawPreview });
           }
           if (item.sourceType === 'IPSNotifications') {
             const keyName = firstValue(row, ['KeyName', 'Component']);
@@ -3184,7 +3274,8 @@
           const displayPath = String(file.name || '');
           const mapped = inheritedSource || mapSource(normalizedPath);
           if (!mapped) return null;
-          const ext = extension(normalizedPath);
+          let ext = extension(normalizedPath);
+          if (!ext && inheritedSource?.sourceType === 'BSSNotifications') ext = 'csv';
           if (!['csv', 'txt', 'zip'].includes(ext)) return null;
           return { file, path: extractedFrom ? extractedFrom + ' -> ' + displayPath : displayPath, sourceType: mapped.sourceType, sourceGroup: mapped.sourceGroup, fileType: ext, isNestedZip: Boolean(extractedFrom) || ext === 'zip', extractedFrom };
         }
@@ -3253,8 +3344,16 @@
         async function yieldIfNeeded(force = false) { const now = Date.now(); if (force || now - ctx.lastUi >= UI_YIELD_EVERY_MS) { ctx.lastUi = now; await new Promise(resolve => setTimeout(resolve, 0)); } }
         function addDiagnostic(level, stage, filePath, message, technicalDetails) { ctx.diagnostics.push({ level, stage, filePath, message, technicalDetails }); }
         function countDiagnostics(level) { return ctx.diagnostics.filter(item => item.level === level).length; }
+        function normalizeLooseHeader(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
         function fatal(error) { addDiagnostic('error', 'Fatal pipeline failure', '', error.message || String(error), error.stack || ''); self.postMessage({ type: 'error', message: error.message || String(error), diagnostics: ctx.diagnostics, pipeline: ctx.pipeline }); }
-        function firstValue(row, keys) { for (const key of keys) if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return String(row[key]).trim(); const lowerMap = Object.fromEntries(Object.entries(row).map(([key, value]) => [key.toLowerCase(), value])); for (const key of keys) { const value = lowerMap[key.toLowerCase()]; if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim(); } return ''; }
+        function firstValue(row, keys) {
+          for (const key of keys) if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return String(row[key]).trim();
+          const lowerMap = Object.fromEntries(Object.entries(row).map(([key, value]) => [String(key).toLowerCase(), value]));
+          for (const key of keys) { const value = lowerMap[String(key).toLowerCase()]; if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim(); }
+          const looseMap = Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeLooseHeader(key), value]));
+          for (const key of keys) { const value = looseMap[normalizeLooseHeader(key)]; if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim(); }
+          return '';
+        }
         function compactJoin(values, separator) { return values.map(value => String(value || '').trim()).filter(Boolean).join(separator); }
         function toNumber(value) { const match = String(value ?? '').replace(/,/g, '').match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/); if (!match) return null; const number = Number(match[0]); return Number.isFinite(number) ? number : null; }
         function isTruthy(value) { return ['true', '1', 'yes', 'y', 'error', 'warning'].includes(String(value || '').trim().toLowerCase()); }
@@ -3266,7 +3365,7 @@
         function extractTimestamp(text) { const match = String(text).match(/\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?|\d{2}[-/]\d{2}[-/]\d{4}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?/); return match ? match[0] : ''; }
         function extractKeyValue(text, keys) { for (const key of keys) { const pattern = new RegExp(escapeRegex(key) + '\\s*[:=]\\s*([^|;,]+)', 'i'); const match = String(text).match(pattern); if (match) return match[1].trim(); } return ''; }
         function escapeRegex(text) { return String(text).replace(/[.*+?^\${}()|[\]\\]/g, '\\$&'); }
-        function parseCsvLine(line) { const cells = []; let cell = ''; let inQuotes = false; for (let i = 0; i < line.length; i += 1) { const char = line[i]; const next = line[i + 1]; if (inQuotes) { if (char === '"' && next === '"') { cell += '"'; i += 1; } else if (char === '"') inQuotes = false; else cell += char; } else if (char === '"') inQuotes = true; else if (char === ',') { cells.push(cell); cell = ''; } else cell += char; } cells.push(cell); return cells; }
+        function parseCsvLine(line, delimiter = ',') { const cells = []; let cell = ''; let inQuotes = false; for (let i = 0; i < line.length; i += 1) { const char = line[i]; const next = line[i + 1]; if (inQuotes) { if (char === '"' && next === '"') { cell += '"'; i += 1; } else if (char === '"') inQuotes = false; else cell += char; } else if (char === '"') inQuotes = true; else if (char === delimiter) { cells.push(cell); cell = ''; } else cell += char; } cells.push(cell); return cells; }
         function isAlertsPath(path) { const normalized = normalizePath(path); return normalized.endsWith('logs/alertsmonitoring.txt') || normalized.endsWith('logs/aletrsmonitoring.txt'); }
         function isUnder(path, prefix) { return normalizePath(path).includes(prefix.toLowerCase()); }
         function normalizePath(path) { return String(path || '').replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase(); }
