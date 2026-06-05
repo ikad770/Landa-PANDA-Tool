@@ -672,6 +672,20 @@
     .status-critical { --status-color: var(--danger); }
     .status-needs_validation { --status-color: var(--accent); }
     .status-no_data { --status-color: #64748b; }
+    .status-no_rule { --status-color: #182231; }
+
+    .radar-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+    .deviation-heatmap { width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(8, 15, 23, 0.52); padding: 12px; }
+    .heatmap-grid { display: grid; grid-template-columns: 112px repeat(var(--bucket-count), minmax(34px, 1fr)); gap: 4px; min-width: max(860px, calc(112px + var(--bucket-count) * 42px)); }
+    .heatmap-label, .heatmap-cell, .state-cell { min-height: 34px; border: 1px solid var(--border-soft); border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 4px; font-size: 11px; color: var(--text-muted); background: rgba(255,255,255,0.025); }
+    .heatmap-label { justify-content: flex-start; font-weight: 800; color: var(--text); position: sticky; left: 0; z-index: 2; background: #101925; }
+    .heatmap-cell { cursor: pointer; color: #06111a; font-weight: 900; text-shadow: 0 1px 10px rgba(255,255,255,0.2); }
+    .heatmap-cell.is-selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .heatmap-cell.status-no_rule, .heatmap-cell.status-no_data { color: var(--text-muted); text-shadow: none; }
+    .state-cell { min-height: 22px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .debug-explorer { border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: rgba(8, 15, 23, 0.52); }
+    .debug-explorer > summary { cursor: pointer; padding: 18px 24px; font-weight: 800; color: var(--text); }
+    .debug-explorer > .debug-body { display: grid; gap: 18px; padding: 0 0 18px; }
 
     .parameter-list { display: grid; gap: 12px; margin-bottom: 18px; }
     .parameter-card { border: 1px solid var(--border-soft); border-left: 4px solid var(--status-color); border-radius: var(--radius-md); padding: 14px; background: rgba(8, 15, 23, 0.52); }
@@ -750,25 +764,25 @@
     </nav>
 
     <main class="workspace">
-      <section class="kpi-row" aria-label="Service radar KPI placeholders">
+      <section class="kpi-row" aria-label="Service radar KPIs">
         <article class="card kpi-card">
-          <p class="kpi-label">Focused files parsed</p>
+          <p class="kpi-label">Systems OK</p>
           <span id="kpiFiles" class="kpi-value muted">No data</span>
         </article>
         <article class="card kpi-card">
-          <p class="kpi-label">Evidence records</p>
+          <p class="kpi-label">Systems Warning</p>
           <span id="kpiEvidence" class="kpi-value muted">No data</span>
         </article>
         <article class="card kpi-card">
-          <p class="kpi-label">Signals discovered</p>
+          <p class="kpi-label">Systems Critical</p>
           <span id="kpiSignals" class="kpi-value muted">No data</span>
         </article>
         <article class="card kpi-card">
-          <p class="kpi-label">Machine state rows</p>
+          <p class="kpi-label">Needs Validation</p>
           <span id="kpiStates" class="kpi-value muted">No data</span>
         </article>
         <article class="card kpi-card">
-          <p class="kpi-label">Rules loaded</p>
+          <p class="kpi-label">Time Range</p>
           <span id="kpiRules" class="kpi-value muted">No rules</span>
         </article>
       </section>
@@ -800,17 +814,6 @@
         </div>
       </section>
 
-      <section class="card" aria-label="BSS BCU health summary">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">BSS / BCU Health Summary</h2>
-            <p class="panel-note">Primary MVP evaluation: Rules Excel rows for System = BSS and Log Source = BSSNotifications are checked against LLCINotifications/BSS/BSSNotifications values. AlertsMonitoring is secondary context only and does not drive these value checks.</p>
-          </div>
-          <span id="bssHealthTag" class="panel-tag">Waiting for rules/logs</span>
-        </div>
-        <div id="bssHealthBody" class="panel-body"><div class="empty-state">Upload an autocollect ZIP and the Rules Excel to evaluate BSS / BCU values from BSSNotifications.</div></div>
-      </section>
-
       <section class="card health-map-card" aria-label="Machine-centered system health map">
         <div class="panel-header">
           <div>
@@ -833,6 +836,45 @@
           <aside id="systemIssuePanel" class="issue-panel" aria-label="Selected system issue summary"></aside>
         </div>
       </section>
+
+      <section class="card" aria-label="Deviation Timeline Heatmap">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Deviation Timeline</h2>
+            <p class="panel-note">Rows are machine systems and columns are adaptive time buckets. Cell color is the worst state-dependent rule result in that bucket; the Machine State strip shows the operating context.</p>
+          </div>
+          <span id="deviationTimelineTag" class="panel-tag">No buckets</span>
+        </div>
+        <div id="deviationTimelineBody" class="panel-body"><div class="empty-state">Upload logs and rules to build the deviation radar timeline.</div></div>
+      </section>
+
+      <section class="card" aria-label="BSS BCU health summary">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">BSS / BCU Health Summary</h2>
+            <p class="panel-note">Primary MVP evaluation: Rules Excel rows for System = BSS and Log Source = BSSNotifications are checked against LLCINotifications/BSS/BSSNotifications values. AlertsMonitoring is secondary context only and does not drive these value checks.</p>
+          </div>
+          <span id="bssHealthTag" class="panel-tag">Waiting for rules/logs</span>
+        </div>
+        <div id="bssHealthBody" class="panel-body"><div class="empty-state">Upload an autocollect ZIP and the Rules Excel to evaluate BSS / BCU values from BSSNotifications.</div></div>
+      </section>
+
+
+      <section id="drilldownSection" class="card" aria-label="Signal drill-down investigation" hidden>
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Signal Drill-Down / Investigation</h2>
+            <p class="panel-note">Focused numeric time-series, selected state-track context, and limited raw evidence for the selected signal.</p>
+          </div>
+          <span id="drilldownTag" class="panel-tag">No signal</span>
+        </div>
+        <div id="drilldownBody" class="panel-body"><div class="empty-state">Click a signal profile to investigate it.</div></div>
+      </section>
+
+
+      <details class="debug-explorer">
+        <summary>Debug / Data Explorer (collapsed)</summary>
+        <div class="debug-body">
 
       <section class="card" aria-label="Log extraction pipeline">
         <div class="panel-header">
@@ -888,17 +930,6 @@
         <div id="timelineBody" class="panel-body"><div class="empty-state">No MachineStates data parsed.</div></div>
       </section>
 
-      <section id="drilldownSection" class="card" aria-label="Signal drill-down investigation" hidden>
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Signal Drill-Down / Investigation</h2>
-            <p class="panel-note">Focused numeric time-series, selected state-track context, and limited raw evidence for the selected signal.</p>
-          </div>
-          <span id="drilldownTag" class="panel-tag">No signal</span>
-        </div>
-        <div id="drilldownBody" class="panel-body"><div class="empty-state">Click a signal profile to investigate it.</div></div>
-      </section>
-
       <section class="card" aria-label="Raw evidence">
         <div class="panel-header">
           <div>
@@ -951,6 +982,9 @@
           </table>
         </div>
       </section>
+
+        </div>
+      </details>
 
     </main>
 
@@ -1015,8 +1049,8 @@
       { system: 'BSS', x: 33, y: 81 }, { system: 'STS', x: 16, y: 66 }, { system: 'IPU', x: 12, y: 43 },
       { system: 'ICS', x: 49, y: 51 }
     ];
-    const STATUS_PRIORITY = { critical: 5, warning: 4, needs_validation: 3, ok: 2, no_data: 1 };
-    const BSS_STATUS_PRIORITY = { critical: 5, warning: 4, needs_validation: 3, ok: 2, no_data: 1 };
+    const STATUS_PRIORITY = { critical: 5, warning: 4, needs_validation: 3, ok: 2, no_data: 1, no_rule: 0 };
+    const BSS_STATUS_PRIORITY = STATUS_PRIORITY;
     const ISSUE_STATUSES = new Set(['critical', 'warning', 'needs_validation']);
 
     const app = {
@@ -1048,7 +1082,11 @@
       worker: null,
       selectedSystem: 'BSS',
       healthFilter: 'all',
-      systemDrilldownOpen: false
+      systemDrilldownOpen: false,
+      selectedTimelineBucket: null,
+      evaluatedPoints: [],
+      systemHealth: [],
+      systemTimeline: []
     };
 
     const els = {
@@ -1073,6 +1111,8 @@
       evidenceBody: document.getElementById('evidenceBody'),
       signalsBody: document.getElementById('signalsBody'),
       timelineBody: document.getElementById('timelineBody'),
+      deviationTimelineBody: document.getElementById('deviationTimelineBody'),
+      deviationTimelineTag: document.getElementById('deviationTimelineTag'),
       rulesBody: document.getElementById('rulesBody'),
       diagnosticsBody: document.getElementById('diagnosticsBody'),
       drilldownSection: document.getElementById('drilldownSection'),
@@ -1142,6 +1182,10 @@
       app.selectedSystem = 'BSS';
       app.healthFilter = 'all';
       app.systemDrilldownOpen = false;
+      app.selectedTimelineBucket = null;
+      app.evaluatedPoints = [];
+      app.systemHealth = [];
+      app.systemTimeline = [];
       app.evidenceFilters = { system: '', source: '', signal: '', state: '', numeric: '', alert: '' };
       app.timeSeriesBySignal = {};
       app.diagnostics = [];
@@ -1211,6 +1255,7 @@
     function renderAll() {
       renderBssHealthSummary();
       renderHealthMap();
+      renderDeviationTimeline();
       renderInventory();
       renderEvidence();
       renderSignals();
@@ -1236,45 +1281,59 @@
           : '<div class="empty-state">Upload the current Rules Excel and an autocollect ZIP to evaluate BSS / BCU values from BSSNotifications.</div>';
         return;
       }
-      els.bssHealthTag.textContent = `BSS ${statusLabel(evaluation.overallStatus)} • ${evaluation.signalsFound} / ${evaluation.rulesTotal} found`;
+      const health = app.systemHealth.find(item => item.system === 'BSS');
       const counts = evaluation.counts || {};
+      const top = evaluation.evaluatedPoints.filter(point => ISSUE_STATUSES.has(point.result)).sort((a, b) => STATUS_PRIORITY[b.result] - STATUS_PRIORITY[a.result] || compareTimestampClient(a.timestamp, b.timestamp))[0] || evaluation.evaluatedPoints[0];
+      els.bssHealthTag.textContent = `BSS ${statusLabel(evaluation.overallStatus)} • ${evaluation.evaluatedValues} points`;
       els.bssHealthBody.innerHTML = `
         <div class="drilldown-metrics status-${escapeHtml(evaluation.overallStatus)}">
-          <span class="metric-pill"><span class="status-dot"></span>System: BSS</span>
-          <span class="metric-pill">Subsystem: BCU</span>
-          <span class="metric-pill">Rules total: ${escapeHtml(String(evaluation.rulesTotal))}</span>
-          <span class="metric-pill">Signals found: ${escapeHtml(String(evaluation.signalsFound))} / ${escapeHtml(String(evaluation.rulesTotal))}</span>
-          <span class="metric-pill">Evaluated values: ${escapeHtml(String(evaluation.evaluatedValues))}</span>
-          <span class="metric-pill status-ok"><span class="status-dot"></span>OK: ${counts.ok || 0}</span>
-          <span class="metric-pill status-warning"><span class="status-dot"></span>Warning: ${counts.warning || 0}</span>
-          <span class="metric-pill status-critical"><span class="status-dot"></span>Critical: ${counts.critical || 0}</span>
-          <span class="metric-pill status-needs_validation"><span class="status-dot"></span>Needs validation: ${counts.needs_validation || 0}</span>
-          <span class="metric-pill status-no_data"><span class="status-dot"></span>No data: ${counts.no_data || 0}</span>
-          <span class="metric-pill">Overall status: ${escapeHtml(statusLabel(evaluation.overallStatus))}</span>
+          <span class="metric-pill"><span class="status-dot"></span>BSS / BCU</span>
+          <span class="metric-pill">Rules: ${escapeHtml(String(evaluation.rulesTotal))}</span>
+          <span class="metric-pill">Signals matched: ${escapeHtml(String(evaluation.signalsFound))}</span>
+          <span class="metric-pill">Evaluated points: ${escapeHtml(String(evaluation.evaluatedValues))}</span>
+          <span class="metric-pill status-ok"><span class="status-dot"></span>OK ${counts.ok || 0}</span>
+          <span class="metric-pill status-warning"><span class="status-dot"></span>Warning ${counts.warning || 0}</span>
+          <span class="metric-pill status-critical"><span class="status-dot"></span>Critical ${counts.critical || 0}</span>
+          <span class="metric-pill status-needs_validation"><span class="status-dot"></span>Needs Validation ${counts.needs_validation || 0}</span>
+          <span class="metric-pill status-no_data"><span class="status-dot"></span>No Data ${counts.no_data || 0}</span>
         </div>
-        <p class="render-note">Main table: exactly the BSS / BCU rules parsed from the Rules Excel. Actual values come only from BSSNotifications.</p>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Rule Row</th><th>Component</th><th>Log Signal Name</th><th>Matched Signal</th><th>Actual Value</th><th>Expected For State</th><th>Expected Range</th><th>Machine State</th><th>System State</th><th>Result</th><th>Reason</th><th>Recommended Action</th><th>Source File</th><th>Timestamp</th></tr></thead>
-            <tbody>${evaluation.results.map(item => `<tr class="status-${escapeHtml(item.status)}"><td>${escapeHtml(String(item.ruleRow || ''))}</td><td>${escapeHtml(item.component || '')}</td><td>${escapeHtml(item.signalName || '')}</td><td>${escapeHtml(item.matchedSignal || '')}</td><td>${escapeHtml(String(item.actualDisplay ?? ''))}</td><td>${escapeHtml(item.expectedForState || '')}</td><td>${escapeHtml(item.expectedRange || '')}</td><td>${escapeHtml(item.machineState || '')}</td><td>${escapeHtml(item.systemState || '')}</td><td>${escapeHtml(statusLabel(item.status))}</td><td>${escapeHtml(item.reason || '')}</td><td>${escapeHtml(item.recommendedAction || '')}</td><td class="path-cell">${escapeHtml(item.sourceFile || '')}</td><td>${escapeHtml(item.timestamp || '')}</td></tr>`).join('') || '<tr><td class="muted" colspan="14">No BSS / BCU evaluation rows available.</td></tr>'}</tbody>
-          </table>
+        <div class="issue-fields status-${escapeHtml(evaluation.overallStatus)}">
+          <div class="issue-field"><strong>Top issue</strong>${escapeHtml(health?.topIssue || top?.reason || 'No issue detected')}</div>
+          <div class="issue-field"><strong>Worst signal</strong>${escapeHtml(health?.worstSignal || top?.signal || 'Unavailable')}</div>
+          <div class="issue-field"><strong>Actual value</strong>${escapeHtml(String(health?.latestActual ?? top?.actualDisplay ?? 'Unavailable'))}</div>
+          <div class="issue-field"><strong>Expected range for state</strong>${escapeHtml(health?.expectedRange || compactJoin([top?.expectedForState, top?.expectedRange], ' • ') || 'Not evaluated')}</div>
+          <div class="issue-field"><strong>Machine state</strong>${escapeHtml(health?.machineState || top?.machineState || 'Unavailable')}</div>
+          <div class="issue-field"><strong>First / last deviation</strong>${escapeHtml(compactJoin([health?.firstDeviationTime || 'None', health?.lastDeviationTime || 'None'], ' → '))}</div>
+          <div class="issue-field"><strong>Recommended action</strong>${escapeHtml(health?.recommendedAction || top?.recommendedAction || recommendedAction(evaluation.overallStatus, 'BSS'))}</div>
         </div>`;
     }
 
     function ensureBssEvaluation() {
-      if (!app.rulesSummary?.bssRules?.length) return null;
+      if (!app.rulesSummary?.bssRules?.length) {
+        app.evaluatedPoints = [];
+        app.systemHealth = buildSystemHealth([]);
+        app.systemTimeline = buildSystemTimeline([], app.systemHealth);
+        return null;
+      }
       app.bssEvaluation = evaluateBssRules(app.rulesSummary.bssRules);
+      app.evaluatedPoints = app.bssEvaluation.evaluatedPoints || [];
+      app.systemHealth = buildSystemHealth(app.evaluatedPoints, app.bssEvaluation);
+      app.systemTimeline = buildSystemTimeline(app.evaluatedPoints, app.systemHealth);
       return app.bssEvaluation;
     }
 
     function evaluateBssRules(rules) {
-      const results = rules.map(rule => evaluateBssRule(rule));
-      const counts = { ok: 0, warning: 0, critical: 0, needs_validation: 0, no_data: 0 };
-      results.forEach(item => { counts[item.status] = (counts[item.status] || 0) + 1; });
-      const signalsFound = results.filter(item => item.matchesFound > 0).length;
-      const evaluatedValues = results.reduce((sum, item) => sum + (item.evaluatedValueCount || 0), 0);
-      const overallStatus = results.map(item => item.status).reduce((best, status) => BSS_STATUS_PRIORITY[status] > BSS_STATUS_PRIORITY[best] ? status : best, 'no_data');
-      return { system: 'BSS', subsystem: 'BCU', rulesTotal: rules.length, signalsFound, evaluatedValues, counts, overallStatus, results };
+      const evaluatedPoints = rules.flatMap(rule => evaluateBssRule(rule));
+      const counts = countStatuses(evaluatedPoints);
+      const signalsFound = new Set(evaluatedPoints.filter(item => item.matchesFound > 0 && item.result !== 'no_data').map(item => String(item.ruleRow))).size;
+      const evaluatedValues = evaluatedPoints.filter(item => typeof item.actualValue === 'number').length;
+      const overallStatus = highestStatus(evaluatedPoints.map(item => item.result));
+      const latestByRule = Object.values(evaluatedPoints.reduce((acc, point) => {
+        const key = point.ruleRow || point.signal;
+        if (!acc[key] || compareTimestampClient(acc[key].timestamp, point.timestamp) <= 0) acc[key] = point;
+        return acc;
+      }, {}));
+      return { system: 'BSS', subsystem: 'BCU', rulesTotal: rules.length, signalsFound, evaluatedValues, counts, overallStatus, results: latestByRule, evaluatedPoints };
     }
 
     function evaluateBssRule(rule) {
@@ -1283,44 +1342,66 @@
         .filter(ev => ev.sourceType === 'BSSNotifications' && sameSystem(ev.system, 'BSS') && bssEvidenceMatchesRule(ev, signalName))
         .sort((a, b) => compareTimestampClient(a.timestamp, b.timestamp));
       if (!matches.length) {
-        return buildBssRuleResult(rule, null, 'no_data', 'No BSSNotifications value found for this rule signal', 'Confirm the BSSNotifications files are present under opc.zip/logs/LLCINotifications/BSS and that Log Signal Name matches the SubComponent/full signal in the log.');
+        return [buildEvaluatedPoint(rule, null, 'no_data', 'No BSSNotifications value found for this rule signal.', 'Confirm the BSSNotifications files are present under opc.zip/logs/LLCINotifications/BSS and that Log Signal Name matches SubComponent, ParameterType, Component/SubComponent/ParameterType, or the raw row.', null, null, null, 0, 0)];
       }
-      const numericMatches = matches.map(ev => ({ ev, value: ev.numericValue ?? extractNumericValue(ev.value) })).filter(item => item.value !== null && item.value !== undefined);
-      if (!numericMatches.length) {
-        return buildBssRuleResult(rule, matches[matches.length - 1], 'needs_validation', 'Signal found but no numeric value extracted', 'Validate the BSSNotifications Value format and update the rule if this signal is intentionally non-numeric.', null, null, null, 0, matches.length);
-      }
-      const selected = numericMatches[numericMatches.length - 1];
-      const stateName = selectRuleState(selected.ev);
-      const expected = expectedForState(rule, stateName);
-      if (!expected.raw) {
-        return buildBssRuleResult(rule, selected.ev, 'needs_validation', 'No expected value configured for current state', recommendedAction('needs_validation', 'BSS'), selected.value, expected, null, numericMatches.length, matches.length);
-      }
-      const thresholdResult = evaluateThresholds(selected.value, expected, rule);
-      return buildBssRuleResult(rule, selected.ev, thresholdResult.status, thresholdResult.reason, recommendedAction(thresholdResult.status, 'BSS'), selected.value, expected, thresholdResult.expectedRange, numericMatches.length, matches.length);
+      const points = matches.map((ev, index) => {
+        const numericActual = ev.numericValue ?? extractNumericValue(ev.value);
+        if (numericActual === null || numericActual === undefined) {
+          return buildEvaluatedPoint(rule, ev, 'needs_validation', 'Signal matched but no numeric actual value could be extracted from the BSSNotifications row.', 'Validate the BSSNotifications Value format and update the rule if this signal is intentionally non-numeric.', null, null, null, index + 1, matches.length);
+        }
+        const stateName = selectRuleState(ev);
+        const expected = expectedForState(rule, stateName);
+        if (!expected.raw) {
+          return buildEvaluatedPoint(rule, ev, 'needs_validation', `No state-dependent expected value is configured for ${stateLabelForDisplay(stateName)}.`, recommendedAction('needs_validation', 'BSS'), numericActual, expected, null, index + 1, matches.length);
+        }
+        const thresholdResult = evaluateThresholds(numericActual, expected, rule);
+        return buildEvaluatedPoint(rule, ev, thresholdResult.status, thresholdResult.reason, recommendedAction(thresholdResult.status, 'BSS'), numericActual, expected, thresholdResult, index + 1, matches.length);
+      });
+      return points;
     }
 
-    function buildBssRuleResult(rule, ev, status, reason, action, numericActual = null, expected = null, expectedRange = null, evaluatedValueCount = 0, matchesFound = null) {
+    function buildEvaluatedPoint(rule, ev, result, reason, action, numericActual = null, expected = null, thresholdResult = null, evaluatedValueCount = 0, matchesFound = null) {
+      const expectedRange = thresholdResult?.computedRange || parseExpectedRange(expected?.raw);
+      const warningRange = thresholdResult?.warningRange || rangeFromRule(rule, 'warning');
+      const criticalRange = thresholdResult?.criticalRange || rangeFromRule(rule, 'critical');
+      const signal = rule.signalName || ev?.signal || ev?.fullSignal || '';
       return {
-        rule,
-        ruleRow: rule.rowNumber,
+        id: `bss-${rule.rowNumber || 'rule'}-${ev?.id || 'no-data'}-${evaluatedValueCount}`,
+        timestamp: ev?.timestamp || '',
+        system: 'BSS',
+        subsystem: 'BCU',
         component: rule.component || ev?.component || '',
-        signalName: rule.signalName || '',
+        signal,
         matchedSignal: ev ? (ev.fullSignal || ev.signal || compactJoin([ev.component, ev.subComponent, ev.parameterType], ' / ')) : '',
         actualValue: numericActual,
         actualDisplay: numericActual !== null && numericActual !== undefined ? numericActual : (ev?.value ?? 'Unavailable'),
+        expectedValue: expected?.raw || '',
         expectedForState: expected?.raw ? `${stateLabelForDisplay(expected.stateName)}: ${expected.raw}` : 'Not configured',
-        expectedRange: expectedRange || 'Not evaluated',
+        expectedLow: finiteOrNull(expectedRange?.min),
+        expectedHigh: finiteOrNull(expectedRange?.max),
+        expectedRange: rangeLabelSafe(expectedRange),
+        warningLow: finiteOrNull(warningRange?.min),
+        warningHigh: finiteOrNull(warningRange?.max),
+        criticalLow: finiteOrNull(criticalRange?.min),
+        criticalHigh: finiteOrNull(criticalRange?.max),
         machineState: ev?.machineState || 'Unavailable',
         systemState: ev?.systemState || 'Unavailable',
-        status,
+        stateContextStatus: ev?.stateContextStatus || (ev ? 'missing' : 'no_data'),
+        result,
+        status: result,
+        severity: statusLabel(result),
         reason,
         recommendedAction: action,
+        ruleRow: rule.rowNumber,
+        rule,
         sourceFile: ev?.sourceFile || ev?.sourceFileId || '',
-        timestamp: ev?.timestamp || '',
+        rawPreview: ev?.rawPreview || '',
         matchesFound: matchesFound ?? (ev ? 1 : 0),
         evaluatedValueCount
       };
     }
+
+    function buildBssRuleResult(...args) { return buildEvaluatedPoint(...args); }
 
     function bssEvidenceMatchesRule(ev, signalName) {
       const needle = normalizeSignalText(signalName);
@@ -1350,30 +1431,36 @@
     function evaluateThresholds(actual, expected, rule) {
       const critical = rangeFromRule(rule, 'critical');
       const warning = rangeFromRule(rule, 'warning');
-      if (critical && !withinRange(actual, critical)) return { status: 'critical', reason: `Actual ${actual} is outside the explicit critical range ${rangeLabel(critical)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical) };
-      if (warning && !withinRange(actual, warning)) return { status: 'warning', reason: `Actual ${actual} is outside the explicit warning range ${rangeLabel(warning)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical) };
-
-      const expectedRange = parseExpectedRange(expected.raw);
+      const baseExpectedRange = parseExpectedRange(expected.raw);
       const tolerance = extractNumericValue(rule.specTolerance);
+      const computedRange = computeExpectedRange(baseExpectedRange, tolerance);
+      const common = { warningRange: warning, criticalRange: critical, computedRange };
+      if (critical && !withinRange(actual, critical)) return { ...common, status: 'critical', reason: `Actual ${actual} is outside the explicit critical range ${rangeLabel(critical)} for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical, computedRange) };
+      if (warning && !withinRange(actual, warning)) return { ...common, status: 'warning', reason: `Actual ${actual} is outside the explicit warning range ${rangeLabel(warning)} for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical, computedRange) };
       const isExact = /\bexact\b/i.test(rule.checkType || '');
       if (isExact) {
-        if (!expectedRange) return { status: 'needs_validation', reason: `Check Type is Exact, but expected value for ${stateLabelForDisplay(expected.stateName)} is not numeric: ${expected.raw}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical) };
-        const exactRange = expectedRange.kind === 'point' ? expectedRange : expectedRange;
+        if (!baseExpectedRange) return { ...common, status: 'needs_validation', reason: `Check Type is Exact, but expected value for ${stateLabelForDisplay(expected.stateName)} is not numeric: ${expected.raw}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical) };
+        const exactRange = baseExpectedRange;
         return withinRange(actual, exactRange)
-          ? { status: 'ok', reason: `Actual ${actual} matches the Exact expected value/range for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical, exactRange) }
-          : { status: 'warning', reason: `Actual ${actual} does not match the Exact expected value/range ${rangeLabel(exactRange)} for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical, exactRange) };
+          ? { ...common, computedRange: exactRange, status: 'ok', reason: `Actual ${actual} matches the Exact expected value/range for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical, exactRange) }
+          : { ...common, computedRange: exactRange, status: 'warning', reason: `Actual ${actual} does not match the Exact expected value/range ${rangeLabel(exactRange)} for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical, exactRange) };
       }
       if (tolerance !== null) {
-        if (!expectedRange) return { status: 'needs_validation', reason: `Spec Tolerance exists, but expected value for ${stateLabelForDisplay(expected.stateName)} is not numeric: ${expected.raw}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical) };
-        const finalRange = expectedRange.kind === 'point'
-          ? { min: expectedRange.value - tolerance, max: expectedRange.value + tolerance }
-          : { min: (expectedRange.min ?? -Infinity) - tolerance, max: (expectedRange.max ?? Infinity) + tolerance };
-        return withinRange(actual, finalRange)
-          ? { status: 'ok', reason: `Actual ${actual} is within the expected range for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical, finalRange) }
-          : { status: 'warning', reason: `Actual ${actual} is outside expected range ${rangeLabel(finalRange)} for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical, finalRange) };
+        if (!baseExpectedRange) return { ...common, status: 'needs_validation', reason: `Spec Tolerance exists, but expected value for ${stateLabelForDisplay(expected.stateName)} is not numeric: ${expected.raw}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical) };
+        return withinRange(actual, computedRange)
+          ? { ...common, status: 'ok', reason: `Actual ${actual} is within the expected range for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical, computedRange) }
+          : { ...common, status: 'warning', reason: `Actual ${actual} is outside expected range ${rangeLabel(computedRange)} for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical, computedRange) };
       }
-      if (warning || critical) return { status: 'ok', reason: `Actual ${actual} is within the configured warning/critical thresholds for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical) };
-      return { status: 'needs_validation', reason: 'Rule has no tolerance or threshold', expectedRange: expectedDisplayFor(rule, expected, warning, critical) };
+      if (warning || critical) return { ...common, status: 'ok', reason: `Actual ${actual} is within the configured warning/critical thresholds for ${stateLabelForDisplay(expected.stateName)}.`, expectedRange: expectedDisplayFor(rule, expected, warning, critical, computedRange) };
+      return { ...common, status: 'needs_validation', reason: 'Rule has no tolerance or threshold to build an expected range.', expectedRange: expectedDisplayFor(rule, expected, warning, critical, computedRange) };
+    }
+
+    function computeExpectedRange(expectedRange, tolerance) {
+      if (!expectedRange) return null;
+      if (tolerance === null || tolerance === undefined) return expectedRange;
+      return expectedRange.kind === 'point'
+        ? { min: expectedRange.value - tolerance, max: expectedRange.value + tolerance }
+        : { min: (expectedRange.min ?? -Infinity) - tolerance, max: (expectedRange.max ?? Infinity) + tolerance };
     }
 
     function expectedDisplayFor(rule, expected, warning, critical, computedRange = null) {
@@ -1425,12 +1512,93 @@
 
     function withinRange(value, range) { return value >= (range.min ?? -Infinity) && value <= (range.max ?? Infinity); }
     function rangeLabel(range) { return `${range.min === -Infinity ? '-∞' : range.min} to ${range.max === Infinity ? '+∞' : range.max}`; }
+    function rangeLabelSafe(range) { return range ? rangeLabel(range) : 'Not evaluated'; }
+    function finiteOrNull(value) { return Number.isFinite(value) ? value : null; }
     function compactJoin(values, separator) { return values.map(value => String(value || '').trim()).filter(Boolean).join(separator); }
     function extractNumericValue(value) { const match = String(value ?? '').replace(/,/g, '').match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/); if (!match) return null; const parsed = Number(match[0]); return Number.isFinite(parsed) ? parsed : null; }
     function normalizeSignalText(value) { return String(value || '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
     function compactSignalText(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
     function normalizeStateName(value) { return String(value || '').replace(/^Expected\s+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
     function compareTimestampClient(left, right) { const leftMs = Date.parse(left || ''); const rightMs = Date.parse(right || ''); if (!Number.isNaN(leftMs) && !Number.isNaN(rightMs)) return leftMs - rightMs; return String(left || '').localeCompare(String(right || '')); }
+
+
+    function countStatuses(items, field = 'result') {
+      const counts = { ok: 0, warning: 0, critical: 0, needs_validation: 0, no_data: 0, no_rule: 0 };
+      (items || []).forEach(item => { const key = item?.[field] || item; counts[key] = (counts[key] || 0) + 1; });
+      return counts;
+    }
+
+    function buildSystemHealth(points, evaluation = null) {
+      const bySystem = groupBy(points, point => point.system || 'Unknown');
+      return HEALTH_SYSTEMS.map(system => {
+        if (!sameSystem(system, 'BSS')) {
+          return { system, status: 'no_rule', rulesTotal: 0, signalsMatched: 0, evaluatedPoints: 0, okCount: 0, warningCount: 0, criticalCount: 0, needsValidationCount: 0, noDataCount: 0, firstDeviationTime: '', lastDeviationTime: '', topIssue: 'No MVP rule configured for this system.', worstSignal: '', recommendedAction: 'Add Rules Excel rows for this system and map its log source before evaluating.' };
+        }
+        const systemPoints = bySystem.BSS || [];
+        if (!evaluation) return { system: 'BSS', status: 'no_data', rulesTotal: 0, signalsMatched: 0, evaluatedPoints: 0, okCount: 0, warningCount: 0, criticalCount: 0, needsValidationCount: 0, noDataCount: 0, firstDeviationTime: '', lastDeviationTime: '', topIssue: app.rulesSummary ? 'No BSS / BCU rules matched the required MVP filters.' : 'Rules Excel and BSSNotifications data are required.', worstSignal: '', recommendedAction: app.rulesSummary ? 'Check System, Subsystem, and Log Source columns in the Rules Excel.' : 'Upload the current Rules Excel and an autocollect ZIP.' };
+        const counts = countStatuses(systemPoints);
+        const deviations = systemPoints.filter(point => ISSUE_STATUSES.has(point.result)).sort((a, b) => compareTimestampClient(a.timestamp, b.timestamp));
+        const topIssue = [...deviations, ...systemPoints].sort((a, b) => STATUS_PRIORITY[b.result] - STATUS_PRIORITY[a.result] || compareTimestampClient(a.timestamp, b.timestamp))[0] || null;
+        return {
+          system: 'BSS',
+          status: evaluation.overallStatus,
+          rulesTotal: evaluation.rulesTotal,
+          signalsMatched: evaluation.signalsFound,
+          evaluatedPoints: systemPoints.length,
+          okCount: counts.ok || 0,
+          warningCount: counts.warning || 0,
+          criticalCount: counts.critical || 0,
+          needsValidationCount: counts.needs_validation || 0,
+          noDataCount: counts.no_data || 0,
+          firstDeviationTime: deviations[0]?.timestamp || '',
+          lastDeviationTime: deviations[deviations.length - 1]?.timestamp || '',
+          topIssue: topIssue?.reason || 'No active deviation detected.',
+          worstSignal: topIssue?.signal || '',
+          latestActual: topIssue?.actualDisplay ?? 'Unavailable',
+          expectedRange: topIssue ? compactJoin([topIssue.expectedForState, topIssue.expectedRange], ' • ') : 'Not evaluated',
+          machineState: topIssue?.machineState || latestMachineState(),
+          recommendedAction: topIssue?.recommendedAction || recommendedAction(evaluation.overallStatus, 'BSS')
+        };
+      });
+    }
+
+    function buildSystemTimeline(points, health) {
+      const buckets = buildTimeBuckets(points);
+      if (!buckets.length) return [];
+      return health.flatMap(systemHealth => buckets.map(bucket => {
+        const bucketPoints = points.filter(point => point.system === systemHealth.system && pointTime(point) >= bucket.startMs && pointTime(point) < bucket.endMs);
+        const status = systemHealth.status === 'no_rule' ? 'no_rule' : (bucketPoints.length ? highestStatus(bucketPoints.map(point => point.result)) : 'no_data');
+        const counts = countStatuses(bucketPoints);
+        const worst = bucketPoints.sort((a, b) => STATUS_PRIORITY[b.result] - STATUS_PRIORITY[a.result])[0] || null;
+        return { bucketStart: new Date(bucket.startMs).toISOString(), bucketEnd: new Date(bucket.endMs).toISOString(), startMs: bucket.startMs, endMs: bucket.endMs, system: systemHealth.system, status, worstSeverity: status, deviationCount: bucketPoints.filter(point => ISSUE_STATUSES.has(point.result)).length, warningCount: counts.warning || 0, criticalCount: counts.critical || 0, needsValidationCount: counts.needs_validation || 0, worstSignal: worst?.signal || '', machineState: stateAtClient(bucket.startMs).machineState || '' };
+      }));
+    }
+
+    function buildTimeBuckets(points) {
+      const times = (points || []).map(pointTime).filter(Number.isFinite);
+      if (!times.length) return [];
+      const min = Math.min(...times), max = Math.max(...times);
+      const range = Math.max(60000, max - min);
+      const bucketMs = range <= 2 * 60 * 60 * 1000 ? 60000 : (range > 24 * 60 * 60 * 1000 ? 15 * 60000 : (range > 8 * 60 * 60 * 1000 ? 10 * 60000 : 5 * 60000));
+      const start = Math.floor(min / bucketMs) * bucketMs;
+      const end = Math.ceil((max + 1) / bucketMs) * bucketMs;
+      const buckets = [];
+      for (let t = start; t < end; t += bucketMs) buckets.push({ startMs: t, endMs: t + bucketMs, bucketMs });
+      return buckets;
+    }
+
+    function pointTime(point) { const t = Date.parse(point?.timestamp || ''); return Number.isNaN(t) ? NaN : t; }
+    function groupBy(items, keyFn) { return (items || []).reduce((acc, item) => { const key = keyFn(item); (acc[key] ||= []).push(item); return acc; }, {}); }
+    function stateAtClient(ms) {
+      let match = null;
+      for (const row of app.machineStateRows || []) {
+        const rowMs = Number.isFinite(row.timeMs) ? row.timeMs : Date.parse(row.timestamp || '');
+        if (Number.isNaN(rowMs)) continue;
+        if (rowMs <= ms) match = row;
+        if (rowMs > ms) break;
+      }
+      return match || {};
+    }
 
     function renderHealthMap() {
       const systems = getSystemHealthSummaries();
@@ -1440,7 +1608,7 @@
       const issueCount = systems.filter(item => ISSUE_STATUSES.has(item.status)).length;
       if (els.healthMapTag) els.healthMapTag.textContent = `${issueCount} issues`;
       if (els.healthSummary) {
-        els.healthSummary.innerHTML = ['critical', 'warning', 'needs_validation', 'ok', 'no_data'].map(status => `
+        els.healthSummary.innerHTML = ['critical', 'warning', 'needs_validation', 'ok', 'no_data', 'no_rule'].map(status => `
           <span class="metric-pill status-${status}"><span class="status-dot"></span>${escapeHtml(statusLabel(status))}: ${counts[status] || 0}</span>
         `).join('');
       }
@@ -1490,42 +1658,32 @@
           <h3 class="issue-card-title"><span class="status-dot"></span>${escapeHtml(summary.system)}</h3>
           <p class="issue-card-subtitle">${escapeHtml(hasIssue ? (problem?.title || `${summary.system} requires attention`) : `${summary.system} is ${statusLabel(summary.status)}.`)}</p>
           <div class="issue-fields">
-            <div class="issue-field"><strong>Main issue title</strong>${escapeHtml(problem?.title || (hasIssue ? 'Review system validation items' : 'No active issue'))}</div>
-            <div class="issue-field"><strong>Summary</strong>${escapeHtml(problem?.summary || summary.summary)}</div>
-            <div class="issue-field"><strong>Current machine state</strong>${escapeHtml(summary.currentMachineState || 'Unavailable')}</div>
-            <div class="issue-field"><strong>Severity</strong>${escapeHtml(statusLabel(summary.status))}</div>
-            <div class="issue-field"><strong>Confidence</strong>${escapeHtml(problem?.confidence || summary.confidence || 'Unavailable')}</div>
-            <div class="issue-field"><strong>Actual vs expected preview</strong>${escapeHtml(problem?.actualExpected || summary.actualExpectedPreview)}</div>
-            <div class="issue-field"><strong>Recommended action preview</strong>${escapeHtml(problem?.recommendedAction || recommendedAction(summary.status, summary.system))}</div>
+            <div class="issue-field"><strong>Top issue</strong>${escapeHtml(problem?.summary || summary.health?.topIssue || summary.summary)}</div>
+            <div class="issue-field"><strong>Worst signal</strong>${escapeHtml(summary.health?.worstSignal || problem?.point?.signal || 'Unavailable')}</div>
+            <div class="issue-field"><strong>Actual value</strong>${escapeHtml(String(summary.health?.latestActual ?? problem?.point?.actualDisplay ?? 'Unavailable'))}</div>
+            <div class="issue-field"><strong>Expected range</strong>${escapeHtml(summary.health?.expectedRange || problem?.actualExpected || summary.actualExpectedPreview || 'Not evaluated')}</div>
+            <div class="issue-field"><strong>Machine state</strong>${escapeHtml(summary.health?.machineState || problem?.machineState || summary.currentMachineState || 'Unavailable')}</div>
+            <div class="issue-field"><strong>First deviation time</strong>${escapeHtml(summary.health?.firstDeviationTime || 'None')}</div>
+            <div class="issue-field"><strong>Last deviation time</strong>${escapeHtml(summary.health?.lastDeviationTime || 'None')}</div>
+            <div class="issue-field"><strong>Recommended action</strong>${escapeHtml(problem?.recommendedAction || summary.health?.recommendedAction || recommendedAction(summary.status, summary.system))}</div>
           </div>
           <button id="openSystemDrilldown" class="primary" type="button">Open Drill-Down</button>
         </div>`;
     }
 
     function getSystemHealthSummaries() {
+      ensureBssEvaluation();
       const currentMachineState = latestMachineState();
-      return HEALTH_SYSTEMS.map(system => {
-        if (sameSystem(system, 'BSS')) return getBssHealthSummary(currentMachineState);
-        const signals = app.signalDiscovery.filter(signal => sameSystem(signal.system, system));
-        const evidence = app.evidence.filter(ev => sameSystem(ev.system, system));
-        const stateValues = app.machineStateRows.map(row => row.systemStates?.[system]).filter(Boolean);
-        const latestSystemState = stateValues[stateValues.length - 1] || '';
-        const problems = buildSystemProblems(system, signals, evidence, latestSystemState, currentMachineState);
-        const statuses = problems.map(item => item.status);
-        if (signals.length || evidence.length || stateValues.length) statuses.push(app.rulesSummary ? 'needs_validation' : 'ok');
-        else statuses.push('no_data');
-        const status = highestStatus(statuses);
-        const topProblem = problems.sort((a, b) => STATUS_PRIORITY[b.status] - STATUS_PRIORITY[a.status])[0] || null;
+      return (app.systemHealth?.length ? app.systemHealth : buildSystemHealth([], null)).map(item => {
+        if (sameSystem(item.system, 'BSS')) return getBssHealthSummary(currentMachineState);
         return {
-          system, status, topProblem, signals, evidence, latestSystemState, currentMachineState,
-          confidence: topProblem?.confidence || (signals.length || evidence.length ? 'Medium' : 'Unavailable'),
-          summary: summarizeSystem(system, status, signals.length, evidence.length, latestSystemState),
-          actualExpectedPreview: topProblem?.actualExpected || defaultActualExpected(signals, latestSystemState)
+          ...item,
+          topProblem: item.status === 'no_rule' ? { status: 'no_rule', title: `${item.system} has no MVP rule`, summary: item.topIssue, confidence: 'Unavailable', actualExpected: 'Actual: No data • Expected: No rule configured', recommendedAction: item.recommendedAction, machineState: currentMachineState } : null,
+          signals: [], evidence: [], latestSystemState: '', currentMachineState,
+          confidence: 'Unavailable', summary: item.topIssue, actualExpectedPreview: 'No rule / no data until Rules Excel coverage is added.'
         };
       });
     }
-
-
 
     function getBssHealthSummary(currentMachineState) {
       const evaluation = ensureBssEvaluation();
@@ -1533,39 +1691,18 @@
       const evidence = app.evidence.filter(ev => sameSystem(ev.system, 'BSS') && ev.sourceType === 'BSSNotifications');
       const stateValues = app.machineStateRows.map(row => row.systemStates?.BSS).filter(Boolean);
       const latestSystemState = stateValues[stateValues.length - 1] || '';
+      const health = app.systemHealth?.find(item => item.system === 'BSS');
       if (!evaluation) {
-        const status = app.rulesSummary ? 'no_data' : (evidence.length || signals.length || stateValues.length ? 'needs_validation' : 'no_data');
-        return {
-          system: 'BSS', status, topProblem: null, signals, evidence, latestSystemState, currentMachineState,
-          confidence: app.rulesSummary ? 'Unavailable' : 'Low',
-          summary: app.rulesSummary ? 'No BSS/BSSNotifications rules were found in the Rules Excel.' : 'BSS requires Rules Excel evaluation from BSSNotifications; AlertsMonitoring is not used for BSS health.',
-          actualExpectedPreview: 'BSS evaluation waits for Rules Excel rows and BSSNotifications values.'
-        };
+        const status = health?.status || 'no_data';
+        return { system: 'BSS', status, topProblem: null, signals, evidence, latestSystemState, currentMachineState, confidence: 'Low', summary: health?.topIssue || 'BSS requires Rules Excel evaluation from BSSNotifications.', actualExpectedPreview: 'BSS evaluation waits for Rules Excel rows and BSSNotifications values.' };
       }
-      const issue = evaluation.results.find(item => ISSUE_STATUSES.has(item.status)) || evaluation.results.find(item => item.status === 'no_data') || evaluation.results[0] || null;
+      const issue = evaluation.evaluatedPoints.find(item => ISSUE_STATUSES.has(item.result)) || evaluation.evaluatedPoints.find(item => item.result === 'no_data') || evaluation.evaluatedPoints[0] || null;
       const topProblem = issue ? {
-        system: 'BSS',
-        status: issue.status,
-        title: `${issue.signalName || 'BSS signal'} ${statusLabel(issue.status)}`,
-        summary: issue.reason,
-        confidence: issue.status === 'no_data' ? 'Medium' : 'High',
-        actualExpected: `Actual: ${issue.actualDisplay ?? 'Unavailable'} • Expected: ${compactJoin([issue.expectedForState, issue.expectedRange], ' • ') || 'Not evaluated'}`,
-        recommendedAction: issue.recommendedAction,
-        machineState: issue.machineState
+        system: 'BSS', status: issue.result, title: `${issue.signal || 'BSS signal'} ${statusLabel(issue.result)}`, summary: issue.reason,
+        confidence: issue.result === 'no_data' ? 'Medium' : 'High', actualExpected: `Actual: ${issue.actualDisplay ?? 'Unavailable'} • Expected: ${compactJoin([issue.expectedForState, issue.expectedRange], ' • ') || 'Not evaluated'}`,
+        recommendedAction: issue.recommendedAction, machineState: issue.machineState, point: issue
       } : null;
-      return {
-        system: 'BSS',
-        status: evaluation.overallStatus,
-        topProblem,
-        signals,
-        evidence,
-        latestSystemState,
-        currentMachineState,
-        confidence: 'High',
-        summary: `BSS/BCU rule evaluation from BSSNotifications: ${evaluation.signalsFound} of ${evaluation.rulesTotal} signals found; ${evaluation.evaluatedValues} numeric values evaluated. AlertsMonitoring was not used for BSS value checks.`,
-        actualExpectedPreview: topProblem?.actualExpected || `Overall: ${statusLabel(evaluation.overallStatus)}`,
-        bssEvaluation: evaluation
-      };
+      return { system: 'BSS', status: evaluation.overallStatus, topProblem, signals, evidence, latestSystemState, currentMachineState, confidence: 'High', summary: `BSS/BCU rule evaluation from BSSNotifications: ${evaluation.signalsFound} of ${evaluation.rulesTotal} rule signals matched; ${evaluation.evaluatedValues} timestamped numeric values evaluated by Machine State.`, actualExpectedPreview: topProblem?.actualExpected || `Overall: ${statusLabel(evaluation.overallStatus)}`, bssEvaluation: evaluation, health };
     }
 
     function buildSystemProblems(system, signals, evidence, latestSystemState, currentMachineState) {
@@ -1608,7 +1745,7 @@
     }
 
     function sameSystem(value, system) { return String(value || '').trim().toUpperCase() === system.toUpperCase(); }
-    function statusLabel(status) { return String(status || 'no_data').replace(/_/g, ' '); }
+    function statusLabel(status) { const labels = { ok: 'OK', warning: 'Warning', critical: 'Critical', needs_validation: 'Needs Validation', no_data: 'No Data', no_rule: 'No Rule' }; return labels[status] || String(status || 'no_data').replace(/_/g, ' '); }
     function latestMachineState() { return app.machineStateRows[app.machineStateRows.length - 1]?.machineState || ''; }
 
     function summarizeSystem(system, status, signalCount, evidenceCount, latestSystemState) {
@@ -1764,6 +1901,62 @@
       if (app.status === PIPELINE_STATUS.PARSING) return 'Parsing';
       if (app.status === PIPELINE_STATUS.SCANNING) return 'Scanning';
       return 'Not started';
+    }
+
+    function renderDeviationTimeline() {
+      if (!els.deviationTimelineBody || !els.deviationTimelineTag) return;
+      ensureBssEvaluation();
+      const timeline = app.systemTimeline || [];
+      const health = app.systemHealth?.length ? app.systemHealth : buildSystemHealth([], null);
+      if (!timeline.length) {
+        els.deviationTimelineTag.textContent = 'No buckets';
+        els.deviationTimelineBody.innerHTML = '<div class="empty-state">No timestamped BSS evaluated points yet. Upload the Rules Excel and parse BSSNotifications logs to build the deviation timeline.</div>';
+        return;
+      }
+      const buckets = [...new Map(timeline.map(item => [item.startMs, item])).values()].sort((a, b) => a.startMs - b.startMs);
+      els.deviationTimelineTag.textContent = `${buckets.length} buckets • ${bucketDurationLabel(buckets[0])}`;
+      const rows = health.map(systemHealth => ({ system: systemHealth.system, cells: buckets.map(bucket => timeline.find(item => item.system === systemHealth.system && item.startMs === bucket.startMs) || { ...bucket, system: systemHealth.system, status: systemHealth.status === 'no_rule' ? 'no_rule' : 'no_data' }) }));
+      const stateStrip = buckets.map(bucket => `<div class="state-cell" style="background:${stateColor(bucket.machineState || stateAtClient(bucket.startMs).machineState || 'Unknown')};color:#06111a" title="${escapeHtml(formatTime(bucket.bucketStart || new Date(bucket.startMs).toISOString()))}: ${escapeHtml(bucket.machineState || stateAtClient(bucket.startMs).machineState || 'Unknown')}">${escapeHtml(bucket.machineState || stateAtClient(bucket.startMs).machineState || '')}</div>`).join('');
+      els.deviationTimelineBody.innerHTML = `
+        <div class="legend-row">
+          ${['ok','warning','critical','needs_validation','no_data','no_rule'].map(status => `<span class="legend-item status-${status}"><span class="legend-swatch" style="background:var(--status-color)"></span>${escapeHtml(statusLabel(status))}</span>`).join('')}
+        </div>
+        <div class="deviation-heatmap" style="--bucket-count:${buckets.length}">
+          <div class="heatmap-grid">
+            <div class="heatmap-label">Machine State</div>${stateStrip}
+            ${rows.map(row => `<div class="heatmap-label">${escapeHtml(row.system)}</div>${row.cells.map(cell => renderHeatmapCell(cell)).join('')}`).join('')}
+          </div>
+        </div>
+        ${renderSelectedBucketDetails()}`;
+    }
+
+    function renderHeatmapCell(cell) {
+      const selected = app.selectedTimelineBucket && app.selectedTimelineBucket.system === cell.system && app.selectedTimelineBucket.startMs === cell.startMs;
+      const label = cell.status === 'no_rule' ? '—' : (cell.deviationCount ? String(cell.deviationCount) : '');
+      const title = `${cell.system} • ${statusLabel(cell.status)} • ${formatTime(cell.bucketStart)} - ${formatTime(cell.bucketEnd)} • ${cell.worstSignal || 'No signal'}`;
+      return `<button class="heatmap-cell status-${escapeHtml(cell.status)} ${selected ? 'is-selected' : ''}" type="button" data-timeline-system="${escapeHtml(cell.system)}" data-bucket-start="${escapeHtml(String(cell.startMs))}" style="background:var(--status-color)" title="${escapeHtml(title)}">${escapeHtml(label)}</button>`;
+    }
+
+    function renderSelectedBucketDetails() {
+      const selected = app.selectedTimelineBucket;
+      if (!selected) return '<div class="segment-details">Click a timeline cell to inspect deviations in that system/time bucket.</div>';
+      const points = (app.evaluatedPoints || []).filter(point => point.system === selected.system && pointTime(point) >= selected.startMs && pointTime(point) < selected.endMs && (ISSUE_STATUSES.has(point.result) || point.result === 'no_data')).slice(0, 300);
+      return `<div class="segment-details"><strong>${escapeHtml(selected.system)} • ${escapeHtml(formatTime(new Date(selected.startMs).toISOString()))} - ${escapeHtml(formatTime(new Date(selected.endMs).toISOString()))}</strong>
+        <p class="panel-note">${points.length ? `${points.length} deviation / validation rows in this bucket.` : 'No deviation rows in this bucket.'}</p>
+        ${points.length ? `<div class="table-wrap"><table><thead><tr><th>Time</th><th>Signal</th><th>Status</th><th>Actual</th><th>Expected Range</th><th>Machine State</th><th>Reason</th><th>Action</th></tr></thead><tbody>${points.map(point => `<tr><td>${escapeHtml(point.timestamp)}</td><td>${escapeHtml(point.signal)}</td><td>${escapeHtml(statusLabel(point.result))}</td><td>${escapeHtml(String(point.actualDisplay ?? ''))}</td><td>${escapeHtml(compactJoin([point.expectedForState, point.expectedRange], ' • '))}</td><td>${escapeHtml(point.machineState)}</td><td>${escapeHtml(point.reason)}</td><td>${escapeHtml(point.recommendedAction)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      </div>`;
+    }
+
+    function bucketDurationLabel(bucket) {
+      if (!bucket) return '';
+      const minutes = Math.round((bucket.endMs - bucket.startMs) / 60000);
+      return `${minutes} min buckets`;
+    }
+
+    function formatTime(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value || '');
+      return date.toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
     }
 
     function renderTimeline() {
@@ -1980,63 +2173,65 @@
         return;
       }
       const system = app.selectedSystem;
-      if (!system) {
-        els.drilldownSection.hidden = true;
-        return;
-      }
+      if (!system) { els.drilldownSection.hidden = true; return; }
       els.drilldownSection.hidden = false;
       const summary = getSystemHealthSummaries().find(item => item.system === system);
-      if (!summary) {
-        els.drilldownBody.innerHTML = '<div class="empty-state">Selected system is no longer available.</div>';
-        return;
-      }
+      if (!summary) { els.drilldownBody.innerHTML = '<div class="empty-state">Selected system is no longer available.</div>'; return; }
       els.drilldownTag.textContent = `${summary.system} • ${statusLabel(summary.status)}`;
       app.selectedStateTrack = STATE_TRACKS.includes(summary.system) ? summary.system : app.selectedStateTrack;
-      const parameters = buildSystemParameterRows(summary).sort((a, b) => STATUS_PRIORITY[b.result] - STATUS_PRIORITY[a.result]);
-      const numericParameter = parameters.find(parameter => parameter.signal && (app.timeSeriesBySignal[signalKey(parameter.signal)]?.points || []).length);
-      const chartPoints = numericParameter ? downsamplePoints(app.timeSeriesBySignal[signalKey(numericParameter.signal)]?.points || [], MAX_CHART_POINTS_RENDERED) : [];
-      const relevantEvidence = summary.evidence.slice(-MAX_RENDER_ROWS).reverse();
-      els.drilldownBody.innerHTML = `
-        <div class="drilldown-metrics status-${escapeHtml(summary.status)}">
-          <span class="metric-pill"><span class="status-dot"></span>System: ${escapeHtml(summary.system)}</span>
-          <span class="metric-pill">Result: ${escapeHtml(statusLabel(summary.status))}</span>
-          <span class="metric-pill">Machine state: ${escapeHtml(summary.currentMachineState || 'Unavailable')}</span>
-          <span class="metric-pill">System state: ${escapeHtml(summary.latestSystemState || 'Unavailable')}</span>
-          <span class="metric-pill">Signals: ${summary.signals.length.toLocaleString()}</span>
-          <span class="metric-pill">Evidence rows: ${summary.evidence.length.toLocaleString()}</span>
-        </div>
-        <h3 class="panel-title" style="font-size:16px;margin:0 0 12px;">Parameters — problematic first</h3>
-        <div class="parameter-list">${parameters.map(renderParameterCard).join('') || '<div class="empty-state">No parameters found for this system.</div>'}</div>
-        <h3 class="panel-title" style="font-size:16px;margin:18px 0 12px;">Compact actual-vs-expected chart</h3>
-        <div class="chart-wrap">${numericParameter ? renderSvgChart(chartPoints, numericParameter.signal) : '<div class="empty-state">No numeric data exists for this system.</div>'}</div>
-        <h3 class="panel-title" style="font-size:16px;margin:18px 0 12px;">Compact state timeline</h3>
-        ${renderSystemMiniTimeline(summary.system)}
-        <h3 class="panel-title" style="font-size:16px;margin:18px 0 12px;">Relevant evidence rows for ${escapeHtml(summary.system)}</h3>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Time</th><th>Source</th><th>Parameter</th><th>Actual Value</th><th>Machine State</th><th>System State</th><th>Raw Preview</th></tr></thead>
-            <tbody>${renderLimitRow(relevantEvidence.length, summary.evidence.length, 7)}${relevantEvidence.map(ev => `<tr><td>${escapeHtml(ev.timestamp || '')}</td><td>${escapeHtml(ev.sourceType || '')}</td><td>${escapeHtml(ev.signal || '')}</td><td>${escapeHtml(String(ev.value ?? ''))}</td><td>${escapeHtml(ev.machineState || '')}</td><td>${escapeHtml(ev.systemState || '')}</td><td class="path-cell">${escapeHtml(ev.rawPreview || ev.sourceFileId || '')}</td></tr>`).join('') || '<tr><td class="muted" colspan="7">No stored evidence rows for this system.</td></tr>'}</tbody>
-          </table>
-        </div>`;
+      if (summary.system === 'BSS' && summary.bssEvaluation) {
+        const parameters = buildSystemParameterRows(summary).sort((a, b) => STATUS_PRIORITY[b.result] - STATUS_PRIORITY[a.result]);
+        const deviationRows = summary.bssEvaluation.evaluatedPoints.filter(point => ISSUE_STATUSES.has(point.result)).slice(0, 300);
+        const chartSignal = parameters.find(row => summary.bssEvaluation.evaluatedPoints.some(point => point.signal === row.name && typeof point.actualValue === 'number'))?.name;
+        const chartPoints = chartSignal ? summary.bssEvaluation.evaluatedPoints.filter(point => point.signal === chartSignal && typeof point.actualValue === 'number') : [];
+        const times = summary.bssEvaluation.evaluatedPoints.map(point => point.timestamp).filter(Boolean);
+        els.drilldownBody.innerHTML = `
+          <div class="drilldown-metrics status-${escapeHtml(summary.status)}">
+            <span class="metric-pill"><span class="status-dot"></span>System: BSS / BCU</span>
+            <span class="metric-pill">Status: ${escapeHtml(statusLabel(summary.status))}</span>
+            <span class="metric-pill">Total deviations: ${deviationRows.length.toLocaleString()}</span>
+            <span class="metric-pill">Time range: ${escapeHtml(times.length ? `${times[0]} → ${times[times.length - 1]}` : 'Unavailable')}</span>
+          </div>
+          <h3 class="panel-title" style="font-size:16px;margin:0 0 12px;">Parameter comparison</h3>
+          <div class="table-wrap"><table><thead><tr><th>Signal</th><th>Component</th><th>Status</th><th>Latest actual</th><th>Expected range</th><th>Machine state</th><th>First deviation</th><th>Last deviation</th><th>Recommended action</th></tr></thead><tbody>${parameters.map(row => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.component || '')}</td><td>${escapeHtml(statusLabel(row.result))}</td><td>${escapeHtml(String(row.actual))}</td><td>${escapeHtml(String(row.expected))}</td><td>${escapeHtml(row.state)}</td><td>${escapeHtml(row.firstDeviation || 'None')}</td><td>${escapeHtml(row.lastDeviation || 'None')}</td><td>${escapeHtml(row.recommendedAction)}</td></tr>`).join('') || '<tr><td class="muted" colspan="9">No BSS parameters evaluated.</td></tr>'}</tbody></table></div>
+          <h3 class="panel-title" style="font-size:16px;margin:18px 0 12px;">Actual vs Expected chart${chartSignal ? ` — ${escapeHtml(chartSignal)}` : ''}</h3>
+          <div class="chart-wrap">${chartPoints.length ? renderEvaluationChart(chartPoints) : '<div class="empty-state">No numeric evaluated points available for charting.</div>'}</div>
+          <h3 class="panel-title" style="font-size:16px;margin:18px 0 12px;">Machine State strip</h3>
+          ${renderSystemMiniTimeline('BSS')}
+          <h3 class="panel-title" style="font-size:16px;margin:18px 0 12px;">Deviations table</h3>
+          <div class="table-wrap"><table><thead><tr><th>Time</th><th>Signal</th><th>Status</th><th>Actual</th><th>Expected range</th><th>Machine State</th><th>System State</th><th>Reason</th><th>Action</th></tr></thead><tbody>${deviationRows.map(point => `<tr><td>${escapeHtml(point.timestamp)}</td><td>${escapeHtml(point.signal)}</td><td>${escapeHtml(statusLabel(point.result))}</td><td>${escapeHtml(String(point.actualDisplay ?? ''))}</td><td>${escapeHtml(compactJoin([point.expectedForState, point.expectedRange], ' • '))}</td><td>${escapeHtml(point.machineState)}</td><td>${escapeHtml(point.systemState)}</td><td>${escapeHtml(point.reason)}</td><td>${escapeHtml(point.recommendedAction)}</td></tr>`).join('') || '<tr><td class="muted" colspan="9">No warning, critical, or needs-validation deviations for this system.</td></tr>'}</tbody></table></div>
+          <details class="segment-details"><summary>Raw evidence (collapsed)</summary><div class="table-wrap"><table><thead><tr><th>Time</th><th>Source</th><th>Signal</th><th>Value</th><th>Raw Preview</th></tr></thead><tbody>${summary.evidence.slice(-300).reverse().map(ev => `<tr><td>${escapeHtml(ev.timestamp)}</td><td>${escapeHtml(ev.sourceType)}</td><td>${escapeHtml(ev.fullSignal || ev.signal)}</td><td>${escapeHtml(String(ev.value ?? ''))}</td><td class="path-cell">${escapeHtml(ev.rawPreview || '')}</td></tr>`).join('') || '<tr><td class="muted" colspan="5">No raw evidence stored.</td></tr>'}</tbody></table></div></details>`;
+        return;
+      }
+      els.drilldownBody.innerHTML = `<div class="empty-state">${escapeHtml(summary.system)} has ${statusLabel(summary.status)}. For this MVP, only BSS / BCU BSSNotifications rules are evaluated; add rules for this system to enable a drill-down.</div>`;
     }
 
     function buildSystemParameterRows(summary) {
       if (summary?.system === 'BSS' && summary.bssEvaluation) {
-        return summary.bssEvaluation.results.map(item => ({
-          name: item.signalName || 'BSS / BCU signal',
-          actual: item.actualDisplay ?? 'Unavailable',
-          expected: compactJoin([item.expectedForState, item.expectedRange], ' • ') || 'Not evaluated',
-          state: item.machineState || 'Unavailable',
-          systemState: item.systemState || 'Unavailable',
-          result: item.status,
-          severity: statusLabel(item.status),
-          reason: item.reason,
-          recommendedAction: item.recommendedAction,
-          sourceFile: item.sourceFile,
-          timestamp: item.timestamp,
-          component: item.component,
-          signal: null
-        }));
+        const byRule = groupBy(summary.bssEvaluation.evaluatedPoints, point => `${point.ruleRow}-${point.signal}`);
+        return Object.values(byRule).map(points => {
+          const sorted = points.sort((a, b) => compareTimestampClient(a.timestamp, b.timestamp));
+          const latest = sorted[sorted.length - 1];
+          const deviations = sorted.filter(point => ISSUE_STATUSES.has(point.result));
+          const worst = [...deviations, latest].sort((a, b) => STATUS_PRIORITY[b.result] - STATUS_PRIORITY[a.result])[0];
+          return {
+            name: latest.signal || 'BSS / BCU signal',
+            actual: latest.actualDisplay ?? 'Unavailable',
+            expected: compactJoin([latest.expectedForState, latest.expectedRange], ' • ') || 'Not evaluated',
+            state: latest.machineState || 'Unavailable',
+            systemState: latest.systemState || 'Unavailable',
+            result: worst.result,
+            severity: statusLabel(worst.result),
+            reason: worst.reason,
+            recommendedAction: worst.recommendedAction,
+            sourceFile: latest.sourceFile,
+            timestamp: latest.timestamp,
+            component: latest.component,
+            firstDeviation: deviations[0]?.timestamp || '',
+            lastDeviation: deviations[deviations.length - 1]?.timestamp || '',
+            signal: null
+          };
+        });
       }
       const rows = summary.signals.map(signal => {
         const result = signalResult(signal);
@@ -2074,6 +2269,40 @@
         <p class="panel-note" style="margin:0 0 8px;"><strong>Reason:</strong> ${escapeHtml(parameter.reason)}</p>
         <p class="panel-note" style="margin:0;"><strong>Recommended action:</strong> ${escapeHtml(parameter.recommendedAction)}</p>
       </article>`;
+    }
+
+    function renderEvaluationChart(points) {
+      const width = 900, height = 280, pad = 42;
+      const values = points.flatMap(point => [point.actualValue, point.expectedLow, point.expectedHigh, point.warningLow, point.warningHigh, point.criticalLow, point.criticalHigh]).filter(Number.isFinite);
+      if (!values.length) return '<div class="empty-state">No numeric values available for charting.</div>';
+      const min = Math.min(...values), max = Math.max(...values), ySpan = max === min ? 1 : max - min;
+      const xFor = index => pad + (index / Math.max(1, points.length - 1)) * (width - pad * 2);
+      const yFor = value => height - pad - ((value - min) / ySpan) * (height - pad * 2);
+      const actualPath = points.map((point, index) => `${index ? 'L' : 'M'} ${xFor(index).toFixed(1)} ${yFor(point.actualValue).toFixed(1)}`).join(' ');
+      const rangePolygon = bandPolygon(points, xFor, yFor, 'expectedLow', 'expectedHigh');
+      const warningPolygon = bandPolygon(points, xFor, yFor, 'warningLow', 'warningHigh');
+      const criticalPolygon = bandPolygon(points, xFor, yFor, 'criticalLow', 'criticalHigh');
+      return `<svg class="signal-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Actual values with expected range band">
+        <rect x="0" y="0" width="${width}" height="${height}" rx="14" fill="#081019"></rect>
+        ${criticalPolygon ? `<polygon points="${criticalPolygon}" fill="rgba(255,107,107,0.14)"></polygon>` : ''}
+        ${warningPolygon ? `<polygon points="${warningPolygon}" fill="rgba(247,201,72,0.16)"></polygon>` : ''}
+        ${rangePolygon ? `<polygon points="${rangePolygon}" fill="rgba(68,208,123,0.18)"></polygon>` : ''}
+        <line x1="${pad}" y1="${height-pad}" x2="${width-pad}" y2="${height-pad}" stroke="#263443"></line>
+        <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height-pad}" stroke="#263443"></line>
+        <text x="${pad}" y="24" fill="#9fb0c3" font-size="12">max ${formatNumber(max)}</text>
+        <text x="${pad}" y="${height-10}" fill="#9fb0c3" font-size="12">min ${formatNumber(min)}</text>
+        <text x="${width-pad-280}" y="24" fill="#9fb0c3" font-size="12">green expected band • yellow/red threshold bands</text>
+        <path d="${actualPath}" fill="none" stroke="#38c8f4" stroke-width="2.8"></path>
+        ${points.map((point, index) => `<circle cx="${xFor(index).toFixed(1)}" cy="${yFor(point.actualValue).toFixed(1)}" r="3.5" class="status-${escapeHtml(point.result)}" fill="var(--status-color)"><title>${escapeHtml(point.timestamp)} • ${escapeHtml(statusLabel(point.result))} • ${escapeHtml(String(point.actualValue))}</title></circle>`).join('')}
+      </svg>`;
+    }
+
+    function bandPolygon(points, xFor, yFor, lowKey, highKey) {
+      const valid = points.filter(point => Number.isFinite(point[lowKey]) && Number.isFinite(point[highKey]));
+      if (!valid.length) return '';
+      const upper = valid.map(point => `${xFor(points.indexOf(point)).toFixed(1)},${yFor(point[highKey]).toFixed(1)}`);
+      const lower = valid.slice().reverse().map(point => `${xFor(points.indexOf(point)).toFixed(1)},${yFor(point[lowKey]).toFixed(1)}`);
+      return [...upper, ...lower].join(' ');
     }
 
     function renderSystemMiniTimeline(system) {
@@ -2125,13 +2354,17 @@
     }
 
     function renderKpis() {
-      const showNoData = app.status === PIPELINE_STATUS.IDLE && !app.counts;
-      const counts = app.counts || computeCounts();
-      setKpi(els.kpiFiles, showNoData ? 'No data' : counts.focusedFilesParsed.toLocaleString());
-      setKpi(els.kpiEvidence, showNoData ? 'No data' : counts.evidenceRecords.toLocaleString());
-      setKpi(els.kpiSignals, showNoData ? 'No data' : counts.signalsDiscovered.toLocaleString());
-      setKpi(els.kpiStates, showNoData ? 'No data' : counts.machineStateRows.toLocaleString());
-      setKpi(els.kpiRules, showNoData && !app.rulesSummary ? 'No data' : counts.rulesLoaded.toLocaleString());
+      ensureBssEvaluation();
+      const showNoData = app.status === PIPELINE_STATUS.IDLE && !app.counts && !app.rulesSummary;
+      const health = app.systemHealth || [];
+      const counts = countStatuses(health, 'status');
+      const times = (app.evaluatedPoints || []).map(pointTime).filter(Number.isFinite);
+      const timeRange = times.length ? `${formatTime(new Date(Math.min(...times)).toISOString())} – ${formatTime(new Date(Math.max(...times)).toISOString())}` : 'No data';
+      setKpi(els.kpiFiles, showNoData ? 'No data' : String(counts.ok || 0));
+      setKpi(els.kpiEvidence, showNoData ? 'No data' : String(counts.warning || 0));
+      setKpi(els.kpiSignals, showNoData ? 'No data' : String(counts.critical || 0));
+      setKpi(els.kpiStates, showNoData ? 'No data' : String(counts.needs_validation || 0));
+      setKpi(els.kpiRules, showNoData ? 'No data' : timeRange);
     }
 
     function setKpi(el, value) {
@@ -2190,6 +2423,20 @@
       if (!segment) return;
       app.selectedStateSegmentIndex = Number(segment.dataset.segmentIndex || 0);
       renderTimeline();
+      renderDrilldown();
+    });
+
+
+    els.deviationTimelineBody?.addEventListener('click', event => {
+      const cell = event.target.closest('[data-timeline-system]');
+      if (!cell) return;
+      app.selectedSystem = cell.dataset.timelineSystem || app.selectedSystem;
+      app.selectedTimelineBucket = { system: app.selectedSystem, startMs: Number(cell.dataset.bucketStart || 0), endMs: Number(cell.dataset.bucketStart || 0) + 1 };
+      const matched = (app.systemTimeline || []).find(item => item.system === app.selectedSystem && item.startMs === app.selectedTimelineBucket.startMs);
+      if (matched) app.selectedTimelineBucket = matched;
+      app.systemDrilldownOpen = true;
+      renderHealthMap();
+      renderDeviationTimeline();
       renderDrilldown();
     });
 
