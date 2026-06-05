@@ -106,6 +106,15 @@
       font-size: 15px;
     }
 
+    .header-actions {
+      justify-self: end;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
     .header-status {
       justify-self: end;
       display: inline-flex;
@@ -131,6 +140,9 @@
     .status-indicator.warning { background: var(--warning); }
     .status-indicator.active { background: var(--accent); }
     .status-indicator.failed { background: var(--danger); }
+
+    .header-actions .file-picker { padding: 8px 12px; background: rgba(15, 23, 32, 0.82); }
+    .header-actions .file-name { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .primary-nav {
       display: flex;
@@ -682,6 +694,12 @@
     .status-no_data { --status-color: #64748b; }
     .status-no_rule { --status-color: #182231; }
 
+    .service-bottom-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(280px, 0.85fr); gap: 18px; align-items: stretch; }
+    .service-bottom-row .card { min-height: 320px; }
+    .recommended-action-body { display: grid; gap: 12px; }
+    .action-hero { border: 1px solid var(--border-soft); border-left: 4px solid var(--status-color); border-radius: var(--radius-md); padding: 14px; background: rgba(255,255,255,0.03); }
+    .action-hero h3 { margin: 0 0 8px; }
+    .action-hero p { margin: 0; color: var(--text-muted); line-height: 1.45; }
     .radar-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
     .deviation-heatmap { width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(8, 15, 23, 0.52); padding: 12px; }
     .heatmap-grid { display: grid; grid-template-columns: 82px repeat(var(--bucket-count), minmax(24px, 1fr)); gap: 4px; min-width: max(620px, calc(82px + var(--bucket-count) * 28px)); }
@@ -704,7 +722,7 @@
     .mini-timeline span { min-width: 3px; }
 
     @media (max-width: 1100px) {
-      .health-map-layout { grid-template-columns: 1fr; }
+      .health-map-layout, .service-bottom-row { grid-template-columns: 1fr; }
       .health-map-stage, .issue-panel { min-height: 480px; }
       .parameter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
@@ -739,7 +757,7 @@
     @media (max-width: 820px) {
       .app-header, .workspace, .primary-nav, .status-bar { padding-left: 18px; padding-right: 18px; }
       .app-header { grid-template-columns: 1fr; }
-      .header-status { justify-self: start; }
+      .header-actions, .header-status { justify-self: start; justify-content: flex-start; }
       .kpi-row, .pipeline-grid { grid-template-columns: 1fr; }
       .panel-header { display: block; }
       .panel-tag { display: inline-flex; margin-top: 14px; }
@@ -756,9 +774,22 @@
         <h1 class="product-name">PANDA Tool</h1>
         <p class="product-subtitle">Proactive Analyzer Notification DA</p>
       </div>
-      <div class="header-status" aria-label="Application data status">
-        <span id="statusIndicator" class="status-indicator" aria-hidden="true"></span>
-        <span id="headerStatusText">No data loaded</span>
+      <div class="header-actions" aria-label="Upload controls and application status">
+        <label class="file-picker">
+          <span>Load autocollect ZIP</span>
+          <input id="zipInput" type="file" accept=".zip,application/zip,application/x-zip-compressed">
+        </label>
+        <span id="zipFileName" class="file-name">No ZIP selected</span>
+        <label class="file-picker">
+          <span>Load Rules</span>
+          <input id="rulesInput" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+        </label>
+        <span id="rulesFileName" class="file-name">No rules file selected</span>
+        <button id="analyzeButton" class="primary" type="button" disabled>Analyze</button>
+        <div class="header-status" aria-label="Application data status">
+          <span id="statusIndicator" class="status-indicator" aria-hidden="true"></span>
+          <span id="headerStatusText">No data loaded</span>
+        </div>
       </div>
     </header>
 
@@ -780,19 +811,7 @@
           </div>
           <span id="modeTag" class="panel-tag">Waiting</span>
         </div>
-        <div class="controls">
-          <label class="file-picker">
-            <span>Load autocollect ZIP</span>
-            <input id="zipInput" type="file" accept=".zip,application/zip,application/x-zip-compressed">
-          </label>
-          <span id="zipFileName" class="file-name">No ZIP selected</span>
-          <label class="file-picker">
-            <span>Load Rules</span>
-            <input id="rulesInput" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
-          </label>
-          <span id="rulesFileName" class="file-name">No rules file selected</span>
-          <button id="analyzeButton" class="primary" type="button" disabled>Analyze</button>
-        </div>
+
         <div class="progress-wrap" aria-label="Scan progress">
           <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
           <p id="scanStage" class="scan-stage">Waiting for autocollect ZIP.</p>
@@ -802,6 +821,29 @@
           <span class="metric-pill">Time range: No data</span>
           <span class="metric-pill">Rules loaded: 0 / 12 BSS-BCU</span>
         </div>
+      </section>
+
+      <section class="kpi-row" aria-label="Service radar KPIs">
+        <article class="card kpi-card">
+          <p class="kpi-label">Machines at risk</p>
+          <span id="kpiFiles" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Critical alerts</p>
+          <span id="kpiEvidence" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Detection confidence / coverage</p>
+          <span id="kpiSignals" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Open preventive actions</p>
+          <span id="kpiStates" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Mean time / last deviation</p>
+          <span id="kpiRules" class="kpi-value muted">No rules</span>
+        </article>
       </section>
 
       <section class="card health-map-card" aria-label="Machine-centered system health map">
@@ -849,44 +891,44 @@
         <div id="drilldownBody" class="panel-body"><div class="empty-state">Select BSS and open drill-down to inspect the 12 BSS / BCU rules.</div></div>
       </section>
 
+      <section class="service-bottom-row" aria-label="Service radar evidence and action row">
+        <section class="card" aria-label="State Machine Timeline">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">State Machine Timeline</h2>
+              <p class="panel-note">Forward-filled MachineStates snapshots provide the operating state at each BSS timestamp.</p>
+            </div>
+            <span id="timelineTag" class="panel-tag">0 states</span>
+          </div>
+          <div id="timelineBody" class="panel-body"><div class="empty-state">No MachineStates data parsed.</div></div>
+        </section>
+
+        <section class="card" aria-label="Evidence Log latest relevant rows">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Evidence Log</h2>
+              <p class="panel-note">Latest relevant BSS / BCU evaluation rows only.</p>
+            </div>
+            <span id="latestEvidenceTag" class="panel-tag">0 events</span>
+          </div>
+          <div id="latestEvidenceBody" class="panel-body"><div class="empty-state">No evaluated evidence yet.</div></div>
+        </section>
+
+        <section class="card" aria-label="Recommended Service Action">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Recommended Service Action</h2>
+              <p class="panel-note">Clear next step based on the worst BSS / BCU rule result.</p>
+            </div>
+            <span id="recommendedActionTag" class="panel-tag">Waiting</span>
+          </div>
+          <div id="recommendedActionBody" class="panel-body"><div class="empty-state">Upload logs and rules to calculate the recommended action.</div></div>
+        </section>
+      </section>
+
       <details class="debug-explorer">
         <summary>Debug / Data Explorer (collapsed)</summary>
         <div class="debug-body">
-
-      <section class="kpi-row" aria-label="Debug service radar KPIs">
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems OK</p>
-          <span id="kpiFiles" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems Warning</p>
-          <span id="kpiEvidence" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems Critical</p>
-          <span id="kpiSignals" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Needs Validation</p>
-          <span id="kpiStates" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Time Range</p>
-          <span id="kpiRules" class="kpi-value muted">No rules</span>
-        </article>
-      </section>
-
-      <section class="card" aria-label="Compact evidence log">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Compact Evidence Log</h2>
-            <p class="panel-note">Latest relevant BSS / BCU evaluation events only. Full raw evidence stays collapsed in Debug / Data Explorer.</p>
-          </div>
-          <span id="latestEvidenceTag" class="panel-tag">0 events</span>
-        </div>
-        <div id="latestEvidenceBody" class="panel-body"><div class="empty-state">No evaluated evidence yet.</div></div>
-      </section>
-
 
       <section class="card" aria-label="BSS BCU health summary">
         <div class="panel-header">
@@ -941,17 +983,6 @@
             <tbody id="signalsBody"><tr><td class="muted" colspan="15">No signals discovered.</td></tr></tbody>
           </table>
         </div>
-      </section>
-
-      <section class="card" aria-label="MachineStates timeline">
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">MachineStates Timeline</h2>
-            <p class="panel-note">Consecutive identical states are aggregated into compact colored timeline segments. Full MachineStates rows are not rendered as cards.</p>
-          </div>
-          <span id="timelineTag" class="panel-tag">0 states</span>
-        </div>
-        <div id="timelineBody" class="panel-body"><div class="empty-state">No MachineStates data parsed.</div></div>
       </section>
 
       <section class="card" aria-label="Raw evidence">
@@ -1145,6 +1176,8 @@
       drilldownTag: document.getElementById('drilldownTag'),
       latestEvidenceBody: document.getElementById('latestEvidenceBody'),
       latestEvidenceTag: document.getElementById('latestEvidenceTag'),
+      recommendedActionBody: document.getElementById('recommendedActionBody'),
+      recommendedActionTag: document.getElementById('recommendedActionTag'),
       filterSystem: document.getElementById('filterSystem'),
       filterSource: document.getElementById('filterSource'),
       filterSignal: document.getElementById('filterSignal'),
@@ -1285,6 +1318,7 @@
       renderHealthMap();
       renderDeviationTimeline();
       renderLatestEvidenceLog();
+      renderRecommendedAction();
       renderInventory();
       renderEvidence();
       renderSignals();
@@ -1587,8 +1621,9 @@
         const ms = Number((slash[7] || '0').padEnd(3, '0').slice(0, 3));
         return Date.UTC(Number(slash[3]), month - 1, day, Number(slash[4]), Number(slash[5]), Number(slash[6]), ms);
       }
-      const direct = Date.parse(text);
-      return Number.isNaN(direct) ? Number.NaN : direct;
+      const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:[.:](\d{1,6}))?/);
+      if (iso) return Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), Number(iso[4]), Number(iso[5]), Number(iso[6]), Number((iso[7] || '0').padEnd(3, '0').slice(0, 3)));
+      return Number.NaN;
     }
     function compareTimestampClient(left, right) { const leftMs = parseClientTime(left || ''); const rightMs = parseClientTime(right || ''); if (!Number.isNaN(leftMs) && !Number.isNaN(rightMs)) return leftMs - rightMs; return String(left || '').localeCompare(String(right || '')); }
 
@@ -1882,6 +1917,36 @@
         return;
       }
       els.latestEvidenceBody.innerHTML = `<div class="table-wrap" style="max-height:260px"><table><thead><tr><th>Time</th><th>Signal</th><th>Status</th><th>Actual</th><th>Expected Range</th><th>Machine State</th><th>Action</th></tr></thead><tbody>${points.map(point => `<tr><td>${escapeHtml(point.timestamp || 'Rule-level')}</td><td>${escapeHtml(point.signal)}</td><td>${escapeHtml(statusLabel(point.result))}</td><td>${escapeHtml(String(point.actualDisplay ?? ''))}</td><td>${escapeHtml(compactJoin([point.expectedForState, point.expectedRange], ' • '))}</td><td>${escapeHtml(point.machineState)}</td><td>${escapeHtml(point.recommendedAction)}</td></tr>`).join('')}</tbody></table></div>`;
+    }
+
+
+    function renderRecommendedAction() {
+      if (!els.recommendedActionBody || !els.recommendedActionTag) return;
+      const bss = getBssHealthSummary(latestMachineState());
+      const evaluation = bss?.bssEvaluation;
+      const point = (evaluation?.evaluatedPoints || [])
+        .slice()
+        .sort((a, b) => STATUS_PRIORITY[b.result] - STATUS_PRIORITY[a.result] || compareTimestampClient(b.timestamp, a.timestamp))[0] || bss?.topProblem?.point || null;
+      const status = point?.result || bss?.status || 'no_data';
+      els.recommendedActionTag.textContent = statusLabel(status);
+      if (!point && !evaluation) {
+        els.recommendedActionBody.innerHTML = '<div class="empty-state">Upload logs and the PANDA Rules Template to calculate the recommended service action.</div>';
+        return;
+      }
+      const action = point?.recommendedAction || recommendedAction(status, 'BSS');
+      els.recommendedActionBody.innerHTML = `
+        <div class="recommended-action-body status-${escapeHtml(status)}">
+          <article class="action-hero">
+            <h3><span class="status-dot"></span>${escapeHtml(action)}</h3>
+            <p>${escapeHtml(point?.reason || bss?.summary || 'BSS / BCU evaluation is pending validation.')}</p>
+          </article>
+          <div class="issue-fields">
+            <div class="issue-field"><strong>Problematic signal</strong>${escapeHtml(point?.signal || bss?.health?.worstSignal || 'Unavailable')}</div>
+            <div class="issue-field"><strong>Actual value</strong>${escapeHtml(String(point?.actualDisplay ?? bss?.health?.latestActual ?? 'Unavailable'))}</div>
+            <div class="issue-field"><strong>Expected range</strong>${escapeHtml(compactJoin([point?.expectedForState, point?.expectedRange], ' • ') || bss?.health?.expectedRange || 'Not evaluated')}</div>
+            <div class="issue-field"><strong>Machine state</strong>${escapeHtml(point?.machineState || bss?.currentMachineState || 'Unavailable')}</div>
+          </div>
+        </div>`;
     }
 
     function renderInventory() {
@@ -2473,14 +2538,19 @@
       ensureBssEvaluation();
       const showNoData = app.status === PIPELINE_STATUS.IDLE && !app.counts && !app.rulesSummary;
       const health = app.systemHealth || [];
-      const counts = countStatuses(health, 'status');
-      const times = (app.evaluatedPoints || []).map(pointTime).filter(Number.isFinite);
-      const timeRange = times.length ? `${formatTime(new Date(Math.min(...times)).toISOString())} – ${formatTime(new Date(Math.max(...times)).toISOString())}` : 'No data';
-      setKpi(els.kpiFiles, showNoData ? 'No data' : String(counts.ok || 0));
-      setKpi(els.kpiEvidence, showNoData ? 'No data' : String(counts.warning || 0));
-      setKpi(els.kpiSignals, showNoData ? 'No data' : String(counts.critical || 0));
-      setKpi(els.kpiStates, showNoData ? 'No data' : String(counts.needs_validation || 0));
-      setKpi(els.kpiRules, showNoData ? 'No data' : timeRange);
+      const atRisk = health.filter(item => ISSUE_STATUSES.has(item.status)).length;
+      const criticalPoints = (app.evaluatedPoints || []).filter(point => point.result === 'critical').length;
+      const rulesTotal = app.rulesSummary?.bssRules?.length || 0;
+      const matched = app.bssEvaluation?.signalsFound || 0;
+      const coverage = rulesTotal ? `${Math.round((matched / rulesTotal) * 100)}% (${matched}/${rulesTotal})` : 'No rules';
+      const openActions = (app.evaluatedPoints || []).filter(point => ISSUE_STATUSES.has(point.result)).length;
+      const deviations = (app.evaluatedPoints || []).filter(point => ISSUE_STATUSES.has(point.result) && Number.isFinite(pointTime(point))).sort((a, b) => pointTime(a) - pointTime(b));
+      const lastDeviation = deviations.length ? formatTime(new Date(pointTime(deviations[deviations.length - 1])).toISOString()) : 'No deviation';
+      setKpi(els.kpiFiles, showNoData ? 'No data' : String(atRisk));
+      setKpi(els.kpiEvidence, showNoData ? 'No data' : String(criticalPoints));
+      setKpi(els.kpiSignals, showNoData ? 'No data' : coverage);
+      setKpi(els.kpiStates, showNoData ? 'No data' : String(openActions));
+      setKpi(els.kpiRules, showNoData ? 'No data' : lastDeviation);
     }
 
     function setKpi(el, value) {
@@ -3073,7 +3143,8 @@
           let headers = [];
           let truncated = false;
           try {
-            const text = await item.file.async('string');
+            const rawText = await item.file.async('string');
+            const text = item.sourceType === 'BSSNotifications' ? cleanBssCsvText(rawText) : rawText;
             const csvPlan = item.sourceType === 'BSSNotifications' ? inspectBssCsv(text, item) : null;
             const parserText = csvPlan ? csvPlan.text : text;
             const parserOptions = csvPlan ? { delimiter: csvPlan.delimiter } : {};
@@ -3316,7 +3387,8 @@
 
         function createEvidence(fields) {
           const value = fields.value ?? '';
-          return { id: 'ev-' + (ctx.evidenceTotal + 1), timestamp: fields.timestamp || '', timeMs: parseTime(fields.timestamp || '', fields.sourceType || ''), sourceFileId: fields.sourceFileId || '', sourceFile: fields.sourceFileId || '', sourceType: fields.sourceType || '', system: fields.system || '', subsystem: fields.subsystem || '', component: fields.component || '', subComponent: fields.subComponent || '', parameterType: fields.parameterType || '', signal: fields.signal || '', fullSignal: fields.fullSignal || fields.signal || '', value, numericValue: toNumber(value), unit: fields.unit || '', machineState: '', systemState: fields.systemState || '', stateContextStatus: 'pending', isAlertLike: Boolean(fields.isAlertLike), rawPreview: trimRaw(fields.rawPreview || '') };
+          const numericValue = toNumber(value);
+          return { id: 'ev-' + (ctx.evidenceTotal + 1), timestamp: fields.timestamp || '', timeMs: parseTime(fields.timestamp || '', fields.sourceType || ''), sourceFileId: fields.sourceFileId || '', sourceFile: fields.sourceFileId || '', sourceType: fields.sourceType || '', system: fields.system || '', subsystem: fields.subsystem || '', component: fields.component || '', subComponent: fields.subComponent || '', parameterType: fields.parameterType || '', signal: fields.signal || '', fullSignal: fields.fullSignal || fields.signal || '', value, actualValue: numericValue, numericValue, unit: fields.unit || '', machineState: '', systemState: fields.systemState || '', stateContextStatus: 'pending', isAlertLike: Boolean(fields.isAlertLike), rawPreview: trimRaw(fields.rawPreview || '') };
         }
 
         function normalizeMachineStateRow(row, sourceFileId) {
@@ -3457,7 +3529,8 @@
         async function yieldIfNeeded(force = false) { const now = Date.now(); if (force || now - ctx.lastUi >= UI_YIELD_EVERY_MS) { ctx.lastUi = now; await new Promise(resolve => setTimeout(resolve, 0)); } }
         function addDiagnostic(level, stage, filePath, message, technicalDetails) { ctx.diagnostics.push({ level, stage, filePath, message, technicalDetails }); }
         function countDiagnostics(level) { return ctx.diagnostics.filter(item => item.level === level).length; }
-        function cleanCsvHeader(value) { return String(value || '').replace(/\\n/g, '').replace(/\n/g, '').replace(/^['"]+|['"]+$/g, '').trim(); }
+        function cleanBssCsvText(text) { return String(text || '').replace(/"IsAlert"\\n\r?\n/g, '"IsAlert"\n').replace(/"IsAlert"\\n/g, '"IsAlert"'); }
+        function cleanCsvHeader(value) { return String(value || '').replace(/\\n/g, '').replace(/\n/g, '').replace(/\\/g, '').replace(/^[\'"]+|[\'"]+$/g, '').trim(); }
         function normalizeLooseHeader(value) { return cleanCsvHeader(value).toLowerCase().replace(/[^a-z0-9]+/g, ''); }
         function fatal(error) { addDiagnostic('error', 'Fatal pipeline failure', '', error.message || String(error), error.stack || ''); self.postMessage({ type: 'error', message: error.message || String(error), diagnostics: ctx.diagnostics, pipeline: ctx.pipeline }); }
         function firstValue(row, keys) {
@@ -3484,9 +3557,9 @@
             const ms = Number((slash[7] || '0').padEnd(3, '0').slice(0, 3));
             return Date.UTC(Number(slash[3]), month - 1, day, Number(slash[4]), Number(slash[5]), Number(slash[6]), ms);
           }
-          const normalized = text.replace(/^(\d{4}-\d{2}-\d{2})[ _](\d{2}-\d{2}-\d{2})/, '$1T$2').replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3');
-          const direct = Date.parse(normalized);
-          return Number.isNaN(direct) ? Number.NaN : direct;
+          const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T_](\d{2})[:-](\d{2})[:-](\d{2})(?:[.:](\d{1,6}))?/);
+          if (iso) return Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), Number(iso[4]), Number(iso[5]), Number(iso[6]), Number((iso[7] || '0').padEnd(3, '0').slice(0, 3)));
+          return Number.NaN;
         }
         function compareTimestamp(left, right) { const leftMs = parseTime(left); const rightMs = parseTime(right); if (!Number.isNaN(leftMs) && !Number.isNaN(rightMs)) return leftMs - rightMs; return String(left || '').localeCompare(String(right || '')); }
         function normalizeSystemForState(system) { if (system === 'FEC') return 'PSS'; if (MACHINE_STATE_SYSTEMS.includes(system)) return system; return system; }
