@@ -791,6 +791,29 @@
         </div>
       </section>
 
+      <section class="kpi-row" aria-label="Service radar KPIs">
+        <article class="card kpi-card">
+          <p class="kpi-label">Systems OK</p>
+          <span id="kpiFiles" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Systems Warning</p>
+          <span id="kpiEvidence" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Systems Critical</p>
+          <span id="kpiSignals" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Needs Validation</p>
+          <span id="kpiStates" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Time Range</p>
+          <span id="kpiRules" class="kpi-value muted">No rules</span>
+        </article>
+      </section>
+
       <section class="card health-map-card" aria-label="Machine-centered system health map">
         <div class="panel-header">
           <div>
@@ -825,34 +848,31 @@
         <div id="deviationTimelineBody" class="panel-body"><div class="empty-state">Upload logs and rules to build the deviation radar timeline.</div></div>
       </section>
 
+      <section id="drilldownSection" class="card" aria-label="BSS BCU drill-down investigation" hidden>
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">BSS / BCU Drill-Down</h2>
+            <p class="panel-note">Breadcrumb: Service Radar → BSS / BCU. Focused comparison for the 12 MVP BSSNotifications rules.</p>
+          </div>
+          <span id="drilldownTag" class="panel-tag">No signal</span>
+        </div>
+        <div id="drilldownBody" class="panel-body"><div class="empty-state">Select BSS and open drill-down to inspect the 12 BSS / BCU rules.</div></div>
+      </section>
+
+      <section class="card" aria-label="Compact evidence log">
+        <div class="panel-header">
+          <div>
+            <h2 class="panel-title">Compact Evidence Log</h2>
+            <p class="panel-note">Latest relevant BSS / BCU evaluation events only. Full raw evidence stays collapsed in Debug / Data Explorer.</p>
+          </div>
+          <span id="latestEvidenceTag" class="panel-tag">0 events</span>
+        </div>
+        <div id="latestEvidenceBody" class="panel-body"><div class="empty-state">No evaluated evidence yet.</div></div>
+      </section>
+
       <details class="debug-explorer">
         <summary>Debug / Data Explorer (collapsed)</summary>
         <div class="debug-body">
-
-      <section class="kpi-row" aria-label="Service radar KPIs">
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems OK</p>
-          <span id="kpiFiles" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems Warning</p>
-          <span id="kpiEvidence" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems Critical</p>
-          <span id="kpiSignals" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Needs Validation</p>
-          <span id="kpiStates" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Time Range</p>
-          <span id="kpiRules" class="kpi-value muted">No rules</span>
-        </article>
-      </section>
-
-
 
       <section class="card" aria-label="BSS BCU health summary">
         <div class="panel-header">
@@ -863,18 +883,6 @@
           <span id="bssHealthTag" class="panel-tag">Waiting for rules/logs</span>
         </div>
         <div id="bssHealthBody" class="panel-body"><div class="empty-state">Upload an autocollect ZIP and the Rules Excel to evaluate BSS / BCU values from BSSNotifications.</div></div>
-      </section>
-
-
-      <section id="drilldownSection" class="card" aria-label="Signal drill-down investigation" hidden>
-        <div class="panel-header">
-          <div>
-            <h2 class="panel-title">Signal Drill-Down / Investigation</h2>
-            <p class="panel-note">Focused numeric time-series, selected state-track context, and limited raw evidence for the selected signal.</p>
-          </div>
-          <span id="drilldownTag" class="panel-tag">No signal</span>
-        </div>
-        <div id="drilldownBody" class="panel-body"><div class="empty-state">Click a signal profile to investigate it.</div></div>
       </section>
 
 
@@ -1005,7 +1013,7 @@
 
   <script>
     const MAX_RENDER_ROWS = 300;
-    const MAX_EVIDENCE_ROWS_STORED = 50000;
+    const MAX_EVIDENCE_ROWS_STORED = 250000;
     const MAX_RAW_LINE_LENGTH = 500;
     const MAX_FILE_PARSE_ROWS = 250000;
     const ROW_BATCH_SIZE = 1000;
@@ -1120,6 +1128,8 @@
       drilldownSection: document.getElementById('drilldownSection'),
       drilldownBody: document.getElementById('drilldownBody'),
       drilldownTag: document.getElementById('drilldownTag'),
+      latestEvidenceBody: document.getElementById('latestEvidenceBody'),
+      latestEvidenceTag: document.getElementById('latestEvidenceTag'),
       filterSystem: document.getElementById('filterSystem'),
       filterSource: document.getElementById('filterSource'),
       filterSignal: document.getElementById('filterSignal'),
@@ -1258,6 +1268,7 @@
       renderBssHealthSummary();
       renderHealthMap();
       renderDeviationTimeline();
+      renderLatestEvidenceLog();
       renderInventory();
       renderEvidence();
       renderSignals();
@@ -1351,6 +1362,9 @@
         if (numericActual === null || numericActual === undefined) {
           return buildEvaluatedPoint(rule, ev, 'needs_validation', 'Signal matched but no numeric actual value could be extracted from the BSSNotifications row.', 'Validate the BSSNotifications Value format and update the rule if this signal is intentionally non-numeric.', null, null, null, index + 1, matches.length);
         }
+        if (ev.stateContextStatus === 'missing' || !ev.machineState) {
+          return buildEvaluatedPoint(rule, ev, 'needs_validation', 'No MachineStates snapshot was found at or before this BSSNotifications timestamp.', recommendedAction('needs_validation', 'BSS'), numericActual, null, null, index + 1, matches.length);
+        }
         const stateName = selectRuleState(ev);
         const expected = expectedForState(rule, stateName);
         if (!expected.raw) {
@@ -1370,6 +1384,7 @@
       return {
         id: `bss-${rule.rowNumber || 'rule'}-${ev?.id || 'no-data'}-${evaluatedValueCount}`,
         timestamp: ev?.timestamp || '',
+        timeMs: Number.isFinite(ev?.timeMs) ? ev.timeMs : parseClientTime(ev?.timestamp || ''),
         system: 'BSS',
         subsystem: 'BCU',
         component: rule.component || ev?.component || '',
@@ -1407,13 +1422,13 @@
     function buildBssRuleResult(...args) { return buildEvaluatedPoint(...args); }
 
     function bssEvidenceMatchesRule(ev, signalName) {
-      const needle = normalizeSignalText(signalName);
-      if (!needle) return false;
-      const haystackText = [ev.component, ev.subComponent, ev.parameterType, ev.signal, ev.fullSignal, ev.rawPreview].join(' ');
-      const primaryHaystack = normalizeSignalText(haystackText);
       const compactNeedle = compactSignalText(signalName);
-      const compactPrimary = compactSignalText(haystackText);
-      return primaryHaystack.includes(needle) || needle.includes(primaryHaystack) || compactPrimary.includes(compactNeedle) || (compactPrimary.length > 3 && compactNeedle.includes(compactPrimary));
+      if (!compactNeedle) return false;
+      if (compactSignalText(ev.subComponent || '') === compactNeedle) return true;
+      if (compactSignalText(ev.signal || '') === compactNeedle) return true;
+      const fullSignal = [ev.component, ev.subComponent, ev.parameterType].join(' / ');
+      if (compactSignalText(fullSignal).includes(compactNeedle)) return true;
+      return compactSignalText(ev.rawPreview || '').includes(compactNeedle);
     }
 
     function selectRuleState(ev) {
@@ -1523,7 +1538,21 @@
     function normalizeSignalText(value) { return String(value || '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
     function compactSignalText(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
     function normalizeStateName(value) { return String(value || '').replace(/^Expected\s+/i, '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
-    function compareTimestampClient(left, right) { const leftMs = Date.parse(left || ''); const rightMs = Date.parse(right || ''); if (!Number.isNaN(leftMs) && !Number.isNaN(rightMs)) return leftMs - rightMs; return String(left || '').localeCompare(String(right || '')); }
+    function parseClientTime(value, sourceType = '') {
+      const text = String(value || '').trim();
+      if (!text) return Number.NaN;
+      const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})(?:[.:](\d{1,6}))?/);
+      if (slash) {
+        const first = Number(slash[1]), second = Number(slash[2]);
+        const month = sourceType === 'MachineStates' ? second : first;
+        const day = sourceType === 'MachineStates' ? first : second;
+        const ms = Number((slash[7] || '0').padEnd(3, '0').slice(0, 3));
+        return Date.UTC(Number(slash[3]), month - 1, day, Number(slash[4]), Number(slash[5]), Number(slash[6]), ms);
+      }
+      const direct = Date.parse(text);
+      return Number.isNaN(direct) ? Number.NaN : direct;
+    }
+    function compareTimestampClient(left, right) { const leftMs = parseClientTime(left || ''); const rightMs = parseClientTime(right || ''); if (!Number.isNaN(leftMs) && !Number.isNaN(rightMs)) return leftMs - rightMs; return String(left || '').localeCompare(String(right || '')); }
 
 
     function countStatuses(items, field = 'result') {
@@ -1591,12 +1620,12 @@
       return buckets;
     }
 
-    function pointTime(point) { const t = Date.parse(point?.timestamp || ''); return Number.isNaN(t) ? NaN : t; }
+    function pointTime(point) { return Number.isFinite(point?.timeMs) ? point.timeMs : parseClientTime(point?.timestamp || ''); }
     function groupBy(items, keyFn) { return (items || []).reduce((acc, item) => { const key = keyFn(item); (acc[key] ||= []).push(item); return acc; }, {}); }
     function stateAtClient(ms) {
       let match = null;
       for (const row of app.machineStateRows || []) {
-        const rowMs = Number.isFinite(row.timeMs) ? row.timeMs : Date.parse(row.timestamp || '');
+        const rowMs = Number.isFinite(row.timeMs) ? row.timeMs : parseClientTime(row.timestamp || '', 'MachineStates');
         if (Number.isNaN(rowMs)) continue;
         if (rowMs <= ms) match = row;
         if (rowMs > ms) break;
@@ -1660,17 +1689,20 @@
       const mismatch = summary.mismatch;
       els.systemIssuePanel.innerHTML = `
         <div class="status-${escapeHtml(summary.status)}">
-          <h3 class="issue-card-title"><span class="status-dot"></span>What Requires Attention — ${escapeHtml(summary.system)}</h3>
+          <h3 class="issue-card-title"><span class="status-dot"></span>Active Issue — ${escapeHtml(summary.system === 'BSS' ? 'BSS / BCU' : summary.system)}</h3>
           <p class="issue-card-subtitle">${escapeHtml(mismatch ? 'BSS rules loaded, but BSSNotifications values were not matched.' : (hasIssue ? (problem?.title || `${summary.system} requires attention`) : `${summary.system} is ${statusLabel(summary.status)}.`))}</p>
           ${mismatch ? renderBssMismatchSummary(mismatch) : `
           <div class="issue-fields">
-            <div class="issue-field"><strong>Which system has a problem?</strong>${escapeHtml(summary.system)}</div>
-            <div class="issue-field"><strong>What value deviated?</strong>${escapeHtml(String(summary.health?.latestActual ?? problem?.point?.actualDisplay ?? 'Unavailable'))}</div>
-            <div class="issue-field"><strong>What was expected?</strong>${escapeHtml(summary.health?.expectedRange || problem?.actualExpected || summary.actualExpectedPreview || 'Not evaluated')}</div>
-            <div class="issue-field"><strong>During which machine state?</strong>${escapeHtml(summary.health?.machineState || problem?.machineState || summary.currentMachineState || 'Unavailable')}</div>
-            <div class="issue-field"><strong>What action should service take?</strong>${escapeHtml(problem?.recommendedAction || summary.health?.recommendedAction || recommendedAction(summary.status, summary.system))}</div>
+            <div class="issue-field"><strong>System</strong>${escapeHtml(summary.system === 'BSS' ? 'BSS / BCU' : summary.system)}</div>
+            <div class="issue-field"><strong>Worst signal</strong>${escapeHtml(summary.health?.worstSignal || problem?.point?.signal || 'Unavailable')}</div>
+            <div class="issue-field"><strong>Actual value</strong>${escapeHtml(String(summary.health?.latestActual ?? problem?.point?.actualDisplay ?? 'Unavailable'))}</div>
+            <div class="issue-field"><strong>Expected range</strong>${escapeHtml(summary.health?.expectedRange || problem?.actualExpected || summary.actualExpectedPreview || 'Not evaluated')}</div>
+            <div class="issue-field"><strong>Machine state</strong>${escapeHtml(summary.health?.machineState || problem?.machineState || summary.currentMachineState || 'Unavailable')}</div>
+            <div class="issue-field"><strong>First deviation time</strong>${escapeHtml(summary.health?.firstDeviationTime || 'None')}</div>
+            <div class="issue-field"><strong>Last deviation time</strong>${escapeHtml(summary.health?.lastDeviationTime || 'None')}</div>
+            <div class="issue-field"><strong>Recommended action</strong>${escapeHtml(problem?.recommendedAction || summary.health?.recommendedAction || recommendedAction(summary.status, summary.system))}</div>
           </div>`}
-          <button id="openSystemDrilldown" class="primary" type="button">Open Debug Drill-Down</button>
+          <button id="openSystemDrilldown" class="primary" type="button">Open Drill-Down</button>
         </div>`;
     }
 
@@ -1796,6 +1828,21 @@
       if (status === 'needs_validation') return `Validate ${system} rule mappings and expected ranges for the current machine/system state.`;
       if (status === 'ok') return `No immediate action required for ${system}. Continue monitoring.`;
       return `Load focused logs/rules to evaluate ${system}.`;
+    }
+
+    function renderLatestEvidenceLog() {
+      if (!els.latestEvidenceBody || !els.latestEvidenceTag) return;
+      ensureBssEvaluation();
+      const points = (app.evaluatedPoints || [])
+        .filter(point => point.system === 'BSS' && (ISSUE_STATUSES.has(point.result) || point.result === 'needs_validation' || point.result === 'no_data'))
+        .sort((a, b) => compareTimestampClient(b.timestamp, a.timestamp))
+        .slice(0, 8);
+      els.latestEvidenceTag.textContent = `${points.length} events`;
+      if (!points.length) {
+        els.latestEvidenceBody.innerHTML = '<div class="empty-state">No BSS / BCU deviations or validation events yet.</div>';
+        return;
+      }
+      els.latestEvidenceBody.innerHTML = `<div class="table-wrap" style="max-height:260px"><table><thead><tr><th>Time</th><th>Signal</th><th>Status</th><th>Actual</th><th>Expected Range</th><th>Machine State</th><th>Action</th></tr></thead><tbody>${points.map(point => `<tr><td>${escapeHtml(point.timestamp || 'Rule-level')}</td><td>${escapeHtml(point.signal)}</td><td>${escapeHtml(statusLabel(point.result))}</td><td>${escapeHtml(String(point.actualDisplay ?? ''))}</td><td>${escapeHtml(compactJoin([point.expectedForState, point.expectedRange], ' • '))}</td><td>${escapeHtml(point.machineState)}</td><td>${escapeHtml(point.recommendedAction)}</td></tr>`).join('')}</tbody></table></div>`;
     }
 
     function renderInventory() {
@@ -2105,8 +2152,7 @@
     }
 
     function parseTimeSafe(value) {
-      const parsed = Date.parse(value);
-      return Number.isFinite(parsed) ? parsed : NaN;
+      return parseClientTime(value, 'MachineStates');
     }
 
     function visibleTimeRange(segments) {
@@ -2221,6 +2267,8 @@
             <span class="metric-pill">Total deviations: ${deviationRows.length.toLocaleString()}</span>
             <span class="metric-pill">Time range: ${escapeHtml(times.length ? `${times[0]} → ${times[times.length - 1]}` : 'Unavailable')}</span>
           </div>
+          <h3 class="panel-title" style="font-size:16px;margin:0 0 12px;">Component / parameter list</h3>
+          <div class="parameter-list">${parameters.map(renderParameterCard).join('') || '<div class="empty-state">No BSS parameters evaluated.</div>'}</div>
           <h3 class="panel-title" style="font-size:16px;margin:0 0 12px;">Parameter comparison</h3>
           <div class="table-wrap"><table><thead><tr><th>Signal</th><th>Component</th><th>Status</th><th>Latest actual</th><th>Expected range</th><th>Machine state</th><th>First deviation</th><th>Last deviation</th><th>Recommended action</th></tr></thead><tbody>${parameters.map(row => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.component || '')}</td><td>${escapeHtml(statusLabel(row.result))}</td><td>${escapeHtml(String(row.actual))}</td><td>${escapeHtml(String(row.expected))}</td><td>${escapeHtml(row.state)}</td><td>${escapeHtml(row.firstDeviation || 'None')}</td><td>${escapeHtml(row.lastDeviation || 'None')}</td><td>${escapeHtml(row.recommendedAction)}</td></tr>`).join('') || '<tr><td class="muted" colspan="9">No BSS parameters evaluated.</td></tr>'}</tbody></table></div>
           <h3 class="panel-title" style="font-size:16px;margin:18px 0 12px;">Actual vs Expected chart${chartSignal ? ` — ${escapeHtml(chartSignal)}` : ''}</h3>
@@ -2541,7 +2589,7 @@
         app.evidence = app.evidencePreview;
         app.evidenceTotal = message.evidenceTotal || app.evidenceTotal;
         app.signalDiscovery = app.signalProfiles;
-        app.machineStateRows = app.machineStatesPreview;
+        app.machineStateRows = message.machineStateRows || app.machineStatesPreview;
         app.diagnostics = message.diagnostics || app.diagnostics;
         app.counts = normalizeCounts(message.counts, { evidenceTotal: app.evidenceTotal });
         updatePipelineFromWorker(message.pipeline);
@@ -2568,7 +2616,7 @@
       app.inventory = app.focusedFiles;
       app.evidence = app.evidencePreview;
       app.signalDiscovery = app.signalProfiles;
-      app.machineStateRows = app.machineStatesPreview;
+      app.machineStateRows = normalized.machineStateRows?.length ? normalized.machineStateRows : app.machineStatesPreview;
       app.evidenceTotal = normalized.counts.evidenceRecords;
       app.counts = normalized.counts;
       app.diagnostics = normalized.diagnostics;
@@ -2597,10 +2645,11 @@
       const focusedFiles = Array.isArray(result.focusedFiles) ? result.focusedFiles : (Array.isArray(result.inventory) ? result.inventory : []);
       const evidencePreview = Array.isArray(result.evidencePreview) ? result.evidencePreview : [];
       const signalProfiles = Array.isArray(result.signalProfiles) ? result.signalProfiles : [];
-      const machineStatesPreview = Array.isArray(result.machineStatesPreview) ? result.machineStatesPreview : (Array.isArray(result.machineStateRows) ? result.machineStateRows : []);
+      const machineStateRows = Array.isArray(result.machineStateRows) ? result.machineStateRows : [];
+      const machineStatesPreview = Array.isArray(result.machineStatesPreview) ? result.machineStatesPreview : machineStateRows.slice(0, MAX_RENDER_ROWS);
       const diagnostics = Array.isArray(result.diagnostics) ? result.diagnostics : [];
       const counts = normalizeCounts(result.counts, { focusedFiles, evidencePreview, signalProfiles, machineStatesPreview, evidenceTotal: result.evidenceTotal });
-      return { focusedFiles, evidencePreview, signalProfiles, machineStatesPreview, counts, diagnostics, timeSeriesBySignal: result.timeSeriesBySignal || {}, archiveSummary: result.archiveSummary || null, pipeline: result.pipeline };
+      return { focusedFiles, evidencePreview, signalProfiles, machineStatesPreview, machineStateRows, counts, diagnostics, timeSeriesBySignal: result.timeSeriesBySignal || {}, archiveSummary: result.archiveSummary || null, pipeline: result.pipeline };
     }
 
     function normalizeCounts(counts, fallback = {}) {
@@ -2920,6 +2969,7 @@
           for (const sourceType of SOURCE_ORDER) {
             const files = parseQueue.filter(item => item.sourceType === sourceType);
             await parseSource(sourceType, files, parseQueue.length);
+            if (sourceType === 'MachineStates') finalizeMachineStateSnapshots();
           }
           updateStage('parsing', 'csvTxtParsing', parseQueue.length ? 'done' : 'warning', parseQueue.length ? 'Focused CSV/TXT files parsed with safe limits.' : 'No focused CSV/TXT files were available to parse.', parseQueue.length);
           if (!parseQueue.length) {
@@ -3002,7 +3052,6 @@
               if (rowCount % ROW_BATCH_SIZE === 0) sendProgress();
               return true;
             }, error => addDiagnostic('warning', 'CSV/TXT parsing', item.path, 'CSV parser error', error.message || String(error)), parserOptions);
-            if (item.sourceType === 'MachineStates') ctx.machineStateRows.sort((a, b) => (a.timeMs || Infinity) - (b.timeMs || Infinity));
             if (item.sourceType === 'BSSNotifications') addBssParseResultDiagnostics(item, rowCount, evidenceCount, skippedRows, headers, csvPlan);
             if (truncated) addDiagnostic('warning', 'CSV/TXT parsing', item.path, 'file truncated because row limit reached', 'Stopped after ' + MAX_FILE_PARSE_ROWS + ' rows. Aggregates and stored preview remain safe.');
             addInventory(item, rowCount, headers, truncated ? 'truncated' : (rowCount ? 'parsed' : 'warning: no rows'), truncated);
@@ -3017,7 +3066,7 @@
             let stopped = false;
             await new Promise(resolve => {
               Papa.parse(text, {
-                header: true, skipEmptyLines: true, delimiter: options.delimiter || '', transformHeader: header => String(header || '').trim(),
+                header: true, skipEmptyLines: true, delimiter: options.delimiter || '', transformHeader: header => cleanCsvHeader(header),
                 step: (results, parser) => {
                   if (stopped) return;
                   const keepGoing = onRow(results.data, results.meta || {});
@@ -3031,7 +3080,7 @@
           }
           const lines = text.split(/\r?\n/);
           const delimiter = options.delimiter || ',';
-          const headers = parseCsvLine(lines.shift() || '', delimiter).map(h => h.trim());
+          const headers = parseCsvLine(lines.shift() || '', delimiter).map(h => cleanCsvHeader(h));
           for (const line of lines) {
             if (!line.trim()) continue;
             const values = parseCsvLine(line, delimiter);
@@ -3133,7 +3182,7 @@
             evidenceTotal: ctx.evidenceTotal,
             signalProfiles,
             machineStatesPreview,
-            machineStateRows: machineStatesPreview,
+            machineStateRows: ctx.machineStateRows,
             timeSeriesBySignal: ctx.timeSeriesBySignal,
             counts: {
               focusedFilesParsed: focusedFiles.length,
@@ -3225,14 +3274,36 @@
 
         function createEvidence(fields) {
           const value = fields.value ?? '';
-          return { id: 'ev-' + (ctx.evidenceTotal + 1), timestamp: fields.timestamp || '', sourceFileId: fields.sourceFileId || '', sourceFile: fields.sourceFileId || '', sourceType: fields.sourceType || '', system: fields.system || '', subsystem: fields.subsystem || '', component: fields.component || '', subComponent: fields.subComponent || '', parameterType: fields.parameterType || '', signal: fields.signal || '', fullSignal: fields.fullSignal || fields.signal || '', value, numericValue: toNumber(value), unit: fields.unit || '', machineState: '', systemState: fields.systemState || '', stateContextStatus: 'pending', isAlertLike: Boolean(fields.isAlertLike), rawPreview: trimRaw(fields.rawPreview || '') };
+          return { id: 'ev-' + (ctx.evidenceTotal + 1), timestamp: fields.timestamp || '', timeMs: parseTime(fields.timestamp || '', fields.sourceType || ''), sourceFileId: fields.sourceFileId || '', sourceFile: fields.sourceFileId || '', sourceType: fields.sourceType || '', system: fields.system || '', subsystem: fields.subsystem || '', component: fields.component || '', subComponent: fields.subComponent || '', parameterType: fields.parameterType || '', signal: fields.signal || '', fullSignal: fields.fullSignal || fields.signal || '', value, numericValue: toNumber(value), unit: fields.unit || '', machineState: '', systemState: fields.systemState || '', stateContextStatus: 'pending', isAlertLike: Boolean(fields.isAlertLike), rawPreview: trimRaw(fields.rawPreview || '') };
         }
 
         function normalizeMachineStateRow(row, sourceFileId) {
           const timestamp = firstValue(row, ['Time', 'Timestamp', 'DateTime']);
           const systemStates = {};
           MACHINE_STATE_SYSTEMS.forEach(system => { systemStates[system] = firstValue(row, [system]) || ''; });
-          return { id: 'state-' + (ctx.machineStateRows.length + 1), timestamp, timeMs: parseTime(timestamp), sourceFileId, machineState: firstValue(row, ['Machine', 'MachineState']) || '', systemStates, rawPreview: previewRow(row) };
+          return { id: 'state-' + (ctx.machineStateRows.length + 1), timestamp, timeMs: parseTime(timestamp, 'MachineStates'), sourceFileId, machineState: firstValue(row, ['Machine', 'MachineState']) || '', systemStates, rawPreview: previewRow(row) };
+        }
+
+        function finalizeMachineStateSnapshots() {
+          if (!ctx.machineStateRows.length) return;
+          ctx.machineStateRows.sort((a, b) => (Number.isFinite(a.timeMs) ? a.timeMs : Infinity) - (Number.isFinite(b.timeMs) ? b.timeMs : Infinity));
+          const current = { Machine: '' };
+          MACHINE_STATE_SYSTEMS.forEach(system => { current[system] = ''; });
+          ctx.machineStateRows = ctx.machineStateRows.map((row, index) => {
+            if (!isSparsePlaceholder(row.machineState)) current.Machine = row.machineState || current.Machine;
+            const filledStates = {};
+            MACHINE_STATE_SYSTEMS.forEach(system => {
+              const value = row.systemStates?.[system] || '';
+              if (!isSparsePlaceholder(value)) current[system] = value || current[system];
+              filledStates[system] = current[system] || '';
+            });
+            return { ...row, id: 'state-' + (index + 1), machineState: current.Machine || row.machineState || '', systemStates: filledStates };
+          });
+        }
+
+        function isSparsePlaceholder(value) {
+          const text = String(value ?? '').trim();
+          return !text || text === '---';
         }
 
         function normalizeAlertLine(line, item, lineNumber) {
@@ -3250,7 +3321,7 @@
 
         function getStateAt(timestamp, system) {
           if (!ctx.machineStateRows.length) return { machineState: '', systemState: '', matchedTimestamp: '', status: 'missing' };
-          const timeMs = parseTime(timestamp);
+          const timeMs = parseTime(timestamp, system === 'BSS' ? 'BSSNotifications' : '');
           const normalizedSystem = normalizeSystemForState(system);
           if (Number.isNaN(timeMs)) {
             const fallback = ctx.machineStateRows[0];
@@ -3344,7 +3415,8 @@
         async function yieldIfNeeded(force = false) { const now = Date.now(); if (force || now - ctx.lastUi >= UI_YIELD_EVERY_MS) { ctx.lastUi = now; await new Promise(resolve => setTimeout(resolve, 0)); } }
         function addDiagnostic(level, stage, filePath, message, technicalDetails) { ctx.diagnostics.push({ level, stage, filePath, message, technicalDetails }); }
         function countDiagnostics(level) { return ctx.diagnostics.filter(item => item.level === level).length; }
-        function normalizeLooseHeader(value) { return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+        function cleanCsvHeader(value) { return String(value || '').replace(/\\n/g, '').replace(/\n/g, '').replace(/^['"]+|['"]+$/g, '').trim(); }
+        function normalizeLooseHeader(value) { return cleanCsvHeader(value).toLowerCase().replace(/[^a-z0-9]+/g, ''); }
         function fatal(error) { addDiagnostic('error', 'Fatal pipeline failure', '', error.message || String(error), error.stack || ''); self.postMessage({ type: 'error', message: error.message || String(error), diagnostics: ctx.diagnostics, pipeline: ctx.pipeline }); }
         function firstValue(row, keys) {
           for (const key of keys) if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return String(row[key]).trim();
@@ -3359,7 +3431,21 @@
         function isTruthy(value) { return ['true', '1', 'yes', 'y', 'error', 'warning'].includes(String(value || '').trim().toLowerCase()); }
         function previewRow(row) { return trimRaw(Object.entries(row).slice(0, 12).map(([key, value]) => key + '=' + value).join(' | ')); }
         function trimRaw(value) { const text = String(value ?? ''); return text.length > MAX_RAW_LINE_LENGTH ? text.slice(0, MAX_RAW_LINE_LENGTH) + '…' : text; }
-        function parseTime(value) { const text = String(value || '').trim(); if (!text) return Number.NaN; const direct = Date.parse(text); if (!Number.isNaN(direct)) return direct; const normalized = text.replace(/^(\d{4}-\d{2}-\d{2})[ _](\d{2}-\d{2}-\d{2})/, '$1T$2').replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3'); const retry = Date.parse(normalized); return Number.isNaN(retry) ? Number.NaN : retry; }
+        function parseTime(value, sourceType = '') {
+          const text = String(value || '').trim();
+          if (!text) return Number.NaN;
+          const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})(?:[.:](\d{1,6}))?/);
+          if (slash) {
+            const first = Number(slash[1]), second = Number(slash[2]);
+            const month = sourceType === 'MachineStates' ? second : first;
+            const day = sourceType === 'MachineStates' ? first : second;
+            const ms = Number((slash[7] || '0').padEnd(3, '0').slice(0, 3));
+            return Date.UTC(Number(slash[3]), month - 1, day, Number(slash[4]), Number(slash[5]), Number(slash[6]), ms);
+          }
+          const normalized = text.replace(/^(\d{4}-\d{2}-\d{2})[ _](\d{2}-\d{2}-\d{2})/, '$1T$2').replace(/T(\d{2})-(\d{2})-(\d{2})/, 'T$1:$2:$3');
+          const direct = Date.parse(normalized);
+          return Number.isNaN(direct) ? Number.NaN : direct;
+        }
         function compareTimestamp(left, right) { const leftMs = parseTime(left); const rightMs = parseTime(right); if (!Number.isNaN(leftMs) && !Number.isNaN(rightMs)) return leftMs - rightMs; return String(left || '').localeCompare(String(right || '')); }
         function normalizeSystemForState(system) { if (system === 'FEC') return 'PSS'; if (MACHINE_STATE_SYSTEMS.includes(system)) return system; return system; }
         function extractTimestamp(text) { const match = String(text).match(/\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?|\d{2}[-/]\d{2}[-/]\d{4}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?/); return match ? match[0] : ''; }
