@@ -268,6 +268,14 @@
       padding: 18px 24px 0;
     }
 
+    .analysis-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 16px 24px 0;
+      color: var(--text-muted);
+    }
+
     .progress-track {
       height: 12px;
       border: 1px solid var(--border);
@@ -789,29 +797,11 @@
           <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
           <p id="scanStage" class="scan-stage">Waiting for autocollect ZIP.</p>
         </div>
-      </section>
-
-      <section class="kpi-row" aria-label="Service radar KPIs">
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems OK</p>
-          <span id="kpiFiles" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems Warning</p>
-          <span id="kpiEvidence" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Systems Critical</p>
-          <span id="kpiSignals" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Needs Validation</p>
-          <span id="kpiStates" class="kpi-value muted">No data</span>
-        </article>
-        <article class="card kpi-card">
-          <p class="kpi-label">Time Range</p>
-          <span id="kpiRules" class="kpi-value muted">No rules</span>
-        </article>
+        <div id="analysisSummary" class="analysis-summary" aria-label="Analysis completion, time range, and rules loaded">
+          <span class="metric-pill">Analysis: Waiting</span>
+          <span class="metric-pill">Time range: No data</span>
+          <span class="metric-pill">Rules loaded: 0 / 12 BSS-BCU</span>
+        </div>
       </section>
 
       <section class="card health-map-card" aria-label="Machine-centered system health map">
@@ -859,6 +849,33 @@
         <div id="drilldownBody" class="panel-body"><div class="empty-state">Select BSS and open drill-down to inspect the 12 BSS / BCU rules.</div></div>
       </section>
 
+      <details class="debug-explorer">
+        <summary>Debug / Data Explorer (collapsed)</summary>
+        <div class="debug-body">
+
+      <section class="kpi-row" aria-label="Debug service radar KPIs">
+        <article class="card kpi-card">
+          <p class="kpi-label">Systems OK</p>
+          <span id="kpiFiles" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Systems Warning</p>
+          <span id="kpiEvidence" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Systems Critical</p>
+          <span id="kpiSignals" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Needs Validation</p>
+          <span id="kpiStates" class="kpi-value muted">No data</span>
+        </article>
+        <article class="card kpi-card">
+          <p class="kpi-label">Time Range</p>
+          <span id="kpiRules" class="kpi-value muted">No rules</span>
+        </article>
+      </section>
+
       <section class="card" aria-label="Compact evidence log">
         <div class="panel-header">
           <div>
@@ -870,9 +887,6 @@
         <div id="latestEvidenceBody" class="panel-body"><div class="empty-state">No evaluated evidence yet.</div></div>
       </section>
 
-      <details class="debug-explorer">
-        <summary>Debug / Data Explorer (collapsed)</summary>
-        <div class="debug-body">
 
       <section class="card" aria-label="BSS BCU health summary">
         <div class="panel-header">
@@ -1107,6 +1121,7 @@
       rulesFileName: document.getElementById('rulesFileName'),
       progressBar: document.getElementById('progressBar'),
       scanStage: document.getElementById('scanStage'),
+      analysisSummary: document.getElementById('analysisSummary'),
       pipelineGrid: document.getElementById('pipelineGrid'),
       pipelineTag: document.getElementById('pipelineTag'),
       bssHealthTag: document.getElementById('bssHealthTag'),
@@ -1266,6 +1281,7 @@
 
     function renderAll() {
       renderBssHealthSummary();
+      renderAnalysisSummary();
       renderHealthMap();
       renderDeviationTimeline();
       renderLatestEvidenceLog();
@@ -1283,6 +1299,28 @@
       renderAll();
     }
 
+
+    function renderAnalysisSummary() {
+      ensureBssEvaluation();
+      const times = (app.evaluatedPoints || []).map(pointTime).filter(Number.isFinite);
+      const timeRange = times.length ? `${formatTime(new Date(Math.min(...times)).toISOString())} – ${formatTime(new Date(Math.max(...times)).toISOString())}` : 'No evaluated BSS values';
+      const rulesLoaded = app.rulesSummary?.bssRules?.length || 0;
+      const bssEvidenceRows = (app.evidence || []).filter(ev => ev.sourceType === 'BSSNotifications' && sameSystem(ev.system, 'BSS')).length;
+      const statusText = app.status === PIPELINE_STATUS.COMPLETED || app.status === PIPELINE_STATUS.COMPLETED_WITH_WARNINGS || app.evaluatedPoints.length
+        ? 'Analysis complete'
+        : (app.status === PIPELINE_STATUS.FAILED ? 'Analysis failed' : (app.status === PIPELINE_STATUS.PARSING || app.status === PIPELINE_STATUS.SCANNING ? 'Analyzing' : 'Waiting'));
+      if (els.analysisSummary) {
+        els.analysisSummary.innerHTML = `
+          <span class="metric-pill">Analysis: ${escapeHtml(statusText)}</span>
+          <span class="metric-pill">Time range: ${escapeHtml(timeRange)}</span>
+          <span class="metric-pill">Rules loaded: ${escapeHtml(String(rulesLoaded))} / 12 BSS-BCU</span>
+          <span class="metric-pill">BSSNotifications rows: ${escapeHtml(String(bssEvidenceRows))}</span>
+          <span class="metric-pill">Evaluated points: ${escapeHtml(String(app.evaluatedPoints.length || 0))}</span>`;
+      }
+      if ((app.status === PIPELINE_STATUS.COMPLETED || app.status === PIPELINE_STATUS.COMPLETED_WITH_WARNINGS) && app.rulesSummary) {
+        setHeader(`${statusText} • ${timeRange} • ${rulesLoaded} rules loaded`, app.status === PIPELINE_STATUS.COMPLETED_WITH_WARNINGS ? 'warning' : 'ready');
+      }
+    }
 
     function renderBssHealthSummary() {
       if (!els.bssHealthBody || !els.bssHealthTag) return;
@@ -1657,7 +1695,8 @@
           </button>`;
         }).join('')}`;
       }
-      renderSystemIssuePanel(selected);
+      const attention = systems.find(item => sameSystem(item.system, 'BSS')) || selected;
+      renderSystemIssuePanel(attention);
     }
 
     function renderMachineImage() {
@@ -1689,14 +1728,14 @@
       const mismatch = summary.mismatch;
       els.systemIssuePanel.innerHTML = `
         <div class="status-${escapeHtml(summary.status)}">
-          <h3 class="issue-card-title"><span class="status-dot"></span>Active Issue — ${escapeHtml(summary.system === 'BSS' ? 'BSS / BCU' : summary.system)}</h3>
+          <h3 class="issue-card-title"><span class="status-dot"></span>What Requires Attention — ${escapeHtml(summary.system === 'BSS' ? 'BSS / BCU' : summary.system)}</h3>
           <p class="issue-card-subtitle">${escapeHtml(mismatch ? 'BSS rules loaded, but BSSNotifications values were not matched.' : (hasIssue ? (problem?.title || `${summary.system} requires attention`) : `${summary.system} is ${statusLabel(summary.status)}.`))}</p>
           ${mismatch ? renderBssMismatchSummary(mismatch) : `
           <div class="issue-fields">
             <div class="issue-field"><strong>System</strong>${escapeHtml(summary.system === 'BSS' ? 'BSS / BCU' : summary.system)}</div>
             <div class="issue-field"><strong>Worst signal</strong>${escapeHtml(summary.health?.worstSignal || problem?.point?.signal || 'Unavailable')}</div>
             <div class="issue-field"><strong>Actual value</strong>${escapeHtml(String(summary.health?.latestActual ?? problem?.point?.actualDisplay ?? 'Unavailable'))}</div>
-            <div class="issue-field"><strong>Expected range</strong>${escapeHtml(summary.health?.expectedRange || problem?.actualExpected || summary.actualExpectedPreview || 'Not evaluated')}</div>
+            <div class="issue-field"><strong>Expected range</strong>${escapeHtml(summary.health?.expectedRange || compactJoin([problem?.point?.expectedForState, problem?.point?.expectedRange], ' • ') || 'Not evaluated')}</div>
             <div class="issue-field"><strong>Machine state</strong>${escapeHtml(summary.health?.machineState || problem?.machineState || summary.currentMachineState || 'Unavailable')}</div>
             <div class="issue-field"><strong>First deviation time</strong>${escapeHtml(summary.health?.firstDeviationTime || 'None')}</div>
             <div class="issue-field"><strong>Last deviation time</strong>${escapeHtml(summary.health?.lastDeviationTime || 'None')}</div>
@@ -2458,7 +2497,9 @@
 
     els.systemIssuePanel?.addEventListener('click', event => {
       if (event.target.id !== 'openSystemDrilldown') return;
+      app.selectedSystem = 'BSS';
       app.systemDrilldownOpen = true;
+      renderHealthMap();
       renderDrilldown();
       els.drilldownSection.hidden = false;
       els.drilldownSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2763,7 +2804,8 @@
         sheetName = 'CSV';
       } else {
         const workbook = XLSX.read(buffer, { type: 'array' });
-        sheetName = workbook.SheetNames.includes('PANDA Rules Template') ? 'PANDA Rules Template' : workbook.SheetNames[0];
+        if (!workbook.SheetNames.includes('PANDA Rules Template')) throw new Error('Rules workbook must include a sheet named PANDA Rules Template.');
+        sheetName = 'PANDA Rules Template';
         const sheet = workbook.Sheets[sheetName];
         const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
         const parsed = buildRulesFromMatrix(matrix);
