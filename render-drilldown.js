@@ -1,3 +1,4 @@
+import { SYSTEM_HOTSPOTS } from './config.js';
 import { $, blockerLabel, chooseInitialParameter, chooseInitialSystem, deviationText, escapeAttr, escapeHtml, expectedText, fmtDuration, fmtNum, fmtTime, getServiceDecision, groupParameters, hasExpectedRange, normalizeStatus, priority, renderActualExpectedChart, renderComparisonGauge, renderEmptyState, renderParameterCard, renderStateTimeline, renderStatusBadge, renderSystemHealthDonut, statusClass, statusLabel } from './render.js';
 
 export function renderDrilldown(app, handlers) {
@@ -20,12 +21,32 @@ export function renderDrilldown(app, handlers) {
     <section class="drill-summary panel pad"><div class="breadcrumbs">Analysis Workspace → Analysis Summary → Service Radar → ${escapeHtml(system || 'System')}</div>${renderSummaryBar(health, summaries, selected)}</section>
     <section class="drilldown-main">
       <aside class="parameter-nav panel pad"><div class="panel-title"><h2>Parameter Comparison Matrix</h2></div>${renderParameterNavigator(summaries, selected?.ruleId)}</aside>
-      <section class="chart-panel panel pad"><div class="chart-heading"><div>${renderStatusBadge(selected?.status || health.status)}<h2>${escapeHtml(selected?.signal || 'No parameter selected')}</h2><p>${escapeHtml(selected?.component || selected?.subsystem || 'Select a parameter to investigate.')}</p></div><div class="legend"><span class="actual-key"></span>Actual <span class="expected-key"></span>Expected range</div></div>${selected ? renderActualExpectedChart(chart, selected, events) : renderEmptyState('No parameter selected', 'This system has no parameter summaries in the AnalysisResult.', health.status)}${renderStateComparison(selected)}${renderStateTimeline({ stateTimeline: result.stateTimeline || [], events })}</section>
+      <section class="chart-panel panel pad"><div class="chart-heading"><div>${renderStatusBadge(selected?.status || health.status)}<h2>${escapeHtml(selected?.signal || 'No parameter selected')}</h2><p>${escapeHtml(selected?.component || selected?.subsystem || 'Select a parameter to investigate.')}</p></div><div class="legend"><button class="expand-chart" type="button" onclick="this.closest('.chart-panel').classList.toggle('expanded')">Expand</button><span class="actual-key"></span>Actual <span class="expected-key"></span>Expected range</div></div>${renderSystemVisual(system, summaries, selected?.ruleId)}${selected ? renderActualExpectedChart(chart, selected, events) : renderEmptyState('No parameter selected', 'This system has no parameter summaries in the AnalysisResult.', health.status)}${renderStateComparison(selected)}${renderStateTimeline({ stateTimeline: result.stateTimeline || [], events })}</section>
       <aside class="selected-param panel pad">${selected ? renderSelectedParameter(result, selected, events) : renderEmptyState('No parameter selected', 'No rules or matching values exist for this system.', health.status)}</aside>
     </section>
     <section class="drill-bottom panel pad">${renderBottomInvestigation(result, selected, events)}</section>`;
   $('drilldownRoot').querySelectorAll('[data-rule]').forEach(el => el.addEventListener('click', () => handlers.selectRule(el.dataset.rule)));
   $('drilldownRoot').querySelectorAll('[data-filter]').forEach(el => el.addEventListener('click', () => applyMatrixFilter(el.dataset.filter)));
+}
+
+
+function renderSystemVisual(system, summaries, selectedId) {
+  const rows = sortComparisonRows(summaries).filter(row => ['critical', 'warning', 'needs_validation', 'needs_configuration', 'ok', 'no_data'].includes(normalizeStatus(row.status))).slice(0, 8);
+  const map = SYSTEM_HOTSPOTS[system] || { region: 'central_print_engine' };
+  return `<div class="drill-visual" ondblclick="this.classList.toggle('show-all')"><button class="show-all-toggle" type="button" onclick="this.parentElement.classList.toggle('show-all')">Show All</button>${systemPlaceholderSvg(system, map.region)}${rows.map((row, idx) => renderParamPin(row, selectedId, idx)).join('')}</div>`;
+}
+
+function systemPlaceholderSvg(system, region) {
+  const accent = region === 'front_cockpit' ? '#f7fbff' : region === 'right_imaging_delivery' ? '#263747' : '#162331';
+  return `<svg class="system-svg" viewBox="0 0 520 240" role="img" aria-label="${escapeAttr(system)} system visual"><defs><linearGradient id="sysBody" x1="0" x2="1"><stop offset="0" stop-color="${accent}"/><stop offset="1" stop-color="#0e1722"/></linearGradient></defs><ellipse cx="260" cy="206" rx="210" ry="24" fill="rgba(0,0,0,.38)"/><path d="M52 150 L106 76 L394 76 L468 132 L438 178 L84 180 Z" fill="url(#sysBody)" stroke="#60758a" stroke-width="3"/><rect x="134" y="104" width="248" height="28" rx="9" fill="#0b131d"/><rect x="154" y="114" width="206" height="7" rx="4" fill="#39c7f3"/><circle cx="148" cy="184" r="16" fill="#111923"/><circle cx="374" cy="184" r="16" fill="#111923"/><text x="260" y="58" text-anchor="middle" fill="#d9e8f6" font-size="28" font-weight="800">${escapeHtml(system)}</text></svg>`;
+}
+
+function renderParamPin(row, selectedId, idx = 0) {
+  const status = normalizeStatus(row.status);
+  const positions = [['4%', '12%', 'auto', 'auto'], ['auto', '14%', '4%', 'auto'], ['6%', 'auto', 'auto', '14%'], ['auto', 'auto', '5%', '16%'], ['25%', '6%', 'auto', 'auto'], ['auto', '7%', '26%', 'auto'], ['25%', 'auto', 'auto', '6%'], ['auto', 'auto', '28%', '7%']];
+  const [left, top, right, bottom] = positions[idx % positions.length];
+  const style = `left:${left};top:${top};right:${right};bottom:${bottom}`;
+  return `<button class="param-pin ${statusClass(status)}" style="${style}" data-rule="${escapeAttr(row.ruleId)}" aria-pressed="${row.ruleId === selectedId}">${renderStatusBadge(status, row.signal || row.parameterName || 'Parameter')}<span>Actual ${fmtNum(row.latestActual)} · Expected ${escapeHtml(expectedText(row))}</span></button>`;
 }
 
 function applyMatrixFilter(filter) {

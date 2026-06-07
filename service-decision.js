@@ -28,6 +28,8 @@ export function buildServiceDecision(result = {}) {
   const primarySystem = (systemRisk.sort(bySystemPriority)[0]?.system) || primaryFinding?.system || systemsRequiringAttention.sort(bySystemPriority)[0]?.system || fullyEvaluatedSystems[0]?.system || systems[0]?.system || null;
   const machineStatus = chooseMachineStatus({ criticalFindings, warningFindings, validationProblems, configurationProblems, rules, systems });
   const nextRecommendedAction = buildRecommendedAction(machineStatus, primaryFinding, { configurationProblems, validationProblems, operationalFindings });
+  const fullyEvaluatedRules = rules.filter(rule => ['ok', 'warning', 'critical'].includes(normalizeDecisionStatus(rule.status)) && (rule.fullyEvaluatedPoints || 0) > 0);
+  const matchedSignals = rules.filter(rule => (rule.matchedRows || 0) > 0);
   const analysisCompleteness = ratio(metadata.rulesEvaluated || statusCounts.ok + statusCounts.warning + statusCounts.critical, metadata.rulesValid || rules.length);
   const dataQuality = ratio((metadata.relevantValuesFound || 0) - (metadata.needsValidationPoints || 0), metadata.relevantValuesFound || 0);
   const ruleCoverage = ratio(metadata.relevantSignalsFound || 0, metadata.relevantSignalsRequired || 0);
@@ -48,7 +50,10 @@ export function buildServiceDecision(result = {}) {
     partiallyEvaluatedSystems,
     primarySystem,
     primaryFinding,
+    topFindings: operationalFindings.slice(0, 3),
     nextRecommendedAction,
+    fullyEvaluatedRules,
+    matchedSignals,
     analysisCompleteness,
     dataQuality,
     ruleCoverage,

@@ -87,9 +87,11 @@ export function renderHotspot(system, health = {}, selectedSystem = '', filter =
 function renderActiveIssue(result, app, handlers, decision) {
   const selectedSystem = app.selectedSystem || decision.primarySystem || chooseInitialSystem(result);
   const events = decision.operationalFindings || [];
-  const selectedEvent = events.find(event => event.id === app.selectedEventId && event.system === selectedSystem) || events.find(event => event.system === selectedSystem);
+  const systemEvents = events.filter(event => event.system === selectedSystem).sort((a, b) => priority(b.severity) - priority(a.severity) || (b.maximumDeviation || 0) - (a.maximumDeviation || 0));
+  const selectedEvent = systemEvents.find(event => event.id === app.selectedEventId) || systemEvents[0];
   const summaries = (result.signalSummaries || []).filter(row => row.system === selectedSystem).sort((a, b) => priority(b.status) - priority(a.status));
   const selectedSummary = selectedEvent ? summaries.find(row => row.signal === selectedEvent.signal) : chooseInitialParameter({ signalSummaries: summaries }, selectedSystem);
+  const issueRows = buildSystemIssueRows(systemEvents, summaries);
   const item = selectedEvent || selectedSummary;
   if (!item) {
     $('activeIssue').innerHTML = renderEmptyState('No rule configured', 'This system has no configured evaluation rules.', 'no_rule');
@@ -108,6 +110,7 @@ function renderActiveIssue(result, app, handlers, decision) {
       <div><label>Deviation</label><strong>${escapeHtml(deviationText(actual, item))}</strong></div>
     </div>
     ${Number.isFinite(actual) ? renderComparisonGauge({ actual, expectedLow: item.expectedLow, expectedHigh: item.expectedHigh, warningLow: item.warningLow, warningHigh: item.warningHigh, criticalLow: item.criticalLow, criticalHigh: item.criticalHigh, status }) : ''}
+    <div class="issue-finding-stack">${issueRows.slice(0, 3).map(renderMiniFinding).join('')}${Math.max(0, issueRows.length - 3) ? `<span class="additional-findings">+ ${issueRows.length - 3} additional findings in Drill-Down</span>` : ''}</div>
     ${renderSystemHealthDonut(health, summaries)}
     <div class="issue-facts">
       <div><label>Machine State</label><b>${escapeHtml([...(item.machineStatesSeen || [])][0] || selectedSummary?.currentMachineState || '—')}</b></div>
@@ -120,6 +123,19 @@ function renderActiveIssue(result, app, handlers, decision) {
     <div class="action-box ${statusClass(status)}"><strong>${status === 'needs_configuration' ? 'Required configuration action' : status === 'needs_validation' ? 'Required validation action' : 'Recommended action'}</strong><p>${escapeHtml(actionFor(item, selectedSummary, status, decision))}</p></div>
   </div>`;
   $('openIssueDrill').onclick = () => handlers.openDrilldown(item.system || selectedSystem);
+}
+
+
+function buildSystemIssueRows(events, summaries) {
+  const eventRows = events.map(event => ({ ...event, status: event.severity, parameterName: event.parameterName || event.signal, actual: event.latestActual ?? event.firstActual }));
+  const configuredRows = summaries.filter(row => !eventRows.some(event => event.signal === row.signal) && ISSUE_STATUSES.has(normalizeStatus(row.status))).map(row => ({ ...row, actual: row.latestActual }));
+  return [...eventRows, ...configuredRows].sort((a, b) => priority(b.severity || b.status) - priority(a.severity || a.status) || Math.abs(b.maximumDeviation || b.deviation || 0) - Math.abs(a.maximumDeviation || a.deviation || 0));
+}
+
+function renderMiniFinding(item) {
+  const status = normalizeStatus(item.severity || item.status);
+  const actual = item.latestActual ?? item.actual ?? item.firstActual;
+  return `<div class="mini-finding ${statusClass(status)}">${renderStatusBadge(status)}<h3 title="${escapeAttr(item.parameterName || item.signal || 'Parameter')}">${escapeHtml(item.parameterName || item.signal || 'Parameter')}</h3><div class="comparison-grid compact"><div><label>Actual</label><strong>${fmtNum(actual)}</strong></div><div><label>Expected</label><strong>${escapeHtml(expectedText(item))}</strong></div><div><label>Difference</label><strong>${escapeHtml(deviationText(actual, item))}</strong></div></div><small>State: ${escapeHtml([...(item.machineStatesSeen || [])][0] || item.currentMachineState || '—')} · Action: ${escapeHtml(item.recommendedAction || blockerLabel(item.blocker) || 'Review in Drill-Down')}</small></div>`;
 }
 
 function actionFor(item, summary, status, decision) {

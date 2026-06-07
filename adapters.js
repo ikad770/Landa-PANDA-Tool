@@ -23,7 +23,9 @@ export function cleanTimestampValue(value) {
     .replace(/\uFEFF/g, '')
     .replace(/\u00A0/g, ' ')
     .replace(/\uFFFD/g, '')
+    .replace(/\\n/g, '')
     .replace(/\n/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
