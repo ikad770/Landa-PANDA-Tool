@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { validateLoginFields } from '../auth.js';
 import { ADAPTERS, matchRuleForRow, parseSlashTimestamp } from '../adapters.js';
 import { evaluateValue, inferCheckType, normalizeState, normalizeToken, parseTolerance, summarizeStateComparisons } from '../evaluation.js';
 import { createStateIndex } from '../machine-states.js';
@@ -44,6 +45,9 @@ assert.equal(new Date(parseSlashTimestamp('12/03/2026 07:02:21.093\u00A0', 'DMY'
 assert.equal(new Date(parseSlashTimestamp('31/12/2025 23:59:59.999', 'DMY')).getDate(), 31, 'DMY end-of-year timestamp parse');
 assert.equal(new Date(parseSlashTimestamp('12/31/2025 23:59:59:999999', 'MDY')).getMilliseconds(), 999, 'MDY colon microseconds parse');
 assert.equal(parseSlashTimestamp('31/12/2025 23:59:59.999', 'MDY'), null, 'Invalid MDY timestamp rejected without Date.parse fallback');
+assert.equal(new Date(parseSlashTimestamp('03/12/2026 15:51:40:441145\\n  ', 'MDY')).getMilliseconds(), 441, 'Escaped newline timestamp is cleaned before manual parsing');
+assert.equal(validateLoginFields({ username: '', password: '' }).valid, false, 'Login validation rejects missing credentials');
+assert.equal(validateLoginFields({ username: 'se', password: '1234' }).valid, true, 'Login validation accepts local service credentials');
 
 const needsValidation = validateAnalysisResult(baseResult());
 assert.equal(needsValidation.valid, true, 'Needs Validation result should validate');
@@ -76,6 +80,8 @@ assert.equal(decision.machineStatus, 'warning', 'serviceDecision machine status 
 assert.equal(decision.systemsAtRiskCount, 1, 'Systems at Risk counts only critical/warning systems');
 assert.equal(decision.systemsRequiringAttentionCount, 2, 'Systems Requiring Attention includes operational and configuration/validation systems');
 assert.equal(decision.operationalFindings.length, 1, 'Operational findings come from real deviation events');
+assert.equal(decision.topFindings.length, 1, 'serviceDecision exposes top findings once centrally');
+assert.equal(Array.isArray(decision.matchedSignals), true, 'serviceDecision exposes matched signals without recalculating in renderers');
 assert.equal(decision.configurationProblems.length, 1, 'Configuration issues are separated at rule level');
 assert.equal(decision.validationProblems.length, 1, 'Validation issues are separated at rule level');
 assert.equal(decision.nextRecommendedAction, 'No service action configured for this rule.', 'Operational warning does not invent a service action when the rule has none');

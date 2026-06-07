@@ -1,14 +1,14 @@
 export const MACHINE_IMAGE_SRC = './assets/landa-machine.png';
 
 export const APP_STAGES = [
-  ['rules_loading', 'Rules', 5],
+  ['rules_loading', 'Upload', 5],
   ['archive_validation', 'Archive validation', 5],
-  ['opc_indexing', 'opc indexing', 10],
+  ['opc_indexing', 'opc.zip indexing', 10],
   ['source_discovery', 'Source discovery', 5],
-  ['machine_states', 'MachineStates', 15],
+  ['machine_states', 'MachineStates parsing', 15],
   ['source_parsing', 'Required log parsing', 40],
-  ['evaluation', 'Evaluation', 10],
-  ['timeline_finalization', 'Timeline/charts', 5],
+  ['evaluation', 'Rule evaluation', 10],
+  ['timeline_finalization', 'Timeline / chart preparation', 5],
   ['result_validation', 'Result validation', 5]
 ];
 

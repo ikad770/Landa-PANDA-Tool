@@ -2,6 +2,6 @@
   "type": "module",
   "scripts": {
     "test": "node tests/module-tests.mjs",
-    "check:js": "for f in index.html styles.css app.js worker.js adapters.js rules.js machine-states.js evaluation.js render.js render-radar.js render-drilldown.js service-decision.js config.js tests/module-tests.mjs; do case \"$f\" in *.js|*.mjs) node --check \"$f\" ;; esac; done"
+    "check:js": "for f in index.html styles.css app.js auth.js worker.js adapters.js rules.js machine-states.js evaluation.js render.js render-radar.js render-drilldown.js service-decision.js config.js tests/module-tests.mjs; do case \"$f\" in *.js|*.mjs) node --check \"$f\" ;; esac; done"
   }
 }

@@ -1,4 +1,5 @@
 import { APP_STAGES } from './config.js';
+import { createLocalSession, validateLoginFields } from './auth.js';
 import { getServiceDecision } from './render.js';
 import { chooseInitialSystem, renderDiagnostics, renderServiceRadar, validateAnalysisResult } from './render-radar.js';
 import { renderDrilldown } from './render-drilldown.js';
@@ -17,12 +18,49 @@ const app = {
   selectedRuleId: null,
   systemFilter: 'issues',
   lastView: 'analysis',
-  workerUrl: null
+  workerUrl: null,
+  session: null,
+  authLoading: false
 };
 
 function show(view) {
-  ['analysisView', 'radarView', 'drilldownView', 'diagnosticsView'].forEach(id => $(id).classList.toggle('hidden', id !== view));
+  ['loginView', 'analysisView', 'radarView', 'drilldownView', 'diagnosticsView'].forEach(id => $(id).classList.toggle('hidden', id !== view));
   app.lastView = view === 'diagnosticsView' ? app.lastView : view.replace('View', '');
+}
+
+
+function setLoginLoading(loading) {
+  app.authLoading = loading;
+  ['usernameInput', 'passwordInput', 'rememberInput', 'signInButton'].forEach(id => { if ($(id)) $(id).disabled = loading; });
+  $('loginForm').classList.toggle('auth-loading', loading);
+}
+
+function renderLoginErrors(errors = {}, message = '') {
+  $('usernameError').textContent = errors.username || '';
+  $('passwordError').textContent = errors.password || '';
+  $('loginMessage').textContent = message || '';
+  $('usernameInput').classList.toggle('invalid', !!errors.username);
+  $('passwordInput').classList.toggle('invalid', !!errors.password);
+}
+
+function submitLogin(event) {
+  event.preventDefault();
+  if (app.authLoading) return;
+  const validation = validateLoginFields({ username: $('usernameInput').value, password: $('passwordInput').value });
+  if (!validation.valid) { renderLoginErrors(validation.errors); return; }
+  renderLoginErrors({}, '');
+  setLoginLoading(true);
+  window.setTimeout(() => {
+    app.session = createLocalSession(validation.username);
+    const userPill = document.querySelector('.user-pill');
+    if (userPill) userPill.textContent = app.session.username;
+    setLoginLoading(false);
+    showAnalysisWorkspace();
+  }, 450);
+}
+
+function forgotPassword() {
+  renderLoginErrors({}, 'Contact your PANDA service administrator to reset local access.');
 }
 
 function renderAnalysisWorkspace() {
@@ -154,6 +192,9 @@ function selectEvent(id) { app.selectedEventId = id; renderServiceRadar(app, { s
 function selectRule(id) { app.selectedRuleId = id; renderDrilldown(app, { selectRule }); }
 function resetAnalysis() { cancelAnalysis(); app.autocollectFile = null; app.rulesFile = null; app.analysisResult = null; app.progress = null; app.selectedSystem = null; app.selectedEventId = null; app.selectedRuleId = null; $('autocollectInput').value = ''; $('rulesInput').value = ''; $('autocollectName').textContent = 'No file selected'; $('rulesName').textContent = 'No file selected'; setWorkspaceMode('upload'); showAnalysisWorkspace(); renderAnalysisWorkspace(); }
 
+$('loginForm').addEventListener('submit', submitLogin);
+$('forgotPassword').onclick = forgotPassword;
+
 $('autocollectInput').addEventListener('change', e => { app.autocollectFile = e.target.files[0] || null; $('autocollectName').textContent = app.autocollectFile?.name || 'No file selected'; renderAnalysisWorkspace(); });
 $('rulesInput').addEventListener('change', e => { app.rulesFile = e.target.files[0] || null; $('rulesName').textContent = app.rulesFile?.name || 'No file selected'; renderAnalysisWorkspace(); });
 $('startAnalysis').onclick = startAnalysis;
@@ -168,10 +209,12 @@ $('backToAnalysis').onclick = showAnalysisWorkspace;
 $('backToRadar').onclick = showServiceRadar;
 $('resetReady').onclick = resetAnalysis;
 $('resetFailed').onclick = resetAnalysis;
+$('resetUpload').onclick = resetAnalysis;
 $('resetFromRadar').onclick = resetAnalysis;
 $('resetFromDiagnostics').onclick = resetAnalysis;
 $('showIssues').onclick = () => { app.systemFilter = 'issues'; $('showIssues').setAttribute('aria-pressed', 'true'); $('showAllSystems').setAttribute('aria-pressed', 'false'); renderServiceRadar(app, { selectEvent, openDrilldown }); };
 $('showAllSystems').onclick = () => { app.systemFilter = 'all'; $('showIssues').setAttribute('aria-pressed', 'false'); $('showAllSystems').setAttribute('aria-pressed', 'true'); renderServiceRadar(app, { selectEvent, openDrilldown }); };
 $('closeDiagnostics').onclick = () => app.lastView === 'radar' ? showServiceRadar() : app.lastView === 'drilldown' ? showDrilldown() : showAnalysisWorkspace();
 
+renderLoginErrors();
 renderAnalysisWorkspace();
