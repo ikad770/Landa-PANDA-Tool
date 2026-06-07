@@ -1,32 +1,69 @@
+export const MACHINE_IMAGE_SRC = './assets/landa-machine.png';
+
 export const APP_STAGES = [
-  ['rules_loading', 'Rules loading', 5],
+  ['rules_loading', 'Rules', 5],
   ['archive_validation', 'Archive validation', 5],
-  ['opc_indexing', 'opc.zip indexing', 10],
+  ['opc_indexing', 'opc indexing', 10],
   ['source_discovery', 'Source discovery', 5],
-  ['machine_states', 'MachineStates parsing', 15],
-  ['source_parsing', 'Relevant source parsing', 40],
-  ['evaluation', 'Rule evaluation and deviation aggregation', 10],
-  ['timeline_finalization', 'Timeline/chart finalization', 5],
-  ['dashboard_finalization', 'Dashboard model finalization', 5]
+  ['machine_states', 'MachineStates', 15],
+  ['source_parsing', 'Required log parsing', 40],
+  ['evaluation', 'Evaluation', 10],
+  ['timeline_finalization', 'Timeline/charts', 5],
+  ['result_validation', 'Result validation', 5]
 ];
 
-export const STAGE_WEIGHTS = Object.fromEntries(APP_STAGES.map(([key, , weight]) => [key, weight]));
-
-export const MAX_CSV_TEXT_MB_WARNING = 150;
 export const MAX_CHART_POINTS_PER_RULE = 2000;
 export const MAX_EVIDENCE_PREVIEW_PER_RULE = 20;
 export const MAX_DEVIATION_EVENTS_PER_RULE = 200;
-export const MAX_DIAGNOSTIC_RAW_LINES = 20;
-export const MIN_DEVIATION_GAP_MS = 30_000;
+export const MIN_DEVIATION_GAP_MS = 30000;
+
+export const SYSTEMS = ['DPS', 'DFES', 'MSPS', 'ITS', 'IPS', 'Ventilation', 'ECS', 'IRD', 'QCS', 'BSS', 'STS', 'IPU', 'ICS', 'FEC', 'CWS', 'PSS', 'Dryer'];
+export const MACHINE_STATE_SYSTEMS = ['Machine', 'BSS', 'IPS', 'PSS', 'Dryer', 'IPU', 'Ventilation', 'CWS', 'IRD', 'DFES', 'DPS', 'QCS', 'ICS', 'ECS', 'MSPS', 'ITS'];
+
+export const SYSTEM_HOTSPOTS = {
+  DPS: { x: 16, y: 57, labelX: 6, labelY: 40 },
+  DFES: { x: 25, y: 36, labelX: 10, labelY: 20 },
+  MSPS: { x: 32, y: 66, labelX: 17, labelY: 80 },
+  ITS: { x: 37, y: 43, labelX: 30, labelY: 18 },
+  IPS: { x: 45, y: 62, labelX: 42, labelY: 82 },
+  Ventilation: { x: 48, y: 27, labelX: 43, labelY: 8 },
+  ECS: { x: 55, y: 40, labelX: 57, labelY: 16 },
+  IRD: { x: 61, y: 61, labelX: 61, labelY: 79 },
+  QCS: { x: 66, y: 34, labelX: 70, labelY: 14 },
+  BSS: { x: 73, y: 59, labelX: 76, labelY: 75 },
+  STS: { x: 79, y: 41, labelX: 82, labelY: 23 },
+  IPU: { x: 84, y: 63, labelX: 87, labelY: 80 },
+  ICS: { x: 88, y: 31, labelX: 83, labelY: 8 },
+  FEC: { x: 91, y: 50, labelX: 91, labelY: 34 },
+  CWS: { x: 24, y: 72, labelX: 7, labelY: 70 },
+  PSS: { x: 53, y: 74, labelX: 51, labelY: 90 },
+  Dryer: { x: 67, y: 72, labelX: 70, labelY: 89 }
+};
+
+export const REQUIRED_SOURCE_PATHS = {
+  BSSNotifications: ['logs/LLCINotifications/BSS/'],
+  IPSNotifications: ['logs/LLCINotifications/IPS/'],
+  FECNotifications: ['logs/FECNotifications/'],
+  MachineStates: ['logs/MachineStates/'],
+  AlertsMonitoring: ['logs/AlertsMonitoring.txt', 'logs/AletrsMonitoring.txt']
+};
+
+export const SIGNAL_ALIASES = {
+  fillflowmeteractualvalve: ['fillflowmeteractualvalue'],
+  fillflowmeteractualvalue: ['fillflowmeteractualvalve'],
+  waterflowmeteractualvalve: ['waterflowmeteractualvalue'],
+  waterflowmeteractualvalue: ['waterflowmeteractualvalve']
+};
 
 export const STATUS_PRIORITY = {
-  critical: 6,
-  warning: 5,
-  needs_validation: 4,
-  evaluator_pending: 3,
-  ok: 2,
-  no_data: 1,
-  no_rule: 0
+  critical: 70,
+  warning: 60,
+  needs_validation: 50,
+  evaluator_pending: 40,
+  ok: 30,
+  no_data: 20,
+  no_rule: 10,
+  not_analyzed: 0
 };
 
 export const STATUS_LABEL = {
@@ -36,18 +73,8 @@ export const STATUS_LABEL = {
   evaluator_pending: 'Evaluator pending',
   ok: 'OK',
   no_data: 'No data',
-  no_rule: 'No rule'
-};
-
-export const SYSTEM_HOTSPOTS = {
-  DPS: { x: 22, y: 51, labelX: 8, labelY: 35 },
-  DFES: { x: 34, y: 36, labelX: 23, labelY: 18 },
-  BSS: { x: 46, y: 63, labelX: 36, labelY: 76 },
-  IPS: { x: 58, y: 43, labelX: 62, labelY: 23 },
-  FEC: { x: 72, y: 52, labelX: 75, labelY: 36 },
-  LLCI: { x: 41, y: 49, labelX: 28, labelY: 56 },
-  DFE: { x: 64, y: 33, labelX: 69, labelY: 16 },
-  MACHINE: { x: 50, y: 20, labelX: 43, labelY: 8 }
+  no_rule: 'No rule',
+  not_analyzed: 'Not analyzed'
 };
 
 export const EXPECTED_STATE_COLUMNS = {
@@ -61,5 +88,5 @@ export const EXPECTED_STATE_COLUMNS = {
   error: 'Expected Error'
 };
 
-export const SUPPORTED_CHECK_TYPES = new Set(['range', 'above threshold', 'below threshold', 'exact']);
-export const PENDING_CHECK_TYPES = new Set(['delta', 'trend', 'flatline', 'statedependent', 'state dependent']);
+export const SUPPORTED_CHECK_TYPES = new Set(['range', 'above threshold', 'below threshold', 'exact', 'max', 'min']);
+export const PENDING_CHECK_TYPES = new Set(['delta', 'trend', 'flatline']);

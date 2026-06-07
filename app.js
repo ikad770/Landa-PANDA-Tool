@@ -1,5 +1,6 @@
 import { APP_STAGES } from './config.js';
-import { chooseInitialSystem, renderDiagnostics, renderDrilldown, renderServiceRadar, validateAnalysisResult } from './render.js';
+import { chooseInitialSystem, renderDiagnostics, renderServiceRadar, validateAnalysisResult } from './render-radar.js';
+import { renderDrilldown } from './render-drilldown.js';
 
 const $ = id => document.getElementById(id);
 const fmtDuration = ms => !Number.isFinite(ms) ? '—' : ms < 1000 ? '<1s' : ms < 60000 ? `${Math.round(ms / 1000)}s` : `${Math.round(ms / 60000)}m ${Math.round(ms % 60000 / 1000)}s`;
@@ -8,7 +9,7 @@ const app = {
   autocollectFile: null,
   rulesFile: null,
   worker: null,
-  result: null,
+  analysisResult: null,
   progress: null,
   selectedSystem: null,
   selectedEventId: null,
@@ -25,18 +26,19 @@ function show(view) {
 
 function renderAnalysisWorkspace() {
   $('startAnalysis').disabled = !(app.autocollectFile && app.rulesFile && !app.worker);
-  $('diagnosticsFromAnalysis').classList.toggle('hidden', !app.result);
+  $('diagnosticsFromAnalysis').classList.toggle('hidden', !app.analysisResult);
 }
 
 function setWorkspaceMode(mode) {
   $('uploadWorkspace').classList.toggle('hidden', mode !== 'upload');
   $('processingWorkspace').classList.toggle('hidden', mode !== 'processing');
   $('readyWorkspace').classList.toggle('hidden', mode !== 'ready');
+  $('failedWorkspace').classList.toggle('hidden', mode !== 'failed');
 }
 
 function startAnalysis() {
   if (!app.autocollectFile || !app.rulesFile) return;
-  app.result = null; app.progress = null; app.selectedSystem = null; app.selectedEventId = null; app.selectedRuleId = null;
+  app.analysisResult = null; app.progress = null; app.selectedSystem = null; app.selectedEventId = null; app.selectedRuleId = null;
   setWorkspaceMode('processing');
   renderSequence('rules_loading');
   const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
@@ -52,17 +54,18 @@ function handleWorkerMessage(message) {
     renderProgress(message.progress);
   } else if (message.type === 'complete') {
     finishWorker();
-    validateAnalysisResult(message.result);
-    app.result = message.result;
-    app.selectedSystem = chooseInitialSystem(app.result);
-    app.selectedEventId = app.result.deviationEvents[0]?.id || null;
+    const result = message.analysisResult || message.result;
+    validateAnalysisResult(result);
+    app.analysisResult = result;
+    app.selectedSystem = chooseInitialSystem(app.analysisResult);
+    app.selectedEventId = app.analysisResult.deviationEvents[0]?.id || null;
     renderReady();
     setWorkspaceMode('ready');
-    renderDiagnostics(app.result);
+    renderDiagnostics(app.analysisResult);
     if ($('autoOpenToggle').checked) showServiceRadar();
   } else if (message.type === 'error') {
     finishWorker();
-    app.result = message.diagnosticsSummary ? { diagnosticsSummary: message.diagnosticsSummary } : app.result;
+    app.analysisResult = message.diagnosticsSummary ? { diagnosticsSummary: message.diagnosticsSummary } : app.analysisResult;
     failAnalysis(message.message);
   }
 }
@@ -80,8 +83,8 @@ function cancelAnalysis() {
 }
 
 function failAnalysis(message) {
-  setWorkspaceMode('upload');
-  alert(`Analysis failed: ${message}`);
+  $('failedReason').textContent = message || 'Analysis could not produce a valid result.';
+  setWorkspaceMode('failed');
   renderAnalysisWorkspace();
 }
 
@@ -112,7 +115,7 @@ function renderSequence(activeStage) {
 }
 
 function renderReady() {
-  const meta = app.result.metadata;
+  const meta = app.analysisResult.metadata;
   $('readyRules').textContent = `${meta.rulesEvaluated} / ${meta.rulesValid}`;
   $('readySignals').textContent = `${meta.relevantSignalsFound} / ${meta.relevantSignalsRequired}`;
   $('readySystems').textContent = meta.systemsEvaluated;
@@ -121,17 +124,17 @@ function renderReady() {
 }
 
 function showServiceRadar() {
-  if (!app.result?.metadata) return;
+  if (!app.analysisResult?.metadata) return;
   renderServiceRadar(app, { selectEvent, openDrilldown });
   show('radarView');
 }
 function showAnalysisWorkspace() { show('analysisView'); }
-function openDiagnostics() { renderDiagnostics(app.result); show('diagnosticsView'); }
+function openDiagnostics() { renderDiagnostics(app.analysisResult); show('diagnosticsView'); }
 function showDrilldown() { renderDrilldown(app, { selectRule }); show('drilldownView'); }
 function openDrilldown(system) { app.selectedSystem = system; showDrilldown(); }
 function selectEvent(id) { app.selectedEventId = id; renderServiceRadar(app, { selectEvent, openDrilldown }); }
 function selectRule(id) { app.selectedRuleId = id; renderDrilldown(app, { selectRule }); }
-function resetAnalysis() { cancelAnalysis(); app.autocollectFile = null; app.rulesFile = null; app.result = null; app.progress = null; app.selectedSystem = null; app.selectedEventId = null; $('autocollectInput').value = ''; $('rulesInput').value = ''; $('autocollectName').textContent = 'No file selected'; $('rulesName').textContent = 'No file selected'; setWorkspaceMode('upload'); showAnalysisWorkspace(); renderAnalysisWorkspace(); }
+function resetAnalysis() { cancelAnalysis(); app.autocollectFile = null; app.rulesFile = null; app.analysisResult = null; app.progress = null; app.selectedSystem = null; app.selectedEventId = null; app.selectedRuleId = null; $('autocollectInput').value = ''; $('rulesInput').value = ''; $('autocollectName').textContent = 'No file selected'; $('rulesName').textContent = 'No file selected'; setWorkspaceMode('upload'); showAnalysisWorkspace(); renderAnalysisWorkspace(); }
 
 $('autocollectInput').addEventListener('change', e => { app.autocollectFile = e.target.files[0] || null; $('autocollectName').textContent = app.autocollectFile?.name || 'No file selected'; renderAnalysisWorkspace(); });
 $('rulesInput').addEventListener('change', e => { app.rulesFile = e.target.files[0] || null; $('rulesName').textContent = app.rulesFile?.name || 'No file selected'; renderAnalysisWorkspace(); });
@@ -139,12 +142,14 @@ $('startAnalysis').onclick = startAnalysis;
 $('cancelAnalysis').onclick = cancelAnalysis;
 $('openRadar').onclick = showServiceRadar;
 $('viewDiagnosticsReady').onclick = openDiagnostics;
+$('viewDiagnosticsFailed').onclick = openDiagnostics;
 $('diagnosticsFromAnalysis').onclick = openDiagnostics;
 $('diagnosticsFromRadar').onclick = openDiagnostics;
 $('diagnosticsFromDrill').onclick = openDiagnostics;
 $('backToAnalysis').onclick = showAnalysisWorkspace;
 $('backToRadar').onclick = showServiceRadar;
 $('resetReady').onclick = resetAnalysis;
+$('resetFailed').onclick = resetAnalysis;
 $('resetFromRadar').onclick = resetAnalysis;
 $('resetFromDiagnostics').onclick = resetAnalysis;
 $('showIssues').onclick = () => { app.systemFilter = 'issues'; $('showIssues').setAttribute('aria-pressed', 'true'); $('showAllSystems').setAttribute('aria-pressed', 'false'); renderServiceRadar(app, { selectEvent, openDrilldown }); };

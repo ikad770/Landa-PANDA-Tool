@@ -1,172 +1,82 @@
-# PANDA Tool — Local Service Radar
+# PANDA Tool — Service Radar
 
-PANDA Tool is a browser-only analysis workspace and Service Radar for Landa autocollect ZIP packages. The application remains runnable from static files and does not require a backend.
+This repository contains a static, no-build PANDA Tool web application for rule-driven analysis of Landa autocollect archives.
 
-## How to run
+## What the application does
 
-Because the worker and application scripts use ES modules, serve the directory with a lightweight local HTTP server:
+The tool runs the full analysis path in a module worker:
+
+1. Parses the uploaded Rules Excel workbook from the real detected header row.
+2. Derives required log sources from valid rules.
+3. Opens the root autocollect ZIP, finds `opc.zip`, and indexes only required paths.
+4. Parses sparse MachineStates files with forward-filled state transitions.
+5. Parses required notification logs, including BSS CSV files inside nested ZIPs.
+6. Matches source values to rule signals, including configured aliases.
+7. Evaluates actual values against state-specific expected values and tolerances.
+8. Consolidates deviation events and returns a compact `AnalysisResult`.
+9. Renders Service Radar and Drill-Down views from that same result.
+
+Diagnostics are intentionally isolated from the Service Radar. The internal `analysisAudit` object is available only from Diagnostics.
+
+## Local run instructions
+
+Because the app uses ES modules and a module worker, run it from a local HTTP server instead of opening `index.html` directly.
 
 ```bash
-python3 -m http.server 8000
+python3 -m http.server 8080
 ```
 
 Then open:
 
 ```text
-http://localhost:8000/index.html
+http://localhost:8080/
 ```
 
-## Project structure
+## Required inputs
 
-```text
-index.html       Static application shell
-styles.css       Workspace, Service Radar, hotspot, drill-down, and diagnostics styling
-app.js           Main-thread state, worker lifecycle, progress, and view switching
-worker.js        Rule-first ZIP indexing, source parsing, runtime aggregation, compact result finalization
-adapters.js      Formal source adapter implementations and source-specific timestamp parsing
-evaluation.js    Rule normalization, tolerance parsing, state selection, and value evaluation
-render.js        Service Radar, drill-down, timeline, evidence, and diagnostics rendering
-config.js        Stage weights, limits, statuses, and SYSTEM_HOTSPOTS configuration
-assets/          Drop machine image assets here
-```
+- **Autocollect ZIP**: root archive containing a nested `opc.zip`.
+- **Rules Excel**: workbook containing a PANDA rules sheet. The Rules header row can appear below row 1 as long as it contains:
+  - `System`
+  - `Subsystem`
+  - `Component`
+  - `Log Signal Name`
+  - `Log Source`
 
-## Expected ZIP structure
+## Source path mapping
 
-The uploaded autocollect ZIP must contain a nested `opc.zip`. Inside `opc.zip`, the worker selectively inspects only folders required by the Rules Excel.
+The analyzer opens only paths required by the Rules Excel:
 
-Common source locations:
+| Log source | Required path |
+| --- | --- |
+| `BSSNotifications` | `logs/LLCINotifications/BSS/` |
+| `IPSNotifications` | `logs/LLCINotifications/IPS/` |
+| `FECNotifications` | `logs/FECNotifications/` |
+| `MachineStates` | `logs/MachineStates/` |
+| `AlertsMonitoring` | `logs/AlertsMonitoring.txt` or `logs/AletrsMonitoring.txt` |
 
-```text
-logs/MachineStates/
-logs/LLCINotifications/BSS/
-logs/LLCINotifications/IPS/
-logs/FECNotifications/
-logs/AlertsMonitoring/
-```
+MachineStates are always included when state-dependent rules exist.
 
-Example: if the rules only reference `BSSNotifications`, the worker opens `logs/MachineStates/` and `logs/LLCINotifications/BSS/` source files and skips unrelated FEC, IPS, and AlertsMonitoring locations.
+## Local machine image fallback
 
-## Supported log sources
-
-The built-in adapters are:
-
-- `BSSNotifications`
-- `IPSNotifications`
-- `FECNotifications`
-- `MachineStates`
-- `AlertsMonitoring`
-
-`AlertsMonitoring` remains contextual unless a rule explicitly references it as a log source.
-
-## Rules Excel requirements
-
-The workbook must contain a sheet named:
-
-```text
-PANDA Rules Template
-```
-
-The parser detects the actual header row by requiring these columns anywhere on the header row:
-
-- `System`
-- `Subsystem`
-- `Component`
-- `Log Signal Name`
-- `Log Source`
-
-Supported expected-value state columns:
-
-- `Expected ON`
-- `Expected Standby`
-- `Expected Ready`
-- `Expected Prepare2Print`
-- `Expected Printing`
-- `Expected PrintEnd`
-- `Expected Recovery`
-- `Expected Error`
-
-Supported check types:
-
-- `Range`
-- `Above Threshold`
-- `Below Threshold`
-- `Exact`
-
-Recognized but intentionally pending evaluators:
-
-- `Delta`
-- `Trend`
-- `Flatline`
-- `StateDependent`
-
-Supported tolerance/limit formats include `±2`, `+/-2`, `2`, `±10%`, `+/-10%`, `10%`, `60 Max`, and `10 Min`.
-
-Invalid or incomplete rules are retained in diagnostics and are not counted as successfully evaluated.
-
-## Machine image asset
-
-The Service Radar references:
+To use the real machine image locally, place the image at:
 
 ```text
 assets/landa-machine.png
 ```
 
-If the file is absent, the UI falls back to a neutral dark machine silhouette. Drop the real Landa machine reference at that path without changing code.
+The application will automatically use it. If the image is missing, the built-in CSS/SVG fallback is displayed.
 
-The image is styled with:
 
-```css
-.machine-image {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center bottom;
-}
-```
+## Files
 
-## How to configure hotspot positions
-
-Edit `SYSTEM_HOTSPOTS` in `config.js`. Each entry uses percentages in the machine canvas:
-
-```js
-DPS: { x: 22, y: 51, labelX: 8, labelY: 35 }
-```
-
-- `x`, `y`: circular status node position
-- `labelX`, `labelY`: label card position
-
-Rendering reads this configuration; hotspot coordinates are not hard-coded in render logic.
-
-## How to add a new source adapter
-
-1. Add a new adapter object in `adapters.js` with the required interface:
-
-```js
-{
-  sourceType,
-  pathPatterns,
-  requiredFields,
-  canHandlePath(path),
-  cleanText(text),
-  normalizeHeader(header),
-  normalizeRow(row),
-  getTimestampMs(row),
-  getPreferredSignal(row),
-  getCompositeSignal(row),
-  getNumericValue(row),
-  getComponent(row),
-  getSystem(row, rule),
-  getSubsystem(row, rule)
-}
-```
-
-2. Make sure `canHandlePath()` matches only the source folder needed for that adapter.
-3. Implement explicit timestamp parsing. Do not use `Date.parse()` for ambiguous slash dates.
-4. Use the new adapter's `sourceType` in the Rules Excel `Log Source` column.
-
-## Known limitations
-
-- Browser JSZip still has to materialize a decompressed CSV string for each selected file. The refactor limits this by opening only required files, processing one file at a time, releasing text references after parsing, and retaining only compact aggregates.
-- Delta, Trend, Flatline, and StateDependent evaluators are recognized but reported as `evaluator_pending` until dedicated algorithms are implemented.
-- Source-specific timestamp formats for FEC and IPS use ISO-like parsing with an MDY fallback; update the corresponding adapter if a stricter known format is supplied.
-- The repository does not include the final Landa machine PNG. Place it at `assets/landa-machine.png`.
+- `index.html` — static HTML shell.
+- `styles.css` — app, Service Radar, hotspot, and Drill-Down styles.
+- `app.js` — main-thread state, worker orchestration, progress, and navigation.
+- `worker.js` — archive indexing, source parsing, runtime evaluation, compact result assembly.
+- `adapters.js` — CSV cleanup, header normalization, timestamp parsing, source adapters, signal matching.
+- `rules.js` — Rules Excel parsing and analysis plan construction.
+- `machine-states.js` — sparse MachineStates forward-fill and binary-search state lookup.
+- `evaluation.js` — expected value selection, tolerance parsing, and status evaluation.
+- `render-radar.js` — Service Radar exports.
+- `render-drilldown.js` — Drill-Down exports.
+- `config.js` — hotspots, stage weights, statuses, source paths, aliases, and limits.

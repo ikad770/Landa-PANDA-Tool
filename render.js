@@ -1,4 +1,4 @@
-import { STATUS_LABEL, STATUS_PRIORITY, SYSTEM_HOTSPOTS } from './config.js';
+import { MACHINE_IMAGE_SRC, STATUS_LABEL, STATUS_PRIORITY, SYSTEM_HOTSPOTS } from './config.js';
 import { formatRange } from './evaluation.js';
 
 const $ = id => document.getElementById(id);
@@ -26,8 +26,8 @@ export function validateAnalysisResult(result) {
 }
 
 export function renderServiceRadar(app, handlers) {
-  const result = app.result;
-  if (!result) return;
+  const result = app.analysisResult;
+  if (!result) { renderRadarEmpty('Run an analysis to evaluate machine systems.'); return; }
   $('radarSubtitle').textContent = result.metadata.timeRange || 'No evaluated time range';
   renderKpis(result);
   renderMachineMap(result, app, handlers);
@@ -35,6 +35,17 @@ export function renderServiceRadar(app, handlers) {
   renderTimeline(result, app.selectedEventId, handlers);
   renderEvidence(result);
   renderActions(result);
+}
+
+
+function renderRadarEmpty(message) {
+  $('radarSubtitle').textContent = 'Not analyzed';
+  $('kpiRow').innerHTML = '';
+  $('machineMap').innerHTML = `<div class="empty-state"><h2>${message}</h2><p class="muted">No system will be labeled No Rule until an analysis result exists.</p></div>`;
+  $('activeIssue').innerHTML = `<div class="empty-state"><h2>Not analyzed</h2><p class="muted">Upload a Rules Excel and autocollect ZIP first.</p></div>`;
+  $('deviationTimeline').innerHTML = '';
+  $('evidenceSummary').innerHTML = '';
+  $('serviceActions').innerHTML = '';
 }
 
 function renderKpis(result) {
@@ -57,10 +68,19 @@ function renderMachineMap(result, app, handlers) {
   const healthBySystem = Object.fromEntries(result.systemHealth.map(h => [h.system, h]));
   const systems = Object.keys(SYSTEM_HOTSPOTS).filter(system => app.systemFilter === 'all' || !['ok', 'no_rule'].includes(healthBySystem[system]?.status || 'no_rule'));
   $('machineMap').innerHTML = `
-    <div class="machine-backdrop"><div class="floor-reflection"></div><img class="machine-image" src="assets/landa-machine.png" alt="Landa machine image placeholder; drop the real asset at assets/landa-machine.png" onerror="this.classList.add('missing');this.alt='Machine image asset missing';"><div class="machine-silhouette" aria-hidden="true"></div></div>
+    <div class="machine-backdrop"><div class="floor-reflection"></div><img class="machine-image" src="${MACHINE_IMAGE_SRC}" alt="Landa Digital Printing machine" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">${machineFallbackSvg('machine-fallback')}</div>
     <div class="hotspot-layer">${systems.map(system => hotspot(system, healthBySystem[system])).join('')}</div>`;
   $('machineMap').querySelectorAll('[data-system]').forEach(el => el.addEventListener('click', () => handlers.openDrilldown(el.dataset.system)));
 }
+
+function machineFallbackSvg(className, compact = false) {
+  const viewBox = compact ? '0 0 720 260' : '0 0 1100 420';
+  const body = compact
+    ? '<rect x="75" y="92" width="485" height="88" rx="28"></rect><rect x="165" y="48" width="270" height="72" rx="22"></rect><circle cx="145" cy="195" r="28"></circle><circle cx="505" cy="195" r="28"></circle><path d="M92 153h445M210 72h190M585 120h70v60h-70z"></path>'
+    : '<rect x="90" y="162" width="760" height="138" rx="38"></rect><rect x="245" y="82" width="390" height="118" rx="30"></rect><rect x="700" y="120" width="120" height="180" rx="24"></rect><circle cx="190" cy="322" r="42"></circle><circle cx="720" cy="322" r="42"></circle><path d="M130 238h660M300 126h280M875 185h115v82H875z"></path>';
+  return `<svg class="${className}" viewBox="${viewBox}" role="img" aria-label="CSS fallback silhouette of Landa Digital Printing machine" hidden><defs><linearGradient id="machineFallbackBody" x1="0" x2="1"><stop offset="0" stop-color="#294760"/><stop offset="1" stop-color="#142538"/></linearGradient></defs><g fill="url(#machineFallbackBody)" stroke="rgba(238,246,255,.28)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">${body}</g><g fill="none" stroke="rgba(57,199,243,.45)" stroke-width="4" stroke-linecap="round"><path d="M155 255h585"/><path d="M330 152h220"/></g></svg>`;
+}
+
 function hotspot(system, health = { status: 'no_rule', label: 'Rules not configured' }) {
   const cfg = SYSTEM_HOTSPOTS[system];
   if (!cfg) return '';
@@ -77,7 +97,7 @@ function renderActiveIssue(result, selectedId) {
     return;
   }
   const deviation = event.latestActual > event.expectedHigh ? event.latestActual - event.expectedHigh : event.latestActual < event.expectedLow ? event.latestActual - event.expectedLow : 0;
-  const series = result.chartSeries[`${event.system}::${event.signal}`] || [];
+  const series = result.chartSeries[result.signalSummaries.find(s => s.system === event.system && s.signal === event.signal)?.ruleId] || [];
   $('activeIssue').innerHTML = `
     <div class="issue-head ${statusClass(event.severity)}"><span>${STATUS_LABEL[event.severity]}</span><h2>${event.system} · ${event.subsystem || 'No subsystem'}</h2><p>${event.signal}</p></div>
     <div class="comparison-grid"><div class="comparison"><span>Actual</span><strong>${fmtNum(event.latestActual)}</strong></div><div class="comparison"><span>Expected</span><strong>${formatRange(event.expectedLow, event.expectedHigh)}</strong></div><div class="comparison"><span>Deviation</span><strong>${deviation > 0 ? '+' : ''}${fmtNum(deviation)}</strong></div></div>
@@ -87,8 +107,8 @@ function renderActiveIssue(result, selectedId) {
 }
 function sparkline(series, event) {
   if (!series.length) return '<div class="sparkline empty">No chart samples available</div>';
-  const pts = series.slice(-80); const ys = pts.flatMap(p => [p.y, p.expectedLow, p.expectedHigh].filter(Number.isFinite)); const min = Math.min(...ys); const max = Math.max(...ys); const span = max - min || 1;
-  const path = pts.map((p, i) => `${i ? 'L' : 'M'} ${i / Math.max(1, pts.length - 1) * 100} ${100 - ((p.y - min) / span * 80 + 10)}`).join(' ');
+  const pts = series.slice(-80); const ys = pts.flatMap(p => [p.actual, p.expectedLow, p.expectedHigh].filter(Number.isFinite)); const min = Math.min(...ys); const max = Math.max(...ys); const span = max - min || 1;
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'} ${i / Math.max(1, pts.length - 1) * 100} ${100 - ((p.actual - min) / span * 80 + 10)}`).join(' ');
   const yLow = 100 - ((event.expectedLow - min) / span * 80 + 10); const yHigh = 100 - ((event.expectedHigh - min) / span * 80 + 10);
   return `<svg class="sparkline" viewBox="0 0 100 100" preserveAspectRatio="none"><rect x="0" y="${Math.min(yLow, yHigh)}" width="100" height="${Math.abs(yHigh - yLow)}" class="band"></rect><path d="${path}" class="actual-line"></path></svg>`;
 }
@@ -103,7 +123,7 @@ function renderTimeline(result, selectedId, handlers) {
 
 function renderEvidence(result) {
   const rows = result.evidence || [];
-  $('evidenceSummary').innerHTML = rows.length ? rows.slice(0, 5).map(p => `<div class="compact-item ${statusClass(p.result)}"><strong>${p.system} · ${p.signal}</strong><span>${fmtTime(p.timestampMs)}</span><small>Actual ${fmtNum(p.actual)} · Expected ${formatRange(p.expectedLow, p.expectedHigh)} · ${STATUS_LABEL[p.result] || p.result}</small></div>`).join('') : `<div class="compact-item">No evaluated values</div>`;
+  $('evidenceSummary').innerHTML = rows.length ? rows.slice(0, 5).map(p => `<div class="compact-item ${statusClass(p.result)}"><strong>${p.system} · ${p.signal}</strong><span>${fmtTime(p.timestampMs)}</span><small>Actual ${fmtNum(p.actual)} · Expected ${p.expected || formatRange(p.expectedLow, p.expectedHigh)} · ${STATUS_LABEL[p.result] || p.result}</small></div>`).join('') : `<div class="compact-item">No evaluated values</div>`;
 }
 
 function renderActions(result) {
@@ -115,24 +135,25 @@ function renderActions(result) {
 }
 
 export function renderDrilldown(app, handlers) {
-  const result = app.result; const system = app.selectedSystem || chooseInitialSystem(result);
+  const result = app.analysisResult; const system = app.selectedSystem || chooseInitialSystem(result);
   const health = result.systemHealth.find(h => h.system === system) || { status: 'no_rule', label: 'Rules not configured' };
   const summaries = result.signalSummaries.filter(s => s.system === system).sort((a, b) => STATUS_PRIORITY[b.status] - STATUS_PRIORITY[a.status]);
   const selected = summaries.find(s => s.ruleId === app.selectedRuleId) || summaries[0];
-  const chart = selected ? result.chartSeries[`${selected.system}::${selected.signal}`] || [] : [];
+  const chart = selected ? result.chartSeries[selected.ruleId] || [] : [];
+  const emptyMessage = health.status === 'no_rule' ? 'No rules configured for this system.' : health.status === 'no_data' ? 'Rules exist, but no matching source values were found.' : health.status === 'needs_validation' ? 'Values exist, but evaluation is blocked by incomplete state, expected value, timestamp, or evaluator context.' : 'No signal selected';
   $('drillSubtitle').textContent = `${system || 'No system selected'} · ${STATUS_LABEL[health.status] || health.status}`;
   $('drilldownRoot').innerHTML = `
     <aside class="drill-left panel pad"><h2>${system || 'No system selected'}</h2><p class="muted">${health.label || 'Focused investigation'}</p><div class="mini-context"><span>Rules ${health.rules || 0}</span><span>Evaluated ${health.evaluated || 0}</span><span>Deviations ${health.deviations || 0}</span></div><h3>Subsystems / Components</h3>${[...new Set(summaries.map(s => s.subsystem || s.component || 'Unmapped'))].map(x => `<button class="ghost">${x}</button>`).join('')}</aside>
-    <section class="drill-center panel pad"><div class="subsystem-visual"><img class="machine-image" src="assets/landa-machine.png" onerror="this.classList.add('missing')"><div class="machine-silhouette small"></div></div><h3>Parameters</h3><div class="param-list">${summaries.map(s => parameterCard(s, selected?.ruleId)).join('') || '<div class="compact-item">No matching source values</div>'}</div></section>
-    <aside class="drill-right panel pad"><h2>${selected?.signal || 'No signal selected'}</h2>${chartSvg(chart, selected)}${eventDetails(result, selected)}</aside>
+    <section class="drill-center panel pad"><div class="subsystem-visual"><img class="machine-image" src="${MACHINE_IMAGE_SRC}" alt="Landa Digital Printing machine" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">${machineFallbackSvg('machine-fallback compact', true)}</div><h3>Parameters</h3><div class="param-list">${summaries.map(s => parameterCard(s, selected?.ruleId)).join('') || `<div class="compact-item">${emptyMessage}</div>`}</div></section>
+    <aside class="drill-right panel pad"><h2>${selected?.signal || emptyMessage}</h2>${chartSvg(chart, selected)}${eventDetails(result, selected)}</aside>
     <section class="drill-bottom panel pad"><h3>Deviations and related rules</h3>${result.deviationEvents.filter(e => e.system === system).slice(0, 8).map(e => `<div class="compact-item ${statusClass(e.severity)}"><strong>${e.signal}</strong><small>${fmtTime(e.startTimestampMs)} · ${fmtDuration(e.durationMs)} · Rule row ${e.ruleRow}</small></div>`).join('') || '<div class="compact-item">No active deviation detected</div>'}</section>`;
   $('drilldownRoot').querySelectorAll('[data-rule]').forEach(el => el.addEventListener('click', () => handlers.selectRule(el.dataset.rule)));
 }
 function parameterCard(s, selectedId) { return `<button class="param-card ${statusClass(s.status)}" data-rule="${s.ruleId}" aria-pressed="${s.ruleId === selectedId}"><span><b>${s.signal}</b><small>${s.component || 'No component'} · ${STATUS_LABEL[s.status] || s.status}</small></span><span><b>${fmtNum(s.latestActual)}</b><small>${formatRange(s.expectedLow, s.expectedHigh)}</small><small>${s.eventCount} events · ${fmtDuration(s.totalDeviationDurationMs)}</small></span></button>`; }
 function chartSvg(chart, selected) {
   if (!chart.length) return '<div class="chart-empty">No chart samples available</div>';
-  const ys = chart.flatMap(p => [p.y, p.expectedLow, p.expectedHigh].filter(Number.isFinite)); const min = Math.min(...ys); const max = Math.max(...ys); const span = max - min || 1;
-  const path = chart.map((p, i) => `${i ? 'L' : 'M'} ${40 + i / Math.max(1, chart.length - 1) * 520} ${260 - ((p.y - min) / span * 220)}`).join(' ');
+  const ys = chart.flatMap(p => [p.actual, p.expectedLow, p.expectedHigh].filter(Number.isFinite)); const min = Math.min(...ys); const max = Math.max(...ys); const span = max - min || 1;
+  const path = chart.map((p, i) => `${i ? 'L' : 'M'} ${40 + i / Math.max(1, chart.length - 1) * 520} ${260 - ((p.actual - min) / span * 220)}`).join(' ');
   return `<svg class="big-chart" viewBox="0 0 600 300"><path d="${path}" class="actual-line"></path><text x="40" y="24">Expected ${formatRange(selected.expectedLow, selected.expectedHigh)}</text></svg>`;
 }
 function eventDetails(result, selected) { const ev = selected && result.deviationEvents.find(e => e.system === selected.system && e.signal === selected.signal); return ev ? `<div class="action-box"><strong>${STATUS_LABEL[ev.severity]} event</strong><span>${fmtTime(ev.startTimestampMs)} · ${fmtDuration(ev.durationMs)}</span><p>${ev.recommendedAction || 'No configured action for this rule'}</p></div>` : '<div class="action-box">No active deviation detected</div>'; }
