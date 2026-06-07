@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import { ADAPTERS, matchRuleForRow, parseSlashTimestamp } from '../adapters.js';
 import { evaluateValue, normalizeToken } from '../evaluation.js';
 import { createStateIndex } from '../machine-states.js';
-import { validateAnalysisResult } from '../render.js';
+import { chooseInitialParameter, chooseInitialSystem, groupParameters, normalizeStatus, renderActualExpectedChart, renderComparisonGauge, validateAnalysisResult } from '../render.js';
+import { renderHotspot } from '../render-radar.js';
 
 function baseResult(overrides = {}) {
   const metadata = {
@@ -48,6 +49,35 @@ assert.equal(needsValidation.status, 'completed_with_warnings');
 assert.equal(baseResult().signalSummaries[0].latestActual, 42, 'Invalid timestamp preserves numeric actual value');
 assert.equal(baseResult().chartSeries.R1[0].actual, 42, 'Needs Validation chart samples should preserve actual values');
 assert.notEqual(baseResult().metadata.relevantSignalsFound / baseResult().metadata.relevantSignalsRequired, baseResult().metadata.rulesEvaluated / baseResult().metadata.rulesValid, 'Signal Match Coverage differs from Fully Evaluated Coverage');
+
+const uiResult = baseResult({
+  metadata: { blockedPoints: 2, needsValidationPoints: 1, needsConfigurationPoints: 1 },
+  systemHealth: [
+    { system: 'BSS', status: 'needs_configuration', rules: 2, deviations: 0, blockedPoints: 1 },
+    { system: 'IPS', status: 'warning', rules: 1, deviations: 2 },
+    { system: 'QCS', status: 'ok', rules: 1, deviations: 0 },
+    { system: 'DPS', status: 'no_rule', rules: 0, deviations: 0 }
+  ],
+  signalSummaries: [
+    { ruleId: 'WARN', system: 'IPS', signal: 'Pressure', status: 'warning', latestActual: 31, expectedLow: 20, expectedHigh: 25, eventCount: 2 },
+    { ruleId: 'CONFIG', system: 'BSS', signal: 'TankActualLevelMM', status: 'needs_configuration', latestActual: 674.54, expectedLow: null, expectedHigh: null, eventCount: 0, blocker: 'missing_expected_value' },
+    { ruleId: 'VALID', system: 'BSS', signal: 'Temperature', status: 'needs_validation', latestActual: 29.2, expectedLow: 25, expectedHigh: 28, eventCount: 0, blocker: 'missing_state' },
+    { ruleId: 'OK', system: 'QCS', signal: 'Quality', status: 'ok', latestActual: 1, expectedLow: 0, expectedHigh: 2, eventCount: 0 },
+    { ruleId: 'NODATA', system: 'BSS', signal: 'Missing', status: 'no_data', latestActual: null, eventCount: 0 }
+  ],
+  chartSeries: { CONFIG: [{ t: 1, actual: 674.54, status: 'needs_configuration' }], WARN: [{ t: 1, actual: 31, expectedLow: 20, expectedHigh: 25, status: 'warning' }] }
+});
+assert.equal(normalizeStatus('evaluator_pending'), 'needs_validation', 'Evaluator pending is visualized as Needs Validation');
+assert.equal(chooseInitialSystem(uiResult), 'IPS', 'Initial selected system follows status priority');
+assert.equal(chooseInitialParameter(uiResult, 'BSS').ruleId, 'VALID', 'Initial selected parameter uses parameter status priority');
+const groups = groupParameters(uiResult.signalSummaries);
+assert.equal(groups.find(group => group.key === 'configuration').rows[0].ruleId, 'CONFIG', 'Needs Configuration has its own parameter group');
+assert.equal(groups.find(group => group.key === 'validation').rows[0].ruleId, 'VALID', 'Needs Validation has its own parameter group');
+assert.match(renderComparisonGauge({ actual: 31, expectedLow: 20, expectedHigh: 25, warningLow: 18, warningHigh: 27, criticalLow: 15, criticalHigh: 30, status: 'warning' }), /gauge-marker/, 'Comparison gauge with full range renders actual marker');
+assert.match(renderComparisonGauge({ actual: 674.54, status: 'needs_configuration' }), /Expected range not configured/, 'Comparison gauge without Expected range renders configuration placeholder');
+assert.match(renderActualExpectedChart(uiResult.chartSeries.CONFIG, uiResult.signalSummaries[1], []), /Expected range is not configured/, 'Actual chart without Expected band keeps actual and shows configuration banner');
+assert.equal(renderHotspot('DPS', uiResult.systemHealth[3], '', 'issues').includes('hotspot'), true, 'Hotspot renderer returns a hotspot component');
+assert.match(renderHotspot('DPS', uiResult.systemHealth[3], '', 'all'), /quiet/, 'No-rule opacity behavior uses quiet class in All systems mode');
 
 const ruleValve = { normSignal: normalizeToken('FillFlowMeterActualValve') };
 assert.equal(matchRuleForRow(ADAPTERS.BSSNotifications, { SubComponent: 'FillFlowMeterActualValue', Component: 'Fill', ParameterType: 'Actual' }, [ruleValve]).length, 1, 'Alias Valve ↔ Value matches from rule to log');
