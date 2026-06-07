@@ -272,3 +272,67 @@ export function escapeAttr(value) {
 export function slug(value) {
   return String(value || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-');
 }
+
+export function escapeAttribute(value = '') {
+  return escapeHtml(String(value)).replace(/"/g, '&quot;');
+}
+
+export function iconSvg(name, className = 'icon') {
+  const icons = {
+    user: '<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    lock: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+    eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    eyeOff: '<path d="m3 3 18 18"/><path d="M10.6 10.6A3 3 0 0 0 13.4 13.4"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a18.5 18.5 0 0 1-3.2 4.1"/><path d="M6.6 6.6C3.7 8.5 2 12 2 12s3.5 7 10 7c1.7 0 3.2-.4 4.5-1"/>',
+    upload: '<path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
+    logOut: '<path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-6"/>',
+    check: '<path d="m20 6-11 11-5-5"/>',
+    alert: '<path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>'
+  };
+  return `<svg class="${className}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icons[name] || icons.check}</svg>`;
+}
+
+export function renderPandaEyes({ mode = 'idle', labelled = false } = {}) {
+  const aria = labelled ? 'role="img" aria-label="Abstract PANDA diagnostic scanner eyes"' : 'aria-hidden="true"';
+  return `<div class="panda-visual ${mode}" ${aria}>
+    <svg class="panda-eye-svg" viewBox="0 0 1000 520" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <radialGradient id="patchGlow" cx="50%" cy="50%" r="68%"><stop offset="0" stop-color="#102134"/><stop offset=".55" stop-color="#050a12"/><stop offset="1" stop-color="#010308"/></radialGradient>
+        <radialGradient id="irisGlow" cx="50%" cy="50%" r="58%"><stop offset="0" stop-color="#e7fbff"/><stop offset=".18" stop-color="#46e4ff"/><stop offset=".48" stop-color="#1186bd"/><stop offset="1" stop-color="rgba(17,134,189,0)"/></radialGradient>
+        <filter id="furDisplace"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.055" numOctaves="4" seed="8"/><feDisplacementMap in="SourceGraphic" scale="18"/></filter>
+        <filter id="softBlur"><feGaussianBlur stdDeviation="10"/></filter>
+        <filter id="cyanBloom"><feGaussianBlur stdDeviation="5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <clipPath id="leftPatch"><path d="M95 238 C115 97 236 42 385 88 C470 114 502 198 458 292 C410 394 264 443 151 378 C96 346 78 296 95 238Z"/></clipPath>
+        <clipPath id="rightPatch"><path d="M905 238 C885 97 764 42 615 88 C530 114 498 198 542 292 C590 394 736 443 849 378 C904 346 922 296 905 238Z"/></clipPath>
+      </defs>
+      <rect width="1000" height="520" fill="transparent"/>
+      <g class="eye-patch left" clip-path="url(#leftPatch)">
+        <path d="M95 238 C115 97 236 42 385 88 C470 114 502 198 458 292 C410 394 264 443 151 378 C96 346 78 296 95 238Z" fill="url(#patchGlow)" filter="url(#furDisplace)"/>
+        <path class="fur-lines" d="M120 155 C220 205 305 205 440 155 M102 250 C245 285 330 282 470 232 M125 342 C250 318 345 348 430 318"/>
+      </g>
+      <g class="eye-patch right" clip-path="url(#rightPatch)">
+        <path d="M905 238 C885 97 764 42 615 88 C530 114 498 198 542 292 C590 394 736 443 849 378 C904 346 922 296 905 238Z" fill="url(#patchGlow)" filter="url(#furDisplace)"/>
+        <path class="fur-lines" d="M880 155 C780 205 695 205 560 155 M898 250 C755 285 670 282 530 232 M875 342 C750 318 655 348 570 318"/>
+      </g>
+      ${[295,705].map((cx,i)=>`<g class="iris iris-${i}" filter="url(#cyanBloom)">
+        <circle cx="${cx}" cy="247" r="92" fill="url(#irisGlow)"/>
+        <circle class="scan-ring" cx="${cx}" cy="247" r="72"/><circle class="scan-ring alt" cx="${cx}" cy="247" r="48"/><circle class="scan-ring thin" cx="${cx}" cy="247" r="103"/>
+        ${Array.from({length:24},(_,n)=>`<line class="radial-data" x1="${cx}" y1="${247-36}" x2="${cx}" y2="${247-72}" transform="rotate(${n*15} ${cx} 247)"/>`).join('')}
+        <circle class="pupil" cx="${cx}" cy="247" r="16"/><circle class="highlight" cx="${cx+22}" cy="${229}" r="7"/>
+      </g>`).join('')}
+      <g class="particle-trails">
+        <path d="M158 423 C282 379 369 396 481 335"/><path d="M842 423 C718 379 631 396 519 335"/><path d="M258 105 C380 154 619 154 742 105"/>
+      </g>
+      <rect class="scan-sweep" x="-120" y="235" width="1240" height="6" rx="3"/>
+    </svg>
+    <div class="brand-core"><p class="brand-eyebrow">PANDA Tool</p><h1>PANDA Tool</h1><p>Proactive Analyzer Notification DA</p><small>Service Intelligence for Landa Digital Printing</small></div>
+    <div class="cmykogb-field" aria-hidden="true">${['C','M','Y','K','O','G','B'].map((l,i)=>`<span class="ink ink-${l.toLowerCase()}" style="--i:${i}">${l}</span>`).join('')}</div>
+  </div>`;
+}
+
+export function renderStatusStrip(items = []) {
+  return `<footer class="status-strip" aria-label="System status">${items.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}</footer>`;
+}
+
+export function renderModal({ id, title, body }) {
+  return `<div id="${escapeAttribute(id)}" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="${escapeAttribute(id)}Title"><div class="modal-panel"><button type="button" class="modal-close" data-close-modal aria-label="Close dialog">×</button><p class="brand-eyebrow">Local prototype</p><h2 id="${escapeAttribute(id)}Title">${escapeHtml(title)}</h2><p>${escapeHtml(body)}</p><button type="button" class="primary" data-close-modal>Understood</button></div></div>`;
+}
