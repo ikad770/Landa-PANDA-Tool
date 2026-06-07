@@ -1,5 +1,5 @@
 import { ADAPTERS } from './adapters.js';
-import { expectedValuesFromRow, normalizeCheckType, normalizeText, normalizeToken, parseThreshold, parseTolerance, validateRule } from './evaluation.js';
+import { expectedValuesFromRow, inferCheckType, normalizeCheckType, normalizeText, normalizeToken, parseThreshold, parseTolerance, validateRule } from './evaluation.js';
 
 const REQUIRED_HEADERS = ['System', 'Subsystem', 'Component', 'Log Signal Name', 'Log Source'];
 
@@ -36,7 +36,7 @@ export function parseRulesWorkbook(XLSX, buffer, audit) {
     const { expectedByState, genericExpected } = expectedValuesFromRow(row);
     const rawLogSource = normalizeText(getCell(row, ['Log Source', 'Source', 'LogSource']));
     const logSource = canonicalLogSource(rawLogSource);
-    const checkType = normalizeText(getCell(row, ['Check Type', 'Check', 'Validation Type']) || 'range');
+    const checkType = normalizeText(getCell(row, ['Check Type', 'Check', 'Validation Type']));
     const rule = {
       id: `R${i + 1}`,
       ruleId: `R${i + 1}`,
@@ -45,6 +45,8 @@ export function parseRulesWorkbook(XLSX, buffer, audit) {
       subsystem: normalizeText(row.Subsystem),
       component: normalizeText(row.Component),
       parameterName: normalizeText(getCell(row, ['Parameter Name', 'Parameter', 'Name']) || row['Log Signal Name']),
+      parameterType: normalizeText(getCell(row, ['Parameter Type', 'Type'])),
+      unit: normalizeText(getCell(row, ['Unit', 'Units'])),
       signal: normalizeText(row['Log Signal Name']),
       normSignal: normalizeToken(row['Log Signal Name']),
       logSource,
@@ -53,7 +55,7 @@ export function parseRulesWorkbook(XLSX, buffer, audit) {
       checkTypeNormalized: normalizeCheckType(checkType),
       expectedByState,
       genericExpected,
-      tolerance: parseTolerance(getCell(row, ['Tolerance', 'Allowed Tolerance', 'Limit', 'Threshold', 'Allowed Range'])),
+      tolerance: parseTolerance(getCell(row, ['Spec Tolerance', 'Tolerance', 'Allowed Tolerance', 'Limit', 'Threshold', 'Allowed Range'])),
       warningLow: parseThreshold(getCell(row, ['Warning Low', 'Warning Min', 'WarningLow'])),
       warningHigh: parseThreshold(getCell(row, ['Warning High', 'Warning Max', 'WarningHigh'])),
       criticalLow: parseThreshold(getCell(row, ['Critical Low', 'Critical Min', 'CriticalLow'])),
@@ -62,6 +64,9 @@ export function parseRulesWorkbook(XLSX, buffer, audit) {
       criticalAction: normalizeText(getCell(row, ['Critical Action', 'Service Action'])),
       recommendedAction: normalizeText(getCell(row, ['Recommended Action', 'Action', 'Service Action']))
     };
+    rule.evaluator = inferCheckType(rule);
+    rule.evaluatorInferred = !rule.checkType && !!rule.evaluator;
+    rule.checkTypeNormalized = rule.evaluator || normalizeCheckType(checkType);
     const invalidReason = ADAPTERS[rule.sourceType] ? validateRule(rule) : 'unsupported_log_source';
     rule.validity = invalidReason === 'valid' ? 'valid' : 'invalid';
     rule.invalidReason = invalidReason === 'valid' ? '' : invalidReason;

@@ -19,12 +19,23 @@ export function renderDrilldown(app, handlers) {
   $('drilldownRoot').innerHTML = `
     <section class="drill-summary panel pad"><div class="breadcrumbs">Analysis Workspace → Analysis Summary → Service Radar → ${escapeHtml(system || 'System')}</div>${renderSummaryBar(health, summaries, selected)}</section>
     <section class="drilldown-main">
-      <aside class="parameter-nav panel pad"><div class="panel-title"><h2>Parameter navigator</h2></div>${renderParameterNavigator(summaries, selected?.ruleId)}</aside>
-      <section class="chart-panel panel pad"><div class="chart-heading"><div>${renderStatusBadge(selected?.status || health.status)}<h2>${escapeHtml(selected?.signal || 'No parameter selected')}</h2><p>${escapeHtml(selected?.component || selected?.subsystem || 'Select a parameter to investigate.')}</p></div><div class="legend"><span class="actual-key"></span>Actual <span class="expected-key"></span>Expected range</div></div>${selected ? renderActualExpectedChart(chart, selected, events) : renderEmptyState('No parameter selected', 'This system has no parameter summaries in the AnalysisResult.', health.status)}${renderStateTimeline({ stateTimeline: result.stateTimeline || [], events })}</section>
+      <aside class="parameter-nav panel pad"><div class="panel-title"><h2>Parameter Comparison Matrix</h2></div>${renderParameterNavigator(summaries, selected?.ruleId)}</aside>
+      <section class="chart-panel panel pad"><div class="chart-heading"><div>${renderStatusBadge(selected?.status || health.status)}<h2>${escapeHtml(selected?.signal || 'No parameter selected')}</h2><p>${escapeHtml(selected?.component || selected?.subsystem || 'Select a parameter to investigate.')}</p></div><div class="legend"><span class="actual-key"></span>Actual <span class="expected-key"></span>Expected range</div></div>${selected ? renderActualExpectedChart(chart, selected, events) : renderEmptyState('No parameter selected', 'This system has no parameter summaries in the AnalysisResult.', health.status)}${renderStateComparison(selected)}${renderStateTimeline({ stateTimeline: result.stateTimeline || [], events })}</section>
       <aside class="selected-param panel pad">${selected ? renderSelectedParameter(result, selected, events) : renderEmptyState('No parameter selected', 'No rules or matching values exist for this system.', health.status)}</aside>
     </section>
     <section class="drill-bottom panel pad">${renderBottomInvestigation(result, selected, events)}</section>`;
   $('drilldownRoot').querySelectorAll('[data-rule]').forEach(el => el.addEventListener('click', () => handlers.selectRule(el.dataset.rule)));
+  $('drilldownRoot').querySelectorAll('[data-filter]').forEach(el => el.addEventListener('click', () => applyMatrixFilter(el.dataset.filter)));
+}
+
+function applyMatrixFilter(filter) {
+  const root = $('drilldownRoot');
+  root.querySelectorAll('.matrix-filter').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.filter === filter)));
+  root.querySelectorAll('.matrix-row[data-status]').forEach(row => {
+    const status = row.dataset.status;
+    const visible = filter === 'all' || status === filter || (filter === 'no_data' && ['no_data', 'no_rule', 'not_analyzed'].includes(status));
+    row.hidden = !visible;
+  });
 }
 
 function renderSummaryBar(health, summaries, selected) {
@@ -33,7 +44,39 @@ function renderSummaryBar(health, summaries, selected) {
 
 function renderParameterNavigator(summaries, selectedId) {
   if (!summaries.length) return renderEmptyState('No parameters', 'No evaluation rule is configured for this system.', 'no_rule');
-  return `<div class="parameter-groups">${groupParameters(summaries).map(group => `<details class="parameter-group" ${group.rows.length ? 'open' : ''}><summary>${escapeHtml(group.label)} <span>${group.rows.length}</span></summary><div class="param-list">${group.rows.map(row => renderParameterCard(row, selectedId)).join('') || '<div class="empty-inline">No parameters in this group.</div>'}</div></details>`).join('')}</div>`;
+  const rows = sortComparisonRows(summaries);
+  const filters = [
+    ['all', 'All'], ['critical', 'Critical'], ['warning', 'Warning'], ['ok', 'OK'], ['needs_validation', 'Validation'], ['needs_configuration', 'Configuration'], ['no_data', 'No Data']
+  ];
+  return `<div class="matrix-shell"><div class="matrix-filters">${filters.map(([key, label]) => `<button class="matrix-filter" data-filter="${key}">${escapeHtml(label)}</button>`).join('')}</div>
+    <div class="comparison-matrix" role="table" aria-label="Parameter comparison matrix">
+      <div class="matrix-row matrix-head" role="row"><span>Status</span><span>Parameter</span><span>Component</span><span>State</span><span>Actual</span><span>Expected</span><span>Allowed Range</span><span>Deviation</span><span>Duration</span></div>
+      ${rows.map(row => renderComparisonRow(row, selectedId)).join('')}
+    </div></div>`;
+}
+
+export function sortComparisonRows(rows = []) {
+  const order = { critical: 0, warning: 1, ok: 2, needs_validation: 3, needs_configuration: 4, no_data: 5, no_rule: 6, not_analyzed: 7 };
+  return [...rows].sort((a, b) => (order[normalizeStatus(a.status)] ?? 99) - (order[normalizeStatus(b.status)] ?? 99) || String(a.parameterName || a.signal).localeCompare(String(b.parameterName || b.signal)));
+}
+
+function renderComparisonRow(row, selectedId) {
+  const state = row.currentSystemState || row.currentMachineState || '—';
+  const expected = Number.isFinite(row.expectedValue ?? row.expected) ? `${fmtNum(row.expectedValue ?? row.expected)}${row.unit || ''}` : '—';
+  return `<button class="matrix-row ${statusClass(row.status)}" data-rule="${escapeAttr(row.ruleId)}" data-status="${normalizeStatus(row.status)}" aria-pressed="${row.ruleId === selectedId}" role="row">
+    <span>${renderStatusBadge(row.status)}</span><span title="${escapeAttr(row.signal)}">${escapeHtml(row.parameterName || row.signal || 'Unnamed parameter')}</span><span>${escapeHtml(row.component || row.subsystem || '—')}</span><span>${escapeHtml(state)}</span><span>${fmtNum(row.latestActual)}${escapeHtml(row.unit || '')}</span><span>${escapeHtml(expected)}</span><span>${escapeHtml(expectedText(row))}${escapeHtml(row.unit || '')}</span><span>${escapeHtml(row.deviationDirection ? `${row.deviationDirection === 'below' ? '-' : row.deviationDirection === 'above' ? '+' : ''}${fmtNum(Math.abs(row.deviation || 0))} ${row.deviationDirection}` : deviationText(row.latestActual, row))}</span><span>${fmtDuration(row.totalDeviationDurationMs)}</span>
+  </button>`;
+}
+
+function renderStateComparison(selected) {
+  if (!selected) return '';
+  const summaries = selected.stateSummaries || [];
+  if (!summaries.length) return `<div class="state-comparison-panel">${renderEmptyState('No state comparison yet', 'This signal has no evaluated state-level samples.', selected.status)}</div>`;
+  return `<div class="state-comparison-panel"><h3>State comparison</h3><div class="state-comparison-table"><div class="state-comparison-row state-comparison-head"><span>State</span><span>Expected</span><span>Allowed Range</span><span>Average Actual</span><span>Minimum</span><span>Maximum</span><span>Out-of-Range %</span><span>Out-of-Range Duration</span><span>Status</span></div>${summaries.map(row => `<div class="state-comparison-row ${statusClass(row.status)}"><span>${escapeHtml(row.state)}</span><span>${fmtNum(row.expected)}</span><span>${escapeHtml(formatRangeSafe(row.allowedLow, row.allowedHigh))}</span><span>${fmtNum(row.averageActual)}</span><span>${fmtNum(row.minActual)}</span><span>${fmtNum(row.maxActual)}</span><span>${fmtNum(row.outOfRangePercent)}%</span><span>${fmtDuration(row.outOfRangeDurationMs)}</span><span>${renderStatusBadge(row.status)}</span></div>`).join('')}</div></div>`;
+}
+
+function formatRangeSafe(low, high) {
+  return `${Number.isFinite(low) ? fmtNum(low) : '−∞'}–${Number.isFinite(high) ? fmtNum(high) : '+∞'}`;
 }
 
 function renderSelectedParameter(result, selected, events) {
