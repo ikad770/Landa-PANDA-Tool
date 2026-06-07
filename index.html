@@ -182,8 +182,8 @@
       <section id="uploadWorkspace" class="workspace-hero">
         <article class="panel hero-copy">
           <p class="brand-eyebrow">Analysis Workspace</p>
-          <h2>Focused BSS / BCU evaluation without locking the browser.</h2>
-          <p class="subtitle">The parser retains only rule-relevant BSSNotifications values, forward-fills MachineStates, merges continuous deviations, and prepares a compact Service Radar model.</p>
+          <h2>Generic multi-system evaluation without locking the browser.</h2>
+          <p class="subtitle">The parser builds a rule-driven analysis plan, runs only required source adapters, forward-fills MachineStates, merges deviations, and prepares a compact Service Radar model.</p>
         </article>
         <article class="panel pad">
           <div class="upload-grid">
@@ -198,7 +198,7 @@
               <input id="rulesInput" type="file" accept=".xlsx,.xls,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
               <div class="upload-icon">XLS</div>
               <h3>PANDA Rules Excel</h3>
-              <p class="muted">BSS / BCU BSSNotifications rules are extracted first.</p>
+              <p class="muted">All valid machine-system rules are extracted and grouped by source.</p>
               <span id="rulesName" class="file-name tiny">No file selected</span>
             </label>
           </div>
@@ -296,8 +296,8 @@
     <div class="shell">
       <div class="topbar">
         <div>
-          <p class="brand-eyebrow">Service Radar → BSS / BCU</p>
-          <h1>BSS Drill-Down</h1>
+          <p class="brand-eyebrow">Service Radar → System</p>
+          <h1>System Drill-Down</h1>
           <p id="drillSubtitle" class="subtitle">Actual values, expected bands, and machine-state context.</p>
         </div>
         <div class="action-row"><button id="backToRadar">Back to Service Radar</button><button id="diagnosticsFromDrill">Diagnostics</button></div>
@@ -314,7 +314,7 @@
   <main id="diagnosticsView" class="view hidden">
     <div class="shell">
       <div class="topbar">
-        <div><p class="brand-eyebrow">PANDA Tool</p><h1>Diagnostics</h1><p class="subtitle">Pipeline details, file inventory, scanned row counts, parser diagnostics, raw preview, and rule mapping.</p></div>
+        <div><p class="brand-eyebrow">PANDA Tool</p><h1>Diagnostics</h1><p class="subtitle">Pipeline details, source adapters, required signals, matched signals, parser diagnostics, and rule mapping.</p></div>
         <div class="action-row"><button id="closeDiagnostics">Back</button><button id="resetFromDiagnostics" class="ghost">New Analysis</button></div>
       </div>
       <section class="panel pad"><pre id="diagnosticsPre">No diagnostics available.</pre></section>
@@ -327,33 +327,21 @@
       PREPARING_DASHBOARD: 'preparing_dashboard', COMPLETED: 'completed', COMPLETED_WITH_WARNINGS: 'completed_with_warnings', FAILED: 'failed', CANCELLED: 'cancelled'
     });
     const STAGES = [
-      ['validating', 'Validating uploaded files'], ['extracting_archive', 'Opening autocollect archive'], ['extracting_opc', 'Opening opc.zip'],
-      ['locating_sources', 'Locating MachineStates and BSSNotifications'], ['loading_rules', 'Loading required Excel rules'],
-      ['extracting_signals', 'Extracting only required BSS signals'], ['matching_state', 'Matching state context'],
-      ['evaluating_rules', 'Evaluating actual versus expected'], ['building_timeline', 'Building deviation timeline'], ['preparing_dashboard', 'Preparing Service Radar']
+      ['validating', 'Validating uploaded files'], ['extracting_archive', 'Opening autocollect archive'], ['extracting_opc', 'Opening nested archives'],
+      ['loading_rules', 'Loading PANDA rules'], ['building_plan', 'Building rule-driven analysis plan'], ['locating_sources', 'Locating required log sources'],
+      ['extracting_signals', 'Extracting rule-matched values'], ['matching_state', 'Attaching machine and system state'],
+      ['evaluating_rules', 'Evaluating actual versus expected'], ['building_timeline', 'Building multi-system timeline'], ['preparing_dashboard', 'Preparing Service Radar']
     ];
-    const HEALTH_SYSTEMS = ['DPS','DFES','MSPS','ITS','IPS','Ventilation','ECS','IRD','QCS','BSS','STS','IPU','ICS'];
+    const MACHINE_SYSTEMS = ['Machine','BSS','IPS','PSS','Dryer','IPU','Ventilation','CWS','IRD','DFES','DPS','QCS','ICS','ECS','MSPS','ITS','FEC','LLCI','STS'];
+    const MAP_SYSTEMS = ['DPS','DFES','MSPS','ITS','IPS','Ventilation','ECS','IRD','QCS','BSS','STS','IPU','ICS','FEC','CWS','PSS','Dryer'];
     const HOTSPOTS = [
-      ['DPS',17,34], ['DFES',25,26], ['MSPS',34,34], ['ITS',43,25], ['IPS',52,34], ['Ventilation',63,24], ['ECS',75,34],
-      ['IRD',84,48], ['QCS',72,63], ['BSS',50,58], ['STS',31,62], ['IPU',16,66], ['ICS',90,68]
+      ['DPS',12,33], ['DFES',21,24], ['MSPS',31,34], ['ITS',40,24], ['IPS',50,34], ['Ventilation',62,23], ['ECS',75,34],
+      ['IRD',85,47], ['QCS',73,62], ['BSS',50,58], ['STS',31,62], ['IPU',16,66], ['ICS',90,68], ['FEC',63,69], ['CWS',39,70], ['PSS',24,45], ['Dryer',79,24]
     ];
     const ISSUE_STATUSES = new Set(['critical', 'warning', 'needs_validation']);
-    const STATUS_PRIORITY = { critical: 5, warning: 4, needs_validation: 3, ok: 2, no_data: 1, no_rule: 0 };
+    const STATUS_PRIORITY = { critical: 6, warning: 5, needs_validation: 4, ok: 3, no_data: 2, no_rule: 1, evaluator_pending: 0 };
 
-    const app = {
-      state: APP_STATES.UPLOAD,
-      autocollectFile: null,
-      rulesFile: null,
-      worker: null,
-      analysisResult: null,
-      diagnostics: null,
-      selectedEventId: null,
-      selectedSignal: null,
-      systemFilter: 'issues',
-      lastView: 'analysis',
-      autoOpenTimer: null
-    };
-
+    const app = { state: APP_STATES.UPLOAD, autocollectFile: null, rulesFile: null, worker: null, analysisResult: null, diagnostics: null, selectedEventId: null, selectedSignal: null, selectedSystem: 'BSS', systemFilter: 'all', showAllTimelineSystems: false, lastView: 'analysis', autoOpenTimer: null };
     const $ = id => document.getElementById(id);
     const viewIds = ['analysisView', 'radarView', 'drilldownView', 'diagnosticsView'];
 
@@ -361,477 +349,144 @@
     function showAnalysisWorkspace() { app.lastView = 'analysis'; showOnly('analysisView'); renderAnalysisWorkspace(); }
     function showServiceRadar() { if (!app.analysisResult) return; app.lastView = 'radar'; showOnly('radarView'); renderServiceRadar(); }
     function openDiagnostics() { app.lastView = currentVisibleView(); showOnly('diagnosticsView'); renderDiagnostics(); }
+    function currentVisibleView() { return viewIds.find(id => !$(id).classList.contains('hidden'))?.replace('View','') || 'analysis'; }
+    function setState(state) { app.state = state; renderAnalysisWorkspace(); }
     function resetAnalysis() {
       if (app.worker) app.worker.terminate();
       clearTimeout(app.autoOpenTimer);
-      app.state = APP_STATES.UPLOAD; app.autocollectFile = null; app.rulesFile = null; app.worker = null; app.analysisResult = null; app.diagnostics = null; app.selectedEventId = null; app.selectedSignal = null;
+      Object.assign(app, { state: APP_STATES.UPLOAD, autocollectFile: null, rulesFile: null, worker: null, analysisResult: null, diagnostics: null, selectedEventId: null, selectedSignal: null, selectedSystem: 'BSS', showAllTimelineSystems: false });
       $('autocollectInput').value = ''; $('rulesInput').value = ''; $('autocollectName').textContent = 'No file selected'; $('rulesName').textContent = 'No file selected';
       showAnalysisWorkspace();
     }
-    window.showAnalysisWorkspace = showAnalysisWorkspace;
-    window.showServiceRadar = showServiceRadar;
-    window.openDiagnostics = openDiagnostics;
-    window.resetAnalysis = resetAnalysis;
+    window.showAnalysisWorkspace = showAnalysisWorkspace; window.showServiceRadar = showServiceRadar; window.openDiagnostics = openDiagnostics; window.resetAnalysis = resetAnalysis;
 
-    function currentVisibleView() { return viewIds.find(id => !$(id).classList.contains('hidden'))?.replace('View','') || 'analysis'; }
-    function setState(state) { app.state = state; renderAnalysisWorkspace(); }
-    function formatDuration(ms) { if (!Number.isFinite(ms) || ms < 0) return '—'; const s = Math.round(ms / 1000); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60; return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`; }
     function fmt(n) { return Number(n || 0).toLocaleString(); }
     function escapeHtml(v) { return String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
-    function statusLabel(s) { return ({ok:'OK', warning:'Warning', critical:'Critical', needs_validation:'Needs Validation', no_data:'No Data', no_rule:'No Rule'}[s] || s || 'No Data'); }
+    function statusLabel(s) { return ({ok:'OK', warning:'Warning', critical:'Critical', needs_validation:'Needs Validation', no_data:'No Data', no_rule:'No Rule', evaluator_pending:'Evaluator Pending'}[s] || s || 'No Data'); }
+    function formatDuration(ms) { if (!Number.isFinite(ms) || ms < 0) return '—'; const s = Math.round(ms / 1000); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60; return h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`; }
     function shortTime(ts) { const d = new Date(ts); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
-    function unitFor(signal) { return /temperature/i.test(signal) ? '°C' : /flow/i.test(signal) ? ' LPM' : /pressure/i.test(signal) ? '' : /valve/i.test(signal) ? '%' : /level|layer/i.test(signal) ? ' mm' : ''; }
+    function unitFor(signal='') { return /temperature/i.test(signal) ? '°C' : /flow/i.test(signal) ? ' LPM' : /valve/i.test(signal) ? '%' : /level|layer/i.test(signal) ? ' mm' : ''; }
     function valueText(v, signal='') { return Number.isFinite(Number(v)) ? `${Number(v).toFixed(Math.abs(Number(v)) >= 100 ? 0 : 1)}${unitFor(signal)}` : '—'; }
     function rangeText(lo, hi, signal='') { return Number.isFinite(Number(lo)) && Number.isFinite(Number(hi)) ? `${valueText(lo, signal)}–${valueText(hi, signal)}` : 'Needs validation'; }
+    function selectedHealth() { return (app.analysisResult?.systemHealth || []).find(h => h.system === app.selectedSystem) || { system: app.selectedSystem, status: 'no_rule' }; }
+    function eventsForSelectedSystem() { return (app.analysisResult?.deviationEvents || []).filter(e => e.system === app.selectedSystem); }
+    function selectedEvent() { const events = eventsForSelectedSystem(); return events.find(e => e.id === app.selectedEventId) || events.sort((a,b) => STATUS_PRIORITY[b.severity] - STATUS_PRIORITY[a.severity] || (b.durationMs || 0) - (a.durationMs || 0))[0] || null; }
 
     function renderAnalysisWorkspace() {
       const processing = [APP_STATES.VALIDATING, APP_STATES.EXTRACTING, APP_STATES.PARSING, APP_STATES.EVALUATING, APP_STATES.PREPARING_DASHBOARD].includes(app.state);
       const ready = [APP_STATES.COMPLETED, APP_STATES.COMPLETED_WITH_WARNINGS].includes(app.state);
-      $('uploadWorkspace').classList.toggle('hidden', processing || ready);
-      $('processingWorkspace').classList.toggle('hidden', !processing && app.state !== APP_STATES.FAILED && app.state !== APP_STATES.CANCELLED);
-      $('readyWorkspace').classList.toggle('hidden', !ready);
-      $('diagnosticsFromAnalysis').classList.toggle('hidden', !app.diagnostics);
-      $('startAnalysis').disabled = !app.autocollectFile || !app.rulesFile;
-      renderSequence();
-      if (ready && app.analysisResult) renderReady();
+      $('uploadWorkspace').classList.toggle('hidden', processing || ready); $('processingWorkspace').classList.toggle('hidden', !processing && app.state !== APP_STATES.FAILED && app.state !== APP_STATES.CANCELLED); $('readyWorkspace').classList.toggle('hidden', !ready);
+      $('diagnosticsFromAnalysis').classList.toggle('hidden', !app.diagnostics); $('startAnalysis').disabled = !app.autocollectFile || !app.rulesFile; renderSequence(); if (ready && app.analysisResult) renderReady();
     }
-
-    function renderSequence(activeStage = '') {
-      const doneIndex = Math.max(-1, STAGES.findIndex(([key]) => key === activeStage) - 1);
-      $('processingSequence').innerHTML = STAGES.map(([key, label], idx) => `<div class="sequence-step ${key === activeStage ? 'active' : idx <= doneIndex ? 'done' : ''}"><span class="step-dot">${idx <= doneIndex ? '✓' : idx + 1}</span><span>${label}</span><span class="tiny">${key === activeStage ? 'Now' : idx <= doneIndex ? 'Done' : ''}</span></div>`).join('');
-    }
-
+    function renderSequence(activeStage = '') { const doneIndex = Math.max(-1, STAGES.findIndex(([key]) => key === activeStage) - 1); $('processingSequence').innerHTML = STAGES.map(([key, label], idx) => `<div class="sequence-step ${key === activeStage ? 'active' : idx <= doneIndex ? 'done' : ''}"><span class="step-dot">${idx <= doneIndex ? '✓' : idx + 1}</span><span>${label}</span><span class="tiny">${key === activeStage ? 'Now' : idx <= doneIndex ? 'Done' : ''}</span></div>`).join(''); }
     function updateProgress(message) {
-      const stateByStage = { validating: APP_STATES.VALIDATING, extracting_archive: APP_STATES.EXTRACTING, extracting_opc: APP_STATES.EXTRACTING, locating_sources: APP_STATES.EXTRACTING, loading_rules: APP_STATES.PARSING, extracting_signals: APP_STATES.PARSING, matching_state: APP_STATES.EVALUATING, evaluating_rules: APP_STATES.EVALUATING, building_timeline: APP_STATES.PREPARING_DASHBOARD, preparing_dashboard: APP_STATES.PREPARING_DASHBOARD };
+      const stateByStage = { validating: APP_STATES.VALIDATING, extracting_archive: APP_STATES.EXTRACTING, extracting_opc: APP_STATES.EXTRACTING, locating_sources: APP_STATES.EXTRACTING, loading_rules: APP_STATES.PARSING, building_plan: APP_STATES.PARSING, extracting_signals: APP_STATES.PARSING, matching_state: APP_STATES.EVALUATING, evaluating_rules: APP_STATES.EVALUATING, building_timeline: APP_STATES.PREPARING_DASHBOARD, preparing_dashboard: APP_STATES.PREPARING_DASHBOARD };
       app.state = stateByStage[message.stage] || app.state;
-      const percent = Math.min(99, Math.max(0, Math.round(message.percent || 0)));
-      $('progressRing').style.setProperty('--p', `${percent}%`);
-      $('progressPercent').textContent = `${percent}%`;
-      $('processingHeadline').textContent = STAGES.find(([key]) => key === message.stage)?.[1] || 'Processing';
-      $('processingSubhead').textContent = app.state === APP_STATES.PARSING ? 'Retaining only values required by BSS / BCU rules.' : statusLabel(app.state);
-      $('currentFile').textContent = message.currentFile || '—';
-      $('filesCount').textContent = `${fmt(message.filesCompleted)} / ${fmt(message.filesTotal)}`;
-      $('relevantValues').textContent = fmt(message.relevantValuesFound);
-      $('elapsedTime').textContent = formatDuration(message.elapsedMs || 0);
-      $('remainingTime').textContent = formatDuration(message.estimatedRemainingMs);
-      $('warningErrorCount').textContent = `${fmt(message.warnings)} / ${fmt(message.errors)}`;
-      renderSequence(message.stage);
-      renderAnalysisWorkspace();
+      const percent = Math.min(99, Math.max(0, Math.round(message.percent || 0))); $('progressRing').style.setProperty('--p', `${percent}%`); $('progressPercent').textContent = `${percent}%`;
+      $('processingHeadline').textContent = STAGES.find(([key]) => key === message.stage)?.[1] || 'Processing'; $('processingSubhead').textContent = app.state === APP_STATES.PARSING ? 'Retaining only values required by active rules and source adapters.' : statusLabel(app.state);
+      $('currentFile').textContent = message.currentFile || '—'; $('filesCount').textContent = `${fmt(message.filesCompleted)} / ${fmt(message.filesTotal)}`; $('relevantValues').textContent = fmt(message.relevantValuesFound); $('elapsedTime').textContent = formatDuration(message.elapsedMs || 0); $('remainingTime').textContent = formatDuration(message.estimatedRemainingMs); $('warningErrorCount').textContent = `${fmt(message.warnings)} / ${fmt(message.errors)}`;
+      renderSequence(message.stage); renderAnalysisWorkspace();
     }
-
-    function renderReady() {
-      const meta = app.analysisResult.metadata || {};
-      $('readyRules').textContent = fmt(meta.rulesEvaluated);
-      $('readySignals').textContent = fmt(meta.relevantSignalsFound);
-      $('readySystems').textContent = fmt((app.analysisResult.systemHealth || []).filter(s => s.status !== 'no_rule').length);
-      $('readyDeviations').textContent = fmt((app.analysisResult.deviationEvents || []).length);
-      $('readyTime').textContent = formatDuration(meta.analysisTimeMs || 0);
-    }
-
+    function renderReady() { const meta = app.analysisResult.metadata || {}; $('readyRules').textContent = fmt(meta.rulesEvaluated); $('readySignals').textContent = fmt(meta.relevantSignalsFound); $('readySystems').textContent = fmt((app.analysisResult.systemHealth || []).filter(s => s.status !== 'no_rule').length); $('readyDeviations').textContent = fmt(meta.deviationsFound); $('readyTime').textContent = formatDuration(meta.analysisTimeMs || 0); }
     async function startAnalysis() {
-      if (!app.autocollectFile || !app.rulesFile) return;
-      clearTimeout(app.autoOpenTimer);
-      app.analysisResult = null; app.diagnostics = null; app.selectedEventId = null; app.selectedSignal = null;
-      setState(APP_STATES.VALIDATING);
-      $('cancelAnalysis').disabled = false;
-      updateProgress({ stage: 'validating', percent: 1, filesCompleted: 0, filesTotal: 0, relevantValuesFound: 0, elapsedMs: 0, warnings: 0, errors: 0 });
-      app.worker = createAnalysisWorker();
-      app.worker.onmessage = event => {
-        const msg = event.data || {};
-        if (msg.type === 'progress') updateProgress(msg);
-        if (msg.type === 'complete') {
-          app.worker?.terminate(); app.worker = null;
-          app.analysisResult = msg.analysisResult; app.diagnostics = msg.analysisResult?.diagnosticsSummary || null;
-          app.state = (app.diagnostics?.warnings || 0) ? APP_STATES.COMPLETED_WITH_WARNINGS : APP_STATES.COMPLETED;
-          $('progressRing').style.setProperty('--p', '100%'); $('progressPercent').textContent = '100%';
-          renderAnalysisWorkspace();
-          if ($('autoOpenToggle').checked) app.autoOpenTimer = setTimeout(showServiceRadar, 1400);
-        }
-        if (msg.type === 'failed') { app.worker?.terminate(); app.worker = null; app.state = APP_STATES.FAILED; app.diagnostics = msg.diagnostic; renderFailure(msg.diagnostic); }
-        if (msg.type === 'cancelled') { app.worker?.terminate(); app.worker = null; app.state = APP_STATES.CANCELLED; app.diagnostics = { status: 'cancelled', message: 'Analysis cancelled by user.' }; renderFailure(app.diagnostics); }
-      };
+      if (!app.autocollectFile || !app.rulesFile) return; clearTimeout(app.autoOpenTimer); Object.assign(app, { analysisResult: null, diagnostics: null, selectedEventId: null, selectedSignal: null }); setState(APP_STATES.VALIDATING); $('cancelAnalysis').disabled = false; updateProgress({ stage: 'validating', percent: 1, filesCompleted: 0, filesTotal: 0, relevantValuesFound: 0, elapsedMs: 0, warnings: 0, errors: 0 });
+      app.worker = createAnalysisWorker(); app.worker.onmessage = event => { const msg = event.data || {}; if (msg.type === 'progress') updateProgress(msg); if (msg.type === 'complete') { app.worker?.terminate(); app.worker = null; app.analysisResult = msg.analysisResult; app.diagnostics = msg.analysisResult?.diagnosticsSummary || null; app.selectedSystem = chooseInitialSystem(app.analysisResult); app.state = (app.diagnostics?.warnings || 0) ? APP_STATES.COMPLETED_WITH_WARNINGS : APP_STATES.COMPLETED; $('progressRing').style.setProperty('--p', '100%'); $('progressPercent').textContent = '100%'; renderAnalysisWorkspace(); if ($('autoOpenToggle').checked) app.autoOpenTimer = setTimeout(showServiceRadar, 800); } if (msg.type === 'failed') { app.worker?.terminate(); app.worker = null; app.state = APP_STATES.FAILED; app.diagnostics = msg.diagnostic; renderFailure(msg.diagnostic); } if (msg.type === 'cancelled') { app.worker?.terminate(); app.worker = null; app.state = APP_STATES.CANCELLED; app.diagnostics = { status: 'cancelled', message: 'Analysis cancelled by user.' }; renderFailure(app.diagnostics); } };
       app.worker.postMessage({ type: 'start', autocollectFile: app.autocollectFile, rulesFile: app.rulesFile });
     }
-
-    function renderFailure(diagnostic) {
-      $('processingHeadline').textContent = app.state === APP_STATES.CANCELLED ? 'Analysis cancelled' : 'Analysis failed';
-      $('processingSubhead').textContent = diagnostic?.message || 'Open Diagnostics for details.';
-      $('cancelAnalysis').disabled = true;
-      $('diagnosticsFromAnalysis').classList.remove('hidden');
-      renderSequence('');
-    }
-
+    function chooseInitialSystem(result) { const health = result?.systemHealth || []; return health.find(h => ISSUE_STATUSES.has(h.status))?.system || health.find(h => h.status !== 'no_rule')?.system || 'BSS'; }
+    function renderFailure(diagnostic) { $('processingHeadline').textContent = app.state === APP_STATES.CANCELLED ? 'Analysis cancelled' : 'Analysis failed'; $('processingSubhead').textContent = diagnostic?.message || 'Open Diagnostics for details.'; $('cancelAnalysis').disabled = true; $('diagnosticsFromAnalysis').classList.remove('hidden'); renderSequence(''); }
     function cancelAnalysis() { if (app.worker) app.worker.postMessage({ type: 'cancel' }); }
 
-    function selectedEvent() {
-      const events = app.analysisResult?.deviationEvents || [];
-      return events.find(e => e.id === app.selectedEventId) || events.sort((a,b) => STATUS_PRIORITY[b.severity] - STATUS_PRIORITY[a.severity] || (b.durationMs || 0) - (a.durationMs || 0))[0] || null;
-    }
-
     function renderServiceRadar() {
-      const result = app.analysisResult;
-      if (!result) return;
-      const health = result.systemHealth || [];
-      const bss = health.find(h => h.system === 'BSS') || { status: 'no_data' };
-      const events = result.deviationEvents || [];
-      const issue = selectedEvent();
-      $('radarSubtitle').textContent = `${result.metadata?.timeRange || 'No time range'} • ${fmt(result.metadata?.relevantValuesFound)} relevant BSS values`;
-      $('kpiRow').innerHTML = [
-        ['Machine Health', statusLabel(bss.status)], ['Problem System', events.length ? 'BSS / BCU' : 'None detected'], ['Active Deviations', fmt(events.length)],
-        ['Rules Evaluated', fmt(result.metadata?.rulesEvaluated)], ['Relevant Values', fmt(result.metadata?.relevantValuesFound)]
-      ].map(([l,v]) => `<div class="kpi"><span>${l}</span><strong>${v}</strong></div>`).join('');
-      renderMachineMap(health);
-      renderActiveIssue(issue, bss);
-      renderTimeline(result, issue);
-      renderEvidenceSummary(result, issue);
-      renderActions(result);
+      const result = app.analysisResult; if (!result) return; const health = result.systemHealth || []; const events = result.deviationEvents || []; const atRisk = health.filter(h => ['critical','warning','needs_validation'].includes(h.status)).length; const critical = health.reduce((sum,h) => sum + (h.criticalCount || 0), 0); const coverage = `${fmt(result.metadata?.rulesEvaluated)} rules / ${fmt(result.metadata?.rulesTotal || result.metadata?.rulesEvaluated)} parsed`; const last = events[0]?.endTimestampMs ? `${shortTime(events[0].endTimestampMs)} • ${formatDuration(events[0].durationMs)}` : 'No active deviation detected';
+      $('radarSubtitle').textContent = `${result.metadata?.timeRange || 'No time range'} • ${fmt(result.metadata?.relevantValuesFound)} relevant machine values`;
+      $('kpiRow').innerHTML = [['Systems at risk', fmt(atRisk)], ['Critical deviations', fmt(critical)], ['Evaluation coverage', coverage], ['Open recommended actions', fmt(result.activeFindings?.length)], ['Last deviation / duration', last]].map(([l,v]) => `<div class="kpi"><span>${l}</span><strong>${escapeHtml(v)}</strong></div>`).join('');
+      renderMachineMap(health); renderActiveIssue(selectedEvent(), selectedHealth()); renderTimeline(result); renderEvidenceSummary(result, selectedEvent()); renderActions(result);
     }
-
-    function renderMachineSvg() {
-      return `<svg class="machine-svg" viewBox="0 0 1000 520" aria-label="Landa machine overview">
-        <defs><linearGradient id="bodyG" x1="0" x2="1"><stop stop-color="#233348"/><stop offset="1" stop-color="#172536"/></linearGradient></defs>
-        <rect x="85" y="150" width="760" height="230" rx="52" fill="url(#bodyG)" stroke="rgba(148,163,184,.45)" stroke-width="4"/>
-        <rect x="180" y="92" width="230" height="125" rx="28" fill="#101d2d" stroke="rgba(57,199,243,.35)" stroke-width="3"/>
-        <rect x="450" y="112" width="250" height="105" rx="24" fill="#111e2e" stroke="rgba(57,199,243,.28)" stroke-width="3"/>
-        <rect x="710" y="185" width="165" height="160" rx="30" fill="#101d2d" stroke="rgba(148,163,184,.35)" stroke-width="3"/>
-        <rect x="120" y="360" width="170" height="62" rx="20" fill="#0c1724"/><rect x="610" y="360" width="220" height="62" rx="20" fill="#0c1724"/>
-        <circle cx="195" cy="430" r="30" fill="#0b1118" stroke="#405064" stroke-width="8"/><circle cx="710" cy="430" r="30" fill="#0b1118" stroke="#405064" stroke-width="8"/>
-        <path d="M120 282h720" stroke="rgba(57,199,243,.20)" stroke-width="18" stroke-linecap="round"/>
-        <path d="M230 170h560" stroke="rgba(238,246,255,.13)" stroke-width="8" stroke-linecap="round"/>
-      </svg>`;
-    }
-
-    function renderMachineMap(health) {
-      const healthMap = new Map((health || []).map(item => [item.system, item]));
-      $('showIssues').setAttribute('aria-pressed', app.systemFilter === 'issues');
-      $('showAllSystems').setAttribute('aria-pressed', app.systemFilter === 'all');
-      $('machineMap').innerHTML = renderMachineSvg() + HOTSPOTS.map(([system,x,y]) => {
-        const item = healthMap.get(system) || { system, status: 'no_rule' };
-        const isIssue = ISSUE_STATUSES.has(item.status);
-        const classes = [`hotspot`, `status-${item.status}`, isIssue ? '' : 'quiet', app.systemFilter === 'issues' && !isIssue ? 'hidden-issue' : ''].join(' ');
-        return `<button class="${classes}" style="left:${x}%;top:${y}%" data-system="${system}" title="${system}: ${statusLabel(item.status)}">${system}</button>`;
-      }).join('');
-      $('machineMap').querySelectorAll('[data-system="BSS"]').forEach(btn => btn.addEventListener('click', showDrilldown));
-    }
-
-    function renderActiveIssue(issue, bss) {
-      if (!issue) {
-        $('activeIssue').innerHTML = `<span class="severity-pill status-${bss.status}">${statusLabel(bss.status)}</span><h2 class="issue-title">No active BSS deviation detected</h2><p class="muted">BSS / BCU rules were evaluated where matching values existed. Open drill-down for parameter coverage.</p><button class="primary" id="openDrillNoIssue">Open Drill-Down</button>`;
-        $('openDrillNoIssue').onclick = showDrilldown;
-        return;
-      }
+    function renderMachineSvg() { return `<svg class="machine-svg" viewBox="0 0 1000 520" aria-label="Landa machine overview"><defs><linearGradient id="bodyG" x1="0" x2="1"><stop stop-color="#233348"/><stop offset="1" stop-color="#172536"/></linearGradient></defs><rect x="85" y="150" width="760" height="230" rx="52" fill="url(#bodyG)" stroke="rgba(148,163,184,.45)" stroke-width="4"/><rect x="180" y="92" width="230" height="125" rx="28" fill="#101d2d" stroke="rgba(57,199,243,.35)" stroke-width="3"/><rect x="450" y="112" width="250" height="105" rx="24" fill="#111e2e" stroke="rgba(57,199,243,.28)" stroke-width="3"/><rect x="710" y="185" width="165" height="160" rx="30" fill="#101d2d" stroke="rgba(148,163,184,.35)" stroke-width="3"/><rect x="120" y="360" width="170" height="62" rx="20" fill="#0c1724"/><rect x="610" y="360" width="220" height="62" rx="20" fill="#0c1724"/><circle cx="195" cy="430" r="30" fill="#0b1118" stroke="#405064" stroke-width="8"/><circle cx="710" cy="430" r="30" fill="#0b1118" stroke="#405064" stroke-width="8"/><path d="M120 282h720" stroke="rgba(57,199,243,.20)" stroke-width="18" stroke-linecap="round"/><path d="M230 170h560" stroke="rgba(238,246,255,.13)" stroke-width="8" stroke-linecap="round"/></svg>`; }
+    function renderMachineMap(health) { const healthMap = new Map((health || []).map(item => [item.system, item])); $('showIssues').setAttribute('aria-pressed', app.systemFilter === 'issues'); $('showAllSystems').setAttribute('aria-pressed', app.systemFilter === 'all'); $('machineMap').innerHTML = renderMachineSvg() + HOTSPOTS.map(([system,x,y]) => { const item = healthMap.get(system) || { system, status: 'no_rule' }; const isIssue = ISSUE_STATUSES.has(item.status); const classes = [`hotspot`, `status-${item.status}`, isIssue ? '' : 'quiet', app.systemFilter === 'issues' && !isIssue ? 'hidden-issue' : '', app.selectedSystem === system ? 'selected' : ''].join(' '); return `<button class="${classes}" style="left:${x}%;top:${y}%" data-system="${system}" title="${system}: ${statusLabel(item.status)}">${system}</button>`; }).join(''); $('machineMap').querySelectorAll('[data-system]').forEach(btn => btn.addEventListener('click', () => { app.selectedSystem = btn.dataset.system; app.selectedEventId = null; app.selectedSignal = null; renderServiceRadar(); })); }
+    function renderActiveIssue(issue, health) {
+      const status = health?.status || 'no_rule';
+      if (!issue) { const msg = status === 'no_rule' ? 'No evaluation rules are currently configured for this system.' : status === 'no_data' ? 'Rules exist, but no matching values were found in the uploaded logs.' : 'No active deviation detected for the selected system.'; $('activeIssue').innerHTML = `<span class="severity-pill status-${status}">${statusLabel(status)}</span><h2 class="issue-title">${escapeHtml(app.selectedSystem)}</h2><p class="muted">${msg}</p><button class="primary" id="openDrillNoIssue">Open Drill-Down</button>`; $('openDrillNoIssue').onclick = showDrilldown; return; }
       const deviation = Number(issue.latestActual) > Number(issue.expectedHigh) ? Number(issue.latestActual) - Number(issue.expectedHigh) : Number(issue.latestActual) - Number(issue.expectedLow);
-      $('activeIssue').innerHTML = `<span class="severity-pill status-${issue.severity}">${statusLabel(issue.severity)}</span>
-        <div><p class="tiny">${escapeHtml(issue.system)} / ${escapeHtml(issue.subsystem || 'BCU')}</p><h2 class="issue-title">${escapeHtml(issue.signal)} outside allowed range</h2></div>
-        <div class="comparison-grid">
-          <div class="comparison"><span>Actual</span><strong>${valueText(issue.latestActual, issue.signal)}</strong></div>
-          <div class="comparison"><span>Expected</span><strong>${rangeText(issue.expectedLow, issue.expectedHigh, issue.signal)}</strong></div>
-          <div class="comparison"><span>Deviation</span><strong>${Number.isFinite(deviation) ? (deviation > 0 ? '+' : '') + valueText(deviation, issue.signal) : '—'}</strong></div>
-        </div>
-        <div class="issue-facts">
-          <div class="comparison"><span>State</span><strong>${escapeHtml(issue.machineState || 'Unknown')}</strong></div>
-          <div class="comparison"><span>Duration</span><strong>${formatDuration(issue.durationMs)}</strong></div>
-          <div class="comparison"><span>First detected</span><strong>${shortTime(issue.startTimestamp)}</strong></div>
-          <div class="comparison"><span>Points</span><strong>${fmt(issue.pointCount)}</strong></div>
-        </div>
-        <div class="action-box"><span class="tiny">Recommended action</span><p>${escapeHtml(issue.recommendedAction || 'Validate the signal and inspect the BSS / BCU subsystem.')}</p></div>
-        <button class="primary" id="openDrill">Open Drill-Down</button>`;
-      $('openDrill').onclick = () => { app.selectedSignal = issue.signal; showDrilldown(); };
+      $('activeIssue').innerHTML = `<span class="severity-pill status-${issue.severity}">${statusLabel(issue.severity)}</span><div><p class="tiny">${escapeHtml(issue.system)}${issue.subsystem ? ' / ' + escapeHtml(issue.subsystem) : ''}${issue.component ? ' / ' + escapeHtml(issue.component) : ''}</p><h2 class="issue-title">${escapeHtml(issue.signal)} requires attention</h2></div><div class="comparison-grid"><div class="comparison"><span>Actual</span><strong>${valueText(issue.latestActual, issue.signal)}</strong></div><div class="comparison"><span>Expected</span><strong>${rangeText(issue.expectedLow, issue.expectedHigh, issue.signal)}</strong></div><div class="comparison"><span>Deviation</span><strong>${Number.isFinite(deviation) ? (deviation > 0 ? '+' : '') + valueText(deviation, issue.signal) : '—'}</strong></div></div><div class="issue-facts"><div class="comparison"><span>Machine state</span><strong>${escapeHtml(issue.machineState || 'Unknown')}</strong></div><div class="comparison"><span>System state</span><strong>${escapeHtml(issue.systemState || 'Unknown')}</strong></div><div class="comparison"><span>Duration</span><strong>${formatDuration(issue.durationMs)}</strong></div><div class="comparison"><span>First detected</span><strong>${shortTime(issue.startTimestamp)}</strong></div><div class="comparison"><span>Last detected</span><strong>${shortTime(issue.endTimestamp)}</strong></div><div class="comparison"><span>Points</span><strong>${fmt(issue.pointCount)}</strong></div></div><div class="action-box"><span class="tiny">Recommended action</span><p>${escapeHtml(issue.recommendedAction || `Validate ${issue.signal} and inspect ${issue.system}.`)}</p></div><button class="primary" id="openDrill">Open Drill-Down</button>`; $('openDrill').onclick = () => { app.selectedSignal = issue.signal; showDrilldown(); };
     }
-
     function renderTimeline(result) {
-      const events = result.deviationTimeline || [];
-      const states = result.stateTimeline || [];
-      const start = result.metadata?.startTimestampMs, end = result.metadata?.endTimestampMs;
-      if (!Number.isFinite(start) || !Number.isFinite(end) || start === end) { $('deviationTimeline').innerHTML = '<p class="muted">No timeline data available.</p>'; return; }
-      const axis = `<div class="time-axis"><span>${shortTime(start)}</span><span>${shortTime(end)}</span></div>`;
-      const row = (label, segs, isState=false) => `<div class="timeline-row"><strong class="tiny">${label}</strong><div class="timeline-track">${segs.map(seg => {
-        const left = Math.max(start, seg.startMs || seg.startTimestampMs || start), right = Math.min(end, seg.endMs || seg.endTimestampMs || end);
-        const width = Math.max(.4, ((right - left) / (end - start)) * 100);
-        return `<button class="timeline-segment status-${seg.status || 'ok'} ${isState ? 'state' : ''}" style="width:${width}%" data-event="${seg.eventId || ''}" title="${escapeHtml(seg.label || statusLabel(seg.status))}"></button>`;
-      }).join('')}</div></div>`;
-      $('deviationTimeline').innerHTML = axis + row('BSS', events) + row('State', states, true);
-      $('deviationTimeline').querySelectorAll('[data-event]').forEach(btn => btn.addEventListener('click', () => { if (btn.dataset.event) { app.selectedEventId = btn.dataset.event; renderServiceRadar(); } }));
+      const start = result.metadata?.startTimestampMs, end = result.metadata?.endTimestampMs; if (!Number.isFinite(start) || !Number.isFinite(end) || start === end) { $('deviationTimeline').innerHTML = '<p class="muted">No timeline data available.</p>'; return; }
+      const rows = (result.timelineRows || []).filter(r => app.showAllTimelineSystems || r.status !== 'no_rule'); const axis = `<div class="action-row" style="padding:0 0 8px"><div class="time-axis" style="flex:1"><span>${shortTime(start)}</span><span>${shortTime(end)}</span></div><button id="toggleTimelineSystems" class="ghost">${app.showAllTimelineSystems ? 'Hide No Rule' : 'Show all systems'}</button></div>`;
+      const row = (label, segs, isState=false) => `<div class="timeline-row"><strong class="tiny">${escapeHtml(label)}</strong><div class="timeline-track">${(segs || []).map(seg => { const left = Math.max(start, seg.startMs || start), right = Math.min(end, seg.endMs || end); const width = Math.max(.4, ((right - left) / (end - start)) * 100); return `<button class="timeline-segment status-${seg.status || 'ok'} ${isState ? 'state' : ''}" style="width:${width}%" data-system="${escapeHtml(seg.system || '')}" data-event="${seg.eventId || ''}" title="${escapeHtml(seg.label || statusLabel(seg.status))}"></button>`; }).join('')}</div></div>`;
+      $('deviationTimeline').innerHTML = axis + rows.map(r => row(r.system, r.segments)).join('') + row('Machine State', result.stateTimeline || [], true); $('toggleTimelineSystems').onclick = () => { app.showAllTimelineSystems = !app.showAllTimelineSystems; renderServiceRadar(); }; $('deviationTimeline').querySelectorAll('[data-system]').forEach(btn => btn.addEventListener('click', () => { if (btn.dataset.system) app.selectedSystem = btn.dataset.system; if (btn.dataset.event) app.selectedEventId = btn.dataset.event; renderServiceRadar(); }));
     }
-
-    function renderEvidenceSummary(result, issue) {
-      const summary = result.diagnosticsSummary || {};
-      $('evidenceSummary').innerHTML = [
-        ['Parameter', issue?.signal || 'No active deviation'], ['Actual vs expected', issue ? `${valueText(issue.latestActual, issue.signal)} vs ${rangeText(issue.expectedLow, issue.expectedHigh, issue.signal)}` : 'No out-of-range event selected'],
-        ['Machine state', issue?.machineState || '—'], ['Scanned rows', `${fmt(summary.scannedRows)} (Diagnostics only)`]
-      ].map(([k,v]) => `<div class="compact-item"><strong>${escapeHtml(k)}</strong><span class="muted">${escapeHtml(v)}</span></div>`).join('');
-    }
-
-    function renderActions(result) {
-      const actions = (result.activeFindings || []).slice(0, 4);
-      $('serviceActions').innerHTML = actions.length ? actions.map(item => `<div class="compact-item"><strong>${escapeHtml(item.title)}</strong><span class="muted">${escapeHtml(item.recommendedAction)}</span></div>`).join('') : '<div class="compact-item"><strong>No service action required from evaluated BSS data.</strong><span class="muted">Open drill-down to review coverage and no-data parameters.</span></div>';
-    }
-
+    function renderEvidenceSummary(result, issue) { const health = selectedHealth(); $('evidenceSummary').innerHTML = [['Selected system', app.selectedSystem], ['Status', statusLabel(health.status)], ['Rules / matched signals', `${fmt(health.rulesTotal)} / ${fmt(health.matchedSignals)}`], ['Parameter', issue?.signal || 'No active deviation'], ['Machine state', issue?.machineState || '—']].map(([k,v]) => `<div class="compact-item"><strong>${escapeHtml(k)}</strong><span class="muted">${escapeHtml(v)}</span></div>`).join(''); }
+    function renderActions(result) { const actions = (result.activeFindings || []).filter(f => f.system === app.selectedSystem).slice(0, 4); $('serviceActions').innerHTML = actions.length ? actions.map(item => `<div class="compact-item"><strong>${escapeHtml(item.title)}</strong><span class="muted">${escapeHtml(item.recommendedAction)}</span></div>`).join('') : '<div class="compact-item"><strong>No open recommended actions for the selected system.</strong><span class="muted">Open drill-down to review evaluated parameters and coverage.</span></div>'; }
     function showDrilldown() { if (!app.analysisResult) return; app.lastView = 'drilldown'; showOnly('drilldownView'); renderDrilldown(); }
-
-    function renderDrilldown() {
-      const result = app.analysisResult;
-      const bss = (result.systemHealth || []).find(h => h.system === 'BSS') || {};
-      const summaries = result.signalSummaries || [];
-      app.selectedSignal ||= summaries[0]?.signal || null;
-      $('drillSubtitle').textContent = `${fmt(result.deviationEvents?.length)} deviation events • ${result.metadata?.timeRange || 'No time range'}`;
-      $('drillSummary').innerHTML = [ ['BSS / BCU', statusLabel(bss.status)], ['Deviation Events', fmt(result.deviationEvents?.length)], ['Rules Evaluated', fmt(result.metadata?.rulesEvaluated)], ['Time Range', result.metadata?.timeRange || '—'], ['Relevant Values', fmt(result.metadata?.relevantValuesFound)] ].map(([l,v]) => `<div class="kpi"><span>${l}</span><strong>${escapeHtml(v)}</strong></div>`).join('');
-      const sorted = [...summaries].sort((a,b) => STATUS_PRIORITY[b.status] - STATUS_PRIORITY[a.status] || a.signal.localeCompare(b.signal));
-      $('parameterList').innerHTML = sorted.map(s => `<button class="param-card status-${s.status}" data-signal="${escapeHtml(s.signal)}" aria-pressed="${s.signal === app.selectedSignal}"><span><strong>${escapeHtml(s.signal)}</strong><span class="tiny">${statusLabel(s.status)} • ${fmt(s.eventCount)} events • ${formatDuration(s.totalDeviationDurationMs)}</span></span><span>${valueText(s.latestActual, s.signal)}<br><span class="tiny">${rangeText(s.expectedLow, s.expectedHigh, s.signal)}</span></span></button>`).join('');
-      $('parameterList').querySelectorAll('[data-signal]').forEach(btn => btn.addEventListener('click', () => { app.selectedSignal = btn.dataset.signal; renderDrilldown(); }));
-      renderParameterChart(app.selectedSignal);
-    }
-
-    function renderParameterChart(signal) {
-      const svg = $('parameterChart');
-      const series = app.analysisResult?.chartSeries?.[signal] || [];
-      if (!series.length) { svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="#9aaec3">No chart data for ${escapeHtml(signal || 'selected parameter')}</text>`; return; }
-      const w = 900, h = 360, pad = 46;
-      const xs = series.map(p => p.timestampMs), ys = series.flatMap(p => [p.actual, p.expectedLow, p.expectedHigh]).filter(Number.isFinite);
-      const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys), spanY = Math.max(1, maxY - minY);
-      const x = v => pad + ((v - minX) / Math.max(1, maxX - minX)) * (w - pad * 2);
-      const y = v => h - pad - ((v - minY) / spanY) * (h - pad * 2);
-      const actual = series.map(p => `${x(p.timestampMs)},${y(p.actual)}`).join(' ');
-      const top = series.map(p => `${x(p.timestampMs)},${y(p.expectedHigh)}`).join(' ');
-      const bottom = [...series].reverse().map(p => `${x(p.timestampMs)},${y(p.expectedLow)}`).join(' ');
-      const firstDeviation = series.find(p => ISSUE_STATUSES.has(p.status));
-      svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-      svg.innerHTML = `<rect x="0" y="0" width="${w}" height="${h}" rx="18" fill="rgba(8,16,25,.35)"/><line x1="${pad}" x2="${w-pad}" y1="${h-pad}" y2="${h-pad}" stroke="rgba(148,163,184,.35)"/><line x1="${pad}" x2="${pad}" y1="${pad}" y2="${h-pad}" stroke="rgba(148,163,184,.35)"/><polygon points="${top} ${bottom}" fill="rgba(67,209,125,.18)" stroke="rgba(67,209,125,.45)"/><polyline points="${actual}" fill="none" stroke="#39c7f3" stroke-width="3"/>${firstDeviation ? `<line x1="${x(firstDeviation.timestampMs)}" x2="${x(firstDeviation.timestampMs)}" y1="${pad}" y2="${h-pad}" stroke="#ff5f68" stroke-dasharray="6 6"/><text x="${x(firstDeviation.timestampMs)+8}" y="${pad+18}" fill="#ffb3b7" font-size="14">Deviation start</text>` : ''}<text x="${pad}" y="24" fill="#eef6ff" font-size="16">${escapeHtml(signal || '')}</text><text x="${pad}" y="${h-10}" fill="#9aaec3" font-size="12">Machine-state strip is represented in the timeline below the Service Radar.</text>`;
-    }
-
-    function renderDiagnostics() {
-      const payload = { applicationState: app.state, diagnosticsSummary: app.diagnostics, analysisMetadata: app.analysisResult?.metadata, fileInventory: app.analysisResult?.diagnosticsSummary?.fileInventory, ruleMapping: app.analysisResult?.diagnosticsSummary?.ruleMapping, rawEvidencePreview: app.analysisResult?.diagnosticsSummary?.rawEvidencePreview };
-      $('diagnosticsPre').textContent = JSON.stringify(payload, null, 2);
-    }
-
-    function createAnalysisWorker() {
-      const workerSource = analysisWorkerMain.toString() + '\nanalysisWorkerMain();';
-      return new Worker(URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' })));
-    }
+    function renderDrilldown() { const result = app.analysisResult; const health = selectedHealth(); const summaries = (result.signalSummaries || []).filter(s => s.system === app.selectedSystem); app.selectedSignal ||= summaries[0]?.signal || null; document.querySelector('#drilldownView .brand-eyebrow').textContent = `Service Radar → ${app.selectedSystem}`; document.querySelector('#drilldownView h1').textContent = `${app.selectedSystem} Drill-Down`; $('drillSubtitle').textContent = `${fmt(eventsForSelectedSystem().length)} deviation events • ${result.metadata?.timeRange || 'No time range'}`; $('drillSummary').innerHTML = [[app.selectedSystem, statusLabel(health.status)], ['Rules evaluated', fmt(health.rulesEvaluated)], ['Matched signals', fmt(health.matchedSignals)], ['Deviation events', fmt(health.activeDeviationEvents)], ['Selected range', result.metadata?.timeRange || '—']].map(([l,v]) => `<div class="kpi"><span>${l}</span><strong>${escapeHtml(v)}</strong></div>`).join(''); const sorted = [...summaries].sort((a,b) => STATUS_PRIORITY[b.status] - STATUS_PRIORITY[a.status] || a.signal.localeCompare(b.signal)); $('parameterList').innerHTML = sorted.length ? sorted.map(s => `<button class="param-card status-${s.status}" data-signal="${escapeHtml(s.signal)}" aria-pressed="${s.signal === app.selectedSignal}"><span><strong>${escapeHtml(s.signal)}</strong><span class="tiny">${escapeHtml(s.component || '—')} • ${statusLabel(s.status)} • ${fmt(s.eventCount)} events • ${formatDuration(s.totalDeviationDurationMs)}</span></span><span>${valueText(s.latestActual, s.signal)}<br><span class="tiny">${rangeText(s.expectedLow, s.expectedHigh, s.signal)}</span></span></button>`).join('') : '<p class="muted">No parameters are configured for this system.</p>'; $('parameterList').querySelectorAll('[data-signal]').forEach(btn => btn.addEventListener('click', () => { app.selectedSignal = btn.dataset.signal; renderDrilldown(); })); renderParameterChart(app.selectedSignal); }
+    function renderParameterChart(signal) { const svg = $('parameterChart'); const key = `${app.selectedSystem}::${signal}`; const series = app.analysisResult?.chartSeries?.[key] || []; if (!series.length) { svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="#9aaec3">No chart data for ${escapeHtml(signal || app.selectedSystem)}</text>`; return; } const w = 900, h = 360, pad = 46; const xs = series.map(p => p.timestampMs), ys = series.flatMap(p => [p.actual, p.expectedLow, p.expectedHigh]).filter(Number.isFinite); const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys), spanY = Math.max(1, maxY - minY); const x = v => pad + ((v - minX) / Math.max(1, maxX - minX)) * (w - pad * 2); const y = v => h - pad - ((v - minY) / spanY) * (h - pad * 2); const actual = series.map(p => `${x(p.timestampMs)},${y(p.actual)}`).join(' '); const top = series.map(p => `${x(p.timestampMs)},${y(p.expectedHigh)}`).join(' '); const bottom = [...series].reverse().map(p => `${x(p.timestampMs)},${y(p.expectedLow)}`).join(' '); const firstDeviation = series.find(p => ISSUE_STATUSES.has(p.status)); svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.innerHTML = `<rect x="0" y="0" width="${w}" height="${h}" rx="18" fill="rgba(8,16,25,.35)"/><line x1="${pad}" x2="${w-pad}" y1="${h-pad}" y2="${h-pad}" stroke="rgba(148,163,184,.35)"/><line x1="${pad}" x2="${pad}" y1="${pad}" y2="${h-pad}" stroke="rgba(148,163,184,.35)"/>${top && bottom ? `<polygon points="${top} ${bottom}" fill="rgba(67,209,125,.18)" stroke="rgba(67,209,125,.45)"/>` : ''}<polyline points="${actual}" fill="none" stroke="#39c7f3" stroke-width="3"/>${firstDeviation ? `<line x1="${x(firstDeviation.timestampMs)}" x2="${x(firstDeviation.timestampMs)}" y1="${pad}" y2="${h-pad}" stroke="#ff5f68" stroke-dasharray="6 6"/><text x="${x(firstDeviation.timestampMs)+8}" y="${pad+18}" fill="#ffb3b7" font-size="14">Deviation start</text>` : ''}<text x="${pad}" y="24" fill="#eef6ff" font-size="16">${escapeHtml(signal || '')}</text><text x="${pad}" y="${h-10}" fill="#9aaec3" font-size="12">Expected band, actual values, deviation markers, and machine-state context.</text>`; }
+    function renderDiagnostics() { const payload = { applicationState: app.state, diagnosticsSummary: app.diagnostics, analysisMetadata: app.analysisResult?.metadata, analysisPlan: app.analysisResult?.analysisPlan, sourceAdapters: app.analysisResult?.diagnosticsSummary?.sourceAdaptersExecuted, fileInventory: app.analysisResult?.diagnosticsSummary?.fileInventory, requiredSignals: app.analysisResult?.diagnosticsSummary?.requiredSignals, matchedSignals: app.analysisResult?.diagnosticsSummary?.matchedSignals, missingSignals: app.analysisResult?.diagnosticsSummary?.missingSignals, parserDiagnostics: app.analysisResult?.diagnosticsSummary?.parserDiagnostics, ruleMapping: app.analysisResult?.diagnosticsSummary?.ruleMapping, rawEvidencePreview: app.analysisResult?.diagnosticsSummary?.rawEvidencePreview }; $('diagnosticsPre').textContent = JSON.stringify(payload, null, 2); }
+    function createAnalysisWorker() { const workerSource = analysisWorkerMain.toString() + '\nanalysisWorkerMain();'; return new Worker(URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }))); }
 
     function analysisWorkerMain() {
       importScripts('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js', 'https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js');
       let cancelled = false;
-      const REQUIRED_FALLBACK = ['TubActualLevelMM','FillActualTemperatureC','FillActualFlowLPM','FillFlowMeterActualValve','WaterFlowMeterActualValve','FoamLayerMM','TankActualLevelMM','TankActualTemperatureC','DrainActualFlowLPM','FilterActualDiffPressure','ActualPressureAfterFilter','CoolingValveAO'];
-      const SYSTEMS = ['DPS','DFES','MSPS','ITS','IPS','Ventilation','ECS','IRD','QCS','BSS','STS','IPU','ICS'];
-      const ISSUE = new Set(['critical','warning','needs_validation']);
-      const PRIORITY = { critical: 5, warning: 4, needs_validation: 3, ok: 2, no_data: 1, no_rule: 0 };
-      const startTime = Date.now();
-      const diagnostics = { warnings: 0, errors: 0, scannedRows: 0, matchedRows: 0, fileInventory: [], parserDiagnostics: [], rawEvidencePreview: [], ruleMapping: [] };
-      onmessage = event => { if (event.data?.type === 'cancel') cancelled = true; if (event.data?.type === 'start') run(event.data).catch(error => fail(error)); };
+      const MACHINE_SYSTEMS = ['Machine','BSS','IPS','PSS','Dryer','IPU','Ventilation','CWS','IRD','DFES','DPS','QCS','ICS','ECS','MSPS','ITS','FEC','LLCI','STS'];
+      const MAP_SYSTEMS = ['DPS','DFES','MSPS','ITS','IPS','Ventilation','ECS','IRD','QCS','BSS','STS','IPU','ICS','FEC','CWS','PSS','Dryer'];
+      const ISSUE = new Set(['critical','warning','needs_validation']); const PRIORITY = { critical: 6, warning: 5, needs_validation: 4, ok: 3, no_data: 2, no_rule: 1, evaluator_pending: 0 };
+      const startTime = Date.now(); const diagnostics = { warnings: 0, errors: 0, scannedRows: 0, matchedRows: 0, fileInventory: [], sourceAdaptersExecuted: [], requiredSignals: {}, matchedSignals: {}, missingSignals: {}, parserDiagnostics: [], rawEvidencePreview: [], ruleMapping: [], unsupportedSourceRules: [] };
+      onmessage = event => { if (event.data?.type === 'cancel') cancelled = true; if (event.data?.type === 'start') run(event.data).then(analysisResult => postMessage({ type: 'complete', analysisResult })).catch(error => fail(error)); };
       function assertLive() { if (cancelled) { postMessage({ type: 'cancelled' }); throw new Error('__cancelled__'); } }
-      function normalize(value) { return String(value ?? '').trim().replace(/^\ufeff/, '').replace(/\s+/g, '').toLowerCase(); }
+      function fail(error) { if (String(error?.message) === '__cancelled__') return; diagnostics.errors += 1; postMessage({ type: 'failed', diagnostic: { message: error?.message || String(error), diagnostics } }); }
+      function progress(stage, percent, extra={}) { postMessage({ type: 'progress', stage, percent, elapsedMs: Date.now() - startTime, warnings: diagnostics.warnings, errors: diagnostics.errors, relevantValuesFound: diagnostics.matchedRows, ...extra }); }
+      function normalize(value) { return String(value ?? '').trim().replace(/^\ufeff/, '').toLowerCase().replace(/[\s_\-\p{P}\p{S}]+/gu, ''); }
+      function compactSource(value) { const n = normalize(value); if (n.includes('bssnotification')) return 'BSSNotifications'; if (n.includes('ipsnotification')) return 'IPSNotifications'; if (n.includes('fecnotification')) return 'FECNotifications'; if (n.includes('machinestate')) return 'MachineStates'; if (n.includes('alertsmonitoring') || n.includes('aletrsmonitoring')) return 'AlertsMonitoring'; return String(value || '').trim(); }
+      function canonSystem(value) { const n = normalize(value); const hit = MACHINE_SYSTEMS.find(s => normalize(s) === n); return hit || (String(value || '').trim() || 'Machine'); }
       function asNumber(value) { const n = Number(String(value ?? '').replace(',', '.').match(/-?\d+(?:\.\d+)?/)?.[0]); return Number.isFinite(n) ? n : NaN; }
       function parseTime(value) { const text = String(value ?? '').trim(); const native = Date.parse(text); if (Number.isFinite(native)) return native; const m = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:[.,](\d{1,6}))?/); if (!m) return NaN; const year = Number(m[3].length === 2 ? '20' + m[3] : m[3]); const ms = Number((m[7] || '0').padEnd(3, '0').slice(0,3)); return Date.UTC(year, Number(m[2])-1, Number(m[1]), Number(m[4]), Number(m[5]), Number(m[6] || 0), ms); }
-      function col(row, names) { const keys = Object.keys(row || {}); for (const name of names) { const direct = keys.find(k => normalize(k) === normalize(name)); if (direct) return row[direct]; } return ''; }
-      function headerName(headers, names) { return headers.find(h => names.some(n => normalize(h) === normalize(n))) || ''; }
-      function basename(path) { return String(path || '').split(/[\\/]/).pop(); }
-      function progress(stage, percent, extra = {}) { postMessage({ type: 'progress', stage, percent, elapsedMs: Date.now() - startTime, warnings: diagnostics.warnings, errors: diagnostics.errors, relevantValuesFound: diagnostics.matchedRows, ...extra }); }
-      function fail(error) { if (String(error?.message) === '__cancelled__') return; diagnostics.errors += 1; postMessage({ type: 'failed', diagnostic: { message: error?.message || String(error), ...diagnostics } }); }
-
-      async function run({ autocollectFile, rulesFile }) {
-        progress('validating', 2, { currentFile: rulesFile?.name || '', filesCompleted: 0, filesTotal: 2 }); assertLive();
-        if (!autocollectFile || !rulesFile) throw new Error('Both Autocollect ZIP and PANDA Rules Excel are required.');
-        const rules = await parseRules(rulesFile); assertLive();
-        const requiredSignals = new Set((rules.length ? rules : REQUIRED_FALLBACK.map(signal => ({ signal, normSignal: normalize(signal), system: 'BSS', subsystem: 'BCU', logSource: 'BSSNotifications' }))).map(r => r.normSignal));
-        progress('extracting_archive', 9, { currentFile: autocollectFile.name, filesCompleted: 1, filesTotal: 2 });
-        const rootZip = await JSZip.loadAsync(autocollectFile); assertLive();
-        const rootFiles = Object.values(rootZip.files).filter(f => !f.dir); diagnostics.fileInventory.push(...rootFiles.map(f => ({ path: f.name, bytes: f._data?.uncompressedSize || 0 })));
-        const opcEntry = rootFiles.find(f => /(^|[\\/])opc\.zip$/i.test(f.name));
-        progress('extracting_opc', 15, { currentFile: opcEntry ? basename(opcEntry.name) : autocollectFile.name, filesCompleted: 1, filesTotal: rootFiles.length });
-        const dataZip = opcEntry ? await JSZip.loadAsync(await opcEntry.async('arraybuffer')) : rootZip; assertLive();
-        const files = Object.values(dataZip.files).filter(f => !f.dir);
-        diagnostics.fileInventory.push(...files.map(f => ({ path: f.name, bytes: f._data?.uncompressedSize || 0 })));
-        const machineFiles = files.filter(f => /MachineStates/i.test(f.name) && /\.csv$/i.test(f.name));
-        const bssFiles = files.filter(f => /BSSNotifications/i.test(f.name) && /\.csv$/i.test(f.name));
-        progress('locating_sources', 22, { currentFile: `${machineFiles.length} MachineStates, ${bssFiles.length} BSSNotifications`, filesCompleted: 0, filesTotal: machineFiles.length + bssFiles.length });
-        if (!machineFiles.length) diagnostics.warnings += 1;
-        if (!bssFiles.length) throw new Error('No BSSNotifications CSV files found in autocollect/opc.zip.');
-        progress('loading_rules', 31, { currentFile: rulesFile.name, filesCompleted: 1, filesTotal: 2 });
-        const machineIndex = await parseMachineStates(machineFiles); assertLive();
-        const bssValues = await parseBssFiles(bssFiles, requiredSignals, machineFiles.length); assertLive();
-        progress('matching_state', 70, { currentFile: 'MachineStates context', filesCompleted: machineFiles.length + bssFiles.length, filesTotal: machineFiles.length + bssFiles.length });
-        const evaluated = evaluateValues(bssValues, rules, machineIndex); assertLive();
-        progress('evaluating_rules', 82, { currentFile: 'BSS / BCU rules', filesCompleted: machineFiles.length + bssFiles.length, filesTotal: machineFiles.length + bssFiles.length });
-        const result = buildAnalysisResult(evaluated, rules, machineIndex); assertLive();
-        progress('building_timeline', 92, { currentFile: 'Deviation timeline', filesCompleted: machineFiles.length + bssFiles.length, filesTotal: machineFiles.length + bssFiles.length });
-        progress('preparing_dashboard', 99, { currentFile: 'Compact AnalysisResult', filesCompleted: machineFiles.length + bssFiles.length, filesTotal: machineFiles.length + bssFiles.length });
-        postMessage({ type: 'complete', analysisResult: result });
-      }
-
-      async function parseRules(file) {
-        const buffer = await file.arrayBuffer();
-        const workbook = XLSX.read(buffer, { type: 'array' });
-        const sheetName = workbook.SheetNames.find(n => /PANDA Rules Template/i.test(n)) || workbook.SheetNames[0];
-        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
-        const rules = rows.map((row, idx) => {
-          const signal = col(row, ['Log Signal Name','LogSignalName','Log Signal','SubComponent','Signal']);
-          const system = col(row, ['System']) || 'BSS';
-          const subsystem = col(row, ['Subsystem','Sub System']) || 'BCU';
-          const logSource = col(row, ['Log Source','Source']) || 'BSSNotifications';
-          const expected = asNumber(col(row, ['Expected','Expected Value','Nominal']));
-          const tolerance = asNumber(col(row, ['Spec Tolerance','Tolerance','SpecTolerance']));
-          const low = asNumber(col(row, ['Expected Low','Low','Min','Warning Low','Lower Threshold']));
-          const high = asNumber(col(row, ['Expected High','High','Max','Warning High','Upper Threshold']));
-          const criticalLow = asNumber(col(row, ['Critical Low','Critical Min']));
-          const criticalHigh = asNumber(col(row, ['Critical High','Critical Max']));
-          const expectedByState = {};
-          Object.keys(row).forEach(key => { if (/expected/i.test(key) && !/low|high|value/i.test(key)) { const state = key.replace(/expected/ig, '').replace(/[()_:-]/g, ' ').trim(); const n = asNumber(row[key]); if (state && Number.isFinite(n)) expectedByState[normalize(state)] = n; } });
-          return { row: idx + 2, system, subsystem, logSource, signal, normSignal: normalize(signal), expected, tolerance, low, high, criticalLow, criticalHigh, expectedByState, recommendedAction: col(row, ['Recommended Action','Service Action','Action']) || 'Inspect BSS / BCU and validate the parameter against the rule limits.', raw: row };
-        }).filter(rule => rule.signal && normalize(rule.system) === 'bss' && normalize(rule.subsystem) === 'bcu' && /BSSNotifications/i.test(rule.logSource));
-        diagnostics.ruleMapping = rules.map(r => ({ row: r.row, signal: r.signal, expected: r.expected, tolerance: r.tolerance, low: r.low, high: r.high }));
-        if (!rules.length) diagnostics.warnings += 1;
-        return rules;
-      }
-
-      async function parseMachineStates(files) {
-        const series = { Machine: [] };
-        let completed = 0;
-        for (const file of files) {
-          assertLive(); progress('matching_state', 45 + completed, { currentFile: basename(file.name), filesCompleted: completed, filesTotal: files.length });
-          let text = await file.async('text');
-          const parsed = Papa.parse(text, { header: true, skipEmptyLines: true }); text = null;
-          if (parsed.errors?.length) diagnostics.parserDiagnostics.push({ file: file.name, errors: parsed.errors.slice(0, 5) });
-          const rows = parsed.data || [];
-          const headers = parsed.meta?.fields || Object.keys(rows[0] || {});
-          const timeHeader = headerName(headers, ['Timestamp','TimeStamp','Time','DateTime']);
-          const stateHeaders = headers.filter(h => h !== timeHeader && !/row|id/i.test(h));
-          for (const row of rows) {
-            const ms = parseTime(row[timeHeader]); if (!Number.isFinite(ms)) continue;
-            for (const h of stateHeaders) {
-              const raw = String(row[h] ?? '').trim(); if (!raw || raw === '---') continue;
-              const system = /machine/i.test(h) ? 'Machine' : h.trim();
-              series[system] ||= [];
-              if (series[system].at(-1)?.value !== raw) series[system].push({ timestampMs: ms, timestampText: row[timeHeader], value: raw });
-            }
-          }
-          completed += 1;
-        }
-        Object.values(series).forEach(items => items.sort((a,b) => a.timestampMs - b.timestampMs));
-        return { series, getStateAt(timestampMs, system='BSS') { return getStateAt(series, timestampMs, system); } };
-      }
-
-      function getStateAt(series, timestampMs, system='BSS') {
-        const pick = name => { const arr = series[name] || []; let lo = 0, hi = arr.length - 1, ans = null; while (lo <= hi) { const mid = (lo + hi) >> 1; if (arr[mid].timestampMs <= timestampMs) { ans = arr[mid]; lo = mid + 1; } else hi = mid - 1; } return ans; };
-        const machine = pick('Machine'); const sys = pick(system);
-        return { machineState: machine?.value || 'Unknown', systemState: sys?.value || 'Unknown', matchedTimestamp: Math.max(machine?.timestampMs || 0, sys?.timestampMs || 0) || null, status: machine || sys ? 'matched' : 'no_state' };
-      }
-
-      async function parseBssFiles(files, requiredSignals, offset) {
-        const values = [];
-        let completed = 0;
-        for (const file of files) {
-          assertLive();
-          const sourceFileId = diagnostics.fileInventory.findIndex(f => f.path === file.name);
-          progress('extracting_signals', 55 + Math.round((completed / Math.max(1, files.length)) * 12), { currentFile: basename(file.name), filesCompleted: offset + completed, filesTotal: offset + files.length });
-          let text = await file.async('text');
-          await new Promise(resolve => {
-            Papa.parse(text, {
-              header: true, skipEmptyLines: true, worker: false,
-              step(results) {
-                diagnostics.scannedRows += 1;
-                if (diagnostics.scannedRows % 5000 === 0) assertLive();
-                const row = results.data || {};
-                const signalRaw = col(row, ['SubComponent','Sub Component','Signal','Log Signal Name']);
-                const norm = normalize(signalRaw);
-                if (!requiredSignals.has(norm)) return;
-                const timestampText = col(row, ['Timestamp','TimeStamp','Time','DateTime']);
-                const timestampMs = parseTime(timestampText);
-                const numericValue = asNumber(col(row, ['Value','Actual','NumericValue']));
-                if (!Number.isFinite(timestampMs) || !Number.isFinite(numericValue)) return;
-                const compact = { timestampMs, timestampText, signal: signalRaw, component: col(row, ['Component']), parameterType: col(row, ['ParameterType','Parameter Type']), numericValue, sourceFileId };
-                values.push(compact); diagnostics.matchedRows += 1;
-                if (diagnostics.rawEvidencePreview.length < 40) diagnostics.rawEvidencePreview.push(compact);
-              }, complete: resolve, error: err => { diagnostics.parserDiagnostics.push({ file: file.name, error: err.message }); resolve(); }
-            });
-          });
-          text = null;
-          completed += 1;
-        }
-        values.sort((a,b) => a.timestampMs - b.timestampMs);
-        return values;
-      }
-
-      function expectedRange(rule, machineState) {
-        const stateExpected = rule.expectedByState?.[normalize(machineState)];
-        const expected = Number.isFinite(stateExpected) ? stateExpected : rule.expected;
-        let low = rule.low, high = rule.high;
-        if ((!Number.isFinite(low) || !Number.isFinite(high)) && Number.isFinite(expected) && Number.isFinite(rule.tolerance)) { low = expected - rule.tolerance; high = expected + rule.tolerance; }
-        return { expected, low, high, criticalLow: rule.criticalLow, criticalHigh: rule.criticalHigh };
-      }
-
-      function evaluateValues(values, rules, machineIndex) {
-        const ruleMap = new Map(rules.map(r => [r.normSignal, r]));
-        return values.map(v => {
-          const rule = ruleMap.get(normalize(v.signal));
-          const state = machineIndex.getStateAt(v.timestampMs, 'BSS');
-          if (!rule) return { ...v, result: 'no_rule', system: 'BSS', subsystem: 'BCU', machineState: state.machineState, systemState: state.systemState };
-          const range = expectedRange(rule, state.machineState);
-          let result = 'ok';
-          if (!Number.isFinite(range.low) || !Number.isFinite(range.high)) result = 'needs_validation';
-          else if ((Number.isFinite(range.criticalLow) && v.numericValue < range.criticalLow) || (Number.isFinite(range.criticalHigh) && v.numericValue > range.criticalHigh)) result = 'critical';
-          else if (v.numericValue < range.low || v.numericValue > range.high) result = 'warning';
-          return { ...v, system: rule.system || 'BSS', subsystem: rule.subsystem || 'BCU', machineState: state.machineState, systemState: state.systemState, result, expectedLow: range.low, expectedHigh: range.high, rule };
-        });
-      }
-
-      function buildAnalysisResult(points, rules, machineIndex) {
-        const events = buildDeviationEvents(points);
-        const summaries = buildSignalSummaries(points, rules, events);
-        const status = highest(points.map(p => p.result));
-        const times = points.map(p => p.timestampMs).filter(Number.isFinite);
-        const startMs = times.length ? Math.min(...times) : null, endMs = times.length ? Math.max(...times) : null;
-        const chartSeries = {};
-        for (const signal of new Set(points.map(p => p.signal))) chartSeries[signal] = downsample(points.filter(p => p.signal === signal).map(p => ({ timestampMs: p.timestampMs, actual: p.numericValue, expectedLow: p.expectedLow, expectedHigh: p.expectedHigh, status: p.result })), 900);
-        const systemHealth = SYSTEMS.map(system => system === 'BSS' ? { system, status: points.length ? status : 'no_data', rulesTotal: rules.length, signalsMatched: new Set(points.map(p => normalize(p.signal))).size, evaluatedPoints: points.length, deviations: events.length, topIssue: events[0]?.signal || '' } : { system, status: 'no_rule', rulesTotal: 0, signalsMatched: 0, evaluatedPoints: 0, deviations: 0 });
-        const activeFindings = events.slice(0, 5).map(e => ({ id: e.id, title: `${e.signal} ${e.severity}`, recommendedAction: e.recommendedAction, severity: e.severity }));
-        const metadata = { createdAt: new Date().toISOString(), rulesEvaluated: rules.length, requiredSignals: rules.map(r => r.signal), relevantSignalsFound: new Set(points.map(p => normalize(p.signal))).size, relevantValuesFound: points.length, systemsEvaluated: 1, deviationsFound: events.length, analysisTimeMs: Date.now() - startTime, startTimestampMs: startMs, endTimestampMs: endMs, timeRange: startMs && endMs ? `${new Date(startMs).toLocaleString()} – ${new Date(endMs).toLocaleString()}` : 'No evaluated BSS values' };
-        diagnostics.warnings += summaries.filter(s => s.status === 'no_data').length;
-        return { metadata, systemHealth, activeFindings, deviationEvents: events, deviationTimeline: buildDeviationTimeline(points, events, startMs, endMs), stateTimeline: buildStateTimeline(machineIndex.series, startMs, endMs), signalSummaries: summaries, chartSeries, diagnosticsSummary: { ...diagnostics, warnings: diagnostics.warnings, errors: diagnostics.errors } };
-      }
-
-      function buildDeviationEvents(points) {
-        const events = [];
-        const bySignal = group(points.filter(p => ISSUE.has(p.result)), p => p.signal);
-        let id = 1;
-        for (const [signal, signalPoints] of Object.entries(bySignal)) {
-          signalPoints.sort((a,b) => a.timestampMs - b.timestampMs);
-          let current = null;
-          for (const p of signalPoints) {
-            const gapOk = current && p.timestampMs - current.endMs <= 5 * 60 * 1000 && p.result === current.severity;
-            if (!gapOk) { if (current) events.push(finalize(current)); current = { id: `DEV-${id++}`, system: p.system, subsystem: p.subsystem, component: p.component, signal, severity: p.result, startMs: p.timestampMs, endMs: p.timestampMs, minActual: p.numericValue, maxActual: p.numericValue, latestActual: p.numericValue, expectedLow: p.expectedLow, expectedHigh: p.expectedHigh, machineState: p.machineState, pointCount: 0, recommendedAction: p.rule?.recommendedAction, ruleRow: p.rule?.row }; }
-            current.endMs = p.timestampMs; current.minActual = Math.min(current.minActual, p.numericValue); current.maxActual = Math.max(current.maxActual, p.numericValue); current.latestActual = p.numericValue; current.pointCount += 1;
-          }
-          if (current) events.push(finalize(current));
-        }
-        return events.sort((a,b) => PRIORITY[b.severity] - PRIORITY[a.severity] || (b.durationMs || 0) - (a.durationMs || 0));
-      }
-      function finalize(e) { return { id: e.id, system: e.system, subsystem: e.subsystem, component: e.component, signal: e.signal, severity: e.severity, startTimestamp: new Date(e.startMs).toISOString(), endTimestamp: new Date(e.endMs).toISOString(), startTimestampMs: e.startMs, endTimestampMs: e.endMs, durationMs: Math.max(0, e.endMs - e.startMs), minActual: e.minActual, maxActual: e.maxActual, latestActual: e.latestActual, expectedLow: e.expectedLow, expectedHigh: e.expectedHigh, machineState: e.machineState, pointCount: e.pointCount, recommendedAction: e.recommendedAction, ruleRow: e.ruleRow }; }
-      function buildSignalSummaries(points, rules, events) { return rules.map(rule => { const pts = points.filter(p => normalize(p.signal) === rule.normSignal); const evs = events.filter(e => normalize(e.signal) === rule.normSignal); const latest = pts.at(-1); const status = pts.length ? highest(pts.map(p => p.result)) : 'no_data'; return { signal: rule.signal, status, latestActual: latest?.numericValue, expectedLow: latest?.expectedLow ?? rule.low, expectedHigh: latest?.expectedHigh ?? rule.high, deviationAmount: evs[0] ? Math.max(Math.abs(evs[0].latestActual - evs[0].expectedHigh), Math.abs(evs[0].expectedLow - evs[0].latestActual)) : 0, totalDeviationDurationMs: evs.reduce((sum,e) => sum + (e.durationMs || 0), 0), eventCount: evs.length }; }); }
-      function buildDeviationTimeline(points, events, startMs, endMs) { if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return []; const sorted = [...points].sort((a,b) => a.timestampMs - b.timestampMs); const segs = []; let cur = null; for (const p of sorted) { const event = events.find(e => e.signal === p.signal && p.timestampMs >= e.startTimestampMs && p.timestampMs <= e.endTimestampMs); const status = p.result || 'no_data'; if (!cur || cur.status !== status || cur.eventId !== event?.id) { if (cur) segs.push(cur); cur = { startMs: p.timestampMs, endMs: p.timestampMs, status, eventId: event?.id, label: event ? `${event.signal}: ${event.severity}` : status }; } else cur.endMs = p.timestampMs; } if (cur) segs.push(cur); return segs.length ? segs : [{ startMs, endMs, status: 'no_data' }]; }
-      function buildStateTimeline(series, startMs, endMs) { const machine = series.Machine || []; if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return []; const relevant = machine.filter(s => s.timestampMs >= startMs && s.timestampMs <= endMs); const states = relevant.length ? relevant : machine.slice(-1); return states.map((s,i) => ({ startMs: Math.max(startMs, s.timestampMs), endMs: i < states.length - 1 ? states[i+1].timestampMs : endMs, status: 'ok', label: s.value })); }
-      function highest(statuses) { return statuses.reduce((best,s) => (PRIORITY[s] || 0) > (PRIORITY[best] || 0) ? s : best, 'no_data'); }
+      function col(row, names) { const keys = Object.keys(row || {}); for (const name of names) { const key = keys.find(k => normalize(k) === normalize(name)); if (key && row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') return row[key]; } return ''; }
+      function headerName(headers, names) { return headers.find(h => names.some(n => normalize(h) === normalize(n))) || headers[0]; }
+      function basename(path) { return String(path || '').split('/').pop(); }
       function group(items, fn) { return items.reduce((acc,item) => { const key = fn(item); (acc[key] ||= []).push(item); return acc; }, {}); }
+      function highest(statuses) { return statuses.length ? statuses.reduce((best,s) => (PRIORITY[s] || 0) > (PRIORITY[best] || 0) ? s : best, statuses[0]) : 'no_data'; }
       function downsample(items, max) { if (items.length <= max) return items; const step = Math.ceil(items.length / max); return items.filter((_, i) => i % step === 0); }
+      function makeAdapter(sourceType, pathPattern, methods) { return { sourceType, canHandle: path => pathPattern.test(path.replace(/\\/g,'/')), parseFile: file => file.async('text'), ...methods }; }
+      const adapters = [
+        makeAdapter('BSSNotifications', /logs\/LLCINotifications\/BSS\//i, { normalizeRow: row => row, getSignal: row => String(col(row, ['SubComponent','Sub Component']) || '').trim(), getCompositeSignal: row => [col(row,['SubComponent']), col(row,['ParameterType'])].filter(Boolean).join(' '), getNumericValue: row => asNumber(col(row, ['Value'])), getTimestamp: row => parseTime(col(row, ['Timestamp','TimeStamp','Time','DateTime'])), getSystem: (row, rule) => rule.system || 'BSS', getComponent: row => String(col(row, ['Component']) || '').trim(), preferredFields: ['SubComponent'] }),
+        makeAdapter('IPSNotifications', /logs\/LLCINotifications\/IPS\//i, { normalizeRow: row => row, getSignal: row => [col(row,['KeyName']), col(row,['ParameterType'])].filter(Boolean).join(' '), getCompositeSignal: row => [col(row,['KeyName']), col(row,['ParameterType'])].filter(Boolean).join(' '), getNumericValue: row => asNumber(col(row, ['Value'])), getTimestamp: row => parseTime(col(row, ['Timestamp','TimeStamp','Time','DateTime'])), getSystem: (row, rule) => rule.system || 'IPS', getComponent: row => String(col(row, ['KeyName']) || '').trim(), preferredFields: ['KeyName','ParameterType'] }),
+        makeAdapter('FECNotifications', /logs\/FECNotifications\//i, { normalizeRow: row => row, getSignal: row => String(col(row, ['PSSID']) || col(row, ['Type']) || '').trim(), getCompositeSignal: row => [col(row,['PSSID']), col(row,['Type']), col(row,['PSCState']), col(row,['Status']), col(row,['State'])].filter(Boolean).join(' '), getNumericValue: row => asNumber(col(row, ['SetPoint','Enabled','HasErrors','HasWarnings','Status','State'])), getTimestamp: row => parseTime(col(row, ['Timestamp','TimeStamp','Time','DateTime'])), getSystem: (row, rule) => rule.system || 'FEC', getComponent: row => String(col(row, ['Type']) || '').trim(), preferredFields: ['PSSID','Type'] }),
+        makeAdapter('MachineStates', /logs\/MachineStates\//i, { normalizeRow: row => row, getSignal: row => String(col(row, ['System','State','MachineState','Signal']) || 'MachineState').trim(), getCompositeSignal: row => Object.values(row || {}).join(' '), getNumericValue: row => asNumber(col(row, ['Value','State','MachineState'])), getTimestamp: row => parseTime(col(row, ['Timestamp','TimeStamp','Time','DateTime'])), getSystem: (row, rule) => rule.system || 'Machine', getComponent: row => 'MachineStates', preferredFields: ['System','State','MachineState'] }),
+        makeAdapter('AlertsMonitoring', /logs\/(AlertsMonitoring|AletrsMonitoring)\.txt$/i, { normalizeRow: row => row, getSignal: row => String(col(row, ['Name','Alert','Message','Description','Signal']) || Object.values(row || {}).join(' ')).trim(), getCompositeSignal: row => Object.values(row || {}).join(' '), getNumericValue: row => asNumber(col(row, ['Value','Severity','Code'])), getTimestamp: row => parseTime(col(row, ['Timestamp','TimeStamp','Time','DateTime'])), getSystem: (row, rule) => rule.system || 'Machine', getComponent: row => 'AlertsMonitoring', preferredFields: ['Name','Alert','Message'] })
+      ];
+      async function run({ autocollectFile, rulesFile }) {
+        progress('validating', 2); if (!autocollectFile || !rulesFile) throw new Error('Autocollect ZIP and PANDA Rules Excel are required.');
+        progress('loading_rules', 10, { currentFile: rulesFile.name }); const rules = await loadRules(rulesFile); const plan = buildAnalysisPlan(rules); diagnostics.requiredSignals = Object.fromEntries(Object.entries(plan.requiredSignalsBySource).map(([k,set]) => [k, [...set]]));
+        progress('extracting_archive', 20, { currentFile: autocollectFile.name }); const zip = await JSZip.loadAsync(autocollectFile); const files = await flattenZip(zip); diagnostics.fileInventory = files.map(f => ({ path: f.name, bytes: f._data?.uncompressedSize || null, sourceType: adapters.find(a => a.canHandle(f.name))?.sourceType || null }));
+        progress('locating_sources', 30, { filesCompleted: 0, filesTotal: files.length }); const machineIndex = await parseMachineStates(files.filter(f => adapters.find(a => a.sourceType === 'MachineStates').canHandle(f.name)));
+        const sourceFiles = files.filter(f => { const adapter = adapters.find(a => a.canHandle(f.name)); return adapter && plan.sources.includes(adapter.sourceType) && adapter.sourceType !== 'MachineStates'; });
+        const points = []; let completed = 0; for (const file of sourceFiles) { assertLive(); const adapter = adapters.find(a => a.canHandle(file.name)); diagnostics.sourceAdaptersExecuted.push(adapter.sourceType); const sourceRules = plan.rulesBySource[adapter.sourceType] || []; progress('extracting_signals', 40 + Math.round((completed / Math.max(1, sourceFiles.length)) * 30), { currentFile: basename(file.name), filesCompleted: completed, filesTotal: sourceFiles.length }); const parsed = await parseSourceFile(file, adapter, sourceRules, machineIndex); points.push(...parsed); completed++; }
+        progress('evaluating_rules', 76); const result = buildResult(rules, plan, points, machineIndex); progress('preparing_dashboard', 95); return result;
+      }
+      async function flattenZip(zip, prefix='') { const out = []; const entries = Object.values(zip.files).filter(e => !e.dir); for (const entry of entries) { assertLive(); const name = prefix + entry.name; if (/\.zip$/i.test(entry.name)) { progress('extracting_opc', 24, { currentFile: basename(name) }); const nested = await JSZip.loadAsync(await entry.async('arraybuffer')); out.push(...await flattenZip(nested, name + '/')); } else out.push({ name, async: entry.async.bind(entry), _data: entry._data }); } return out; }
+      async function loadRules(file) { const data = await file.arrayBuffer(); const workbook = XLSX.read(data, { type: 'array' }); const rows = []; workbook.SheetNames.forEach(sheetName => { const sheet = workbook.Sheets[sheetName]; XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false }).forEach((row, idx) => rows.push({ sheetName, row, excelRow: idx + 2 })); }); const rules = rows.map(({ sheetName, row, excelRow }) => ruleFromRow(row, sheetName, excelRow)).filter(Boolean); diagnostics.ruleMapping = rules.map(r => ({ row: r.row, system: r.system, subsystem: r.subsystem, source: r.logSource, signal: r.signal, checkType: r.checkType, expected: r.expected, tolerance: r.tolerance })); if (!rules.length) diagnostics.warnings += 1; return rules; }
+      function ruleFromRow(row, sheetName, excelRow) { const system = canonSystem(col(row, ['System','Machine System','MachineSystem']) || sheetName); const source = compactSource(col(row, ['Log Source','LogSource','Source','Source Type','SourceType'])); const signal = String(col(row, ['Log Signal Name','Signal','Signal Name','Parameter','Parameter Name','SubComponent','KeyName','PSSID']) || '').trim(); if (!signal || !source) return null; const expectedByState = {}; Object.keys(row).forEach(k => { const m = String(k).match(/Expected\s+(.+)/i); if (m) { const v = asNumber(row[k]); if (Number.isFinite(v)) expectedByState[normalize(m[1])] = v; } }); return { row: excelRow, sheetName, system, normSystem: normalize(system), subsystem: String(col(row, ['Subsystem','Sub System']) || '').trim(), logSource: source, normSource: normalize(source), signal, normSignal: normalize(signal), recommendedAction: String(col(row, ['Recommended Action','Action','Service Action']) || '').trim(), checkType: String(col(row, ['Check Type','CheckType','Evaluation','Comparator']) || 'range').trim().toLowerCase(), expected: asNumber(col(row, ['Expected','Expected Value','Nominal'])), tolerance: asNumber(col(row, ['Spec Tolerance','Tolerance','Allowed Tolerance'])), low: asNumber(col(row, ['Expected Low','Low','Min','Warning Low','WarningLow'])), high: asNumber(col(row, ['Expected High','High','Max','Warning High','WarningHigh'])), criticalLow: asNumber(col(row, ['Critical Low','CriticalLow'])), criticalHigh: asNumber(col(row, ['Critical High','CriticalHigh'])), expectedByState } }
+      function buildAnalysisPlan(rules) { const plan = { systems: [], sources: [], rulesBySystem: {}, rulesBySource: {}, requiredSignalsBySource: {} }; for (const rule of rules) { if (!plan.systems.includes(rule.system)) plan.systems.push(rule.system); if (!plan.sources.includes(rule.logSource)) plan.sources.push(rule.logSource); (plan.rulesBySystem[rule.system] ||= []).push(rule); (plan.rulesBySource[rule.logSource] ||= []).push(rule); (plan.requiredSignalsBySource[rule.logSource] ||= new Set()).add(rule.normSignal); } return plan; }
+      async function parseMachineStates(files) { const series = { Machine: [] }; let completed = 0; for (const file of files) { assertLive(); progress('matching_state', 32 + completed, { currentFile: basename(file.name), filesCompleted: completed, filesTotal: files.length }); const text = await file.async('text'); const parsed = Papa.parse(text, { header: true, skipEmptyLines: true }); if (parsed.errors?.length) diagnostics.parserDiagnostics.push({ file: file.name, errors: parsed.errors.slice(0, 5) }); const rows = parsed.data || []; const headers = parsed.meta?.fields || Object.keys(rows[0] || {}); const timeHeader = headerName(headers, ['Timestamp','TimeStamp','Time','DateTime']); const stateHeaders = headers.filter(h => h !== timeHeader && !/row|id/i.test(h)); const last = {}; for (const row of rows) { const ms = parseTime(row[timeHeader]); if (!Number.isFinite(ms)) continue; for (const h of stateHeaders) { const raw = String(row[h] ?? '').trim(); if (!raw || raw === '---') continue; last[h] = raw; const system = /machine/i.test(h) ? 'Machine' : canonSystem(h); series[system] ||= []; if (series[system].at(-1)?.value !== raw) series[system].push({ timestampMs: ms, timestampText: row[timeHeader], value: raw }); } } completed++; } Object.values(series).forEach(items => items.sort((a,b) => a.timestampMs - b.timestampMs)); return { series, getStateAt(timestampMs, system='Machine') { return getStateAt(series, timestampMs, system); } }; }
+      function getStateAt(series, timestampMs, system='Machine') { const pick = name => { const arr = series[name] || []; let lo = 0, hi = arr.length - 1, ans = null; while (lo <= hi) { const mid = (lo + hi) >> 1; if (arr[mid].timestampMs <= timestampMs) { ans = arr[mid]; lo = mid + 1; } else hi = mid - 1; } return ans; }; const machine = pick('Machine'); const sys = pick(system); return { machineState: machine?.value || 'Unknown', systemState: sys?.value || 'Unknown', matchedTimestamp: Math.max(machine?.timestampMs || 0, sys?.timestampMs || 0) || null, status: machine || sys ? 'matched' : 'no_state' }; }
+      async function parseSourceFile(file, adapter, rules, machineIndex) { const values = []; const text = await adapter.parseFile(file); await new Promise(resolve => { Papa.parse(text, { header: true, skipEmptyLines: true, worker: false, step(results) { diagnostics.scannedRows += 1; if (diagnostics.scannedRows % 5000 === 0) assertLive(); const row = adapter.normalizeRow(results.data || {}); const match = matchRule(row, adapter, rules); if (!match.rule) return; const timestampMs = adapter.getTimestamp(row); if (!Number.isFinite(timestampMs)) return; const numericValue = adapter.getNumericValue(row); const state = machineIndex.getStateAt(timestampMs, match.rule.system); const evalResult = evaluatePoint(match.rule, numericValue, state); const point = { timestampMs, timestampText: new Date(timestampMs).toISOString(), sourceType: adapter.sourceType, system: adapter.getSystem(row, match.rule), subsystem: match.rule.subsystem, component: adapter.getComponent(row), signal: match.rule.signal, observedSignal: adapter.getSignal(row), compositeSignal: adapter.getCompositeSignal(row), numericValue, matchType: match.matchType, machineState: state.machineState, systemState: state.systemState, rule: match.rule, ...evalResult }; values.push(point); diagnostics.matchedRows += 1; (diagnostics.matchedSignals[adapter.sourceType] ||= new Set()).add(match.rule.signal); if (diagnostics.rawEvidencePreview.length < 40) diagnostics.rawEvidencePreview.push({ timestamp: point.timestampText, sourceType: point.sourceType, system: point.system, signal: point.signal, actual: point.numericValue, matchType: point.matchType, result: point.result }); }, complete: resolve, error: err => { diagnostics.parserDiagnostics.push({ file: file.name, error: err.message }); resolve(); } }); }); return values; }
+      function matchRule(row, adapter, rules) { const preferred = normalize(adapter.getSignal(row)); const composite = normalize(adapter.getCompositeSignal(row)); for (const rule of rules) if (preferred && preferred === rule.normSignal) return { rule, matchType: 'exact' }; for (const rule of rules) if (composite && composite === rule.normSignal) return { rule, matchType: 'composite' }; for (const rule of rules) if (rule.normSignal.length >= 4 && (preferred.includes(rule.normSignal) || composite.includes(rule.normSignal) || rule.normSignal.includes(preferred))) return { rule, matchType: 'partial' }; return { rule: null, matchType: 'none' }; }
+      function expectedRange(rule, machineState) { const stateExpected = rule.expectedByState?.[normalize(machineState)]; const expected = Number.isFinite(stateExpected) ? stateExpected : rule.expected; let low = rule.low, high = rule.high; if ((!Number.isFinite(low) || !Number.isFinite(high)) && Number.isFinite(expected) && Number.isFinite(rule.tolerance)) { low = expected - rule.tolerance; high = expected + rule.tolerance; } return { expected, low, high, criticalLow: rule.criticalLow, criticalHigh: rule.criticalHigh }; }
+      function evaluatePoint(rule, numericValue, state) { const range = expectedRange(rule, state.machineState); if (!Number.isFinite(numericValue)) return { result: 'needs_validation', reason: 'no_numeric_value', ...range }; if (!state.machineState || state.machineState === 'Unknown') return { result: 'needs_validation', reason: 'missing_machine_state', ...range }; if (!Number.isFinite(range.low) || !Number.isFinite(range.high)) return { result: 'needs_validation', reason: 'missing_expected_range', ...range }; if (/range|between|threshold|expected|equals|equal|=|min|max|greater|less/.test(rule.checkType || 'range')) { const critical = (Number.isFinite(range.criticalLow) && numericValue < range.criticalLow) || (Number.isFinite(range.criticalHigh) && numericValue > range.criticalHigh); const warning = numericValue < range.low || numericValue > range.high; return { result: critical ? 'critical' : warning ? 'warning' : 'ok', reason: critical ? 'critical_threshold' : warning ? 'outside_expected_range' : 'within_expected_range', expectedLow: range.low, expectedHigh: range.high, ...range }; } return { result: 'evaluator_pending', reason: 'unsupported_check_type', expectedLow: range.low, expectedHigh: range.high, ...range }; }
+      function buildResult(rules, plan, points, machineIndex) { diagnostics.matchedSignals = Object.fromEntries(Object.entries(diagnostics.matchedSignals).map(([k,set]) => [k, [...set]])); for (const [src, req] of Object.entries(plan.requiredSignalsBySource)) { const matched = new Set(diagnostics.matchedSignals[src] || []); diagnostics.missingSignals[src] = [...req].filter(sig => ![...matched].some(m => normalize(m) === sig)); } const events = buildDeviationEvents(points); const summaries = buildSignalSummaries(points, rules, events); const startMs = points.length ? Math.min(...points.map(p => p.timestampMs)) : null; const endMs = points.length ? Math.max(...points.map(p => p.timestampMs)) : null; const chartSeries = {}; for (const [key, pts] of Object.entries(group(points, p => `${p.system}::${p.signal}`))) chartSeries[key] = downsample(pts, 500).map(p => ({ timestampMs: p.timestampMs, actual: p.numericValue, expectedLow: p.expectedLow, expectedHigh: p.expectedHigh, status: p.result, machineState: p.machineState, systemState: p.systemState })); const systemHealth = MACHINE_SYSTEMS.map(system => buildSystemHealth(system, rules, points, events)); const activeFindings = events.slice(0, 8).map(e => ({ id: e.id, system: e.system, title: `${e.system} • ${e.signal} ${e.severity}`, recommendedAction: e.recommendedAction || `Inspect ${e.system} ${e.signal}.`, severity: e.severity })); const metadata = { createdAt: new Date().toISOString(), rulesTotal: rules.length, rulesEvaluated: rules.length, requiredSignals: rules.map(r => r.signal), relevantSignalsFound: new Set(points.map(p => `${p.sourceType}:${normalize(p.signal)}`)).size, relevantValuesFound: points.length, systemsEvaluated: systemHealth.filter(s => s.status !== 'no_rule').length, deviationsFound: events.length, analysisTimeMs: Date.now() - startTime, startTimestampMs: startMs, endTimestampMs: endMs, timeRange: startMs && endMs ? `${new Date(startMs).toLocaleString()} – ${new Date(endMs).toLocaleString()}` : 'No evaluated machine values' }; diagnostics.warnings += summaries.filter(s => s.status === 'no_data').length; return { metadata, analysisPlan: { ...plan, requiredSignalsBySource: Object.fromEntries(Object.entries(plan.requiredSignalsBySource).map(([k,set]) => [k, [...set]])) }, systemHealth, activeFindings, deviationEvents: events, timelineRows: buildTimelineRows(points, events, rules, startMs, endMs), stateTimeline: buildStateTimeline(machineIndex.series, startMs, endMs), signalSummaries: summaries, chartSeries, diagnosticsSummary: { ...diagnostics, warnings: diagnostics.warnings, errors: diagnostics.errors } }; }
+      function buildSystemHealth(system, rules, points, events) { const sysRules = rules.filter(r => r.system === system); const sysPoints = points.filter(p => p.system === system); const sysEvents = events.filter(e => e.system === system); const counts = group(sysPoints, p => p.result); let status = 'no_rule'; if (sysRules.length) status = sysPoints.length ? highest(sysPoints.map(p => p.result)) : 'no_data'; const worstFinding = sysEvents[0] || null; return { system, status, rulesTotal: sysRules.length, rulesEvaluated: sysRules.length, matchedSignals: new Set(sysPoints.map(p => normalize(p.signal))).size, evaluatedPoints: sysPoints.length, okCount: (counts.ok || []).length, warningCount: (counts.warning || []).length, criticalCount: (counts.critical || []).length, needsValidationCount: (counts.needs_validation || []).length, noDataCount: sysRules.length && !sysPoints.length ? sysRules.length : 0, evaluatorPendingCount: (counts.evaluator_pending || []).length, activeDeviationEvents: sysEvents.length, firstDeviationTime: sysEvents.at(-1)?.startTimestamp || null, lastDeviationTime: sysEvents[0]?.endTimestamp || null, worstFinding, topAction: worstFinding?.recommendedAction || '', dataSources: [...new Set(sysRules.map(r => r.logSource))] }; }
+      function buildDeviationEvents(points) { const events = []; const bySignal = group(points.filter(p => ISSUE.has(p.result)), p => `${p.system}::${p.signal}`); let id = 1; for (const signalPoints of Object.values(bySignal)) { signalPoints.sort((a,b) => a.timestampMs - b.timestampMs); let current = null; for (const p of signalPoints) { const gapOk = current && p.timestampMs - current.endMs <= 5 * 60 * 1000 && p.result === current.severity; if (!gapOk) { if (current) events.push(finalize(current)); current = { id: `DEV-${id++}`, system: p.system, subsystem: p.subsystem, component: p.component, signal: p.signal, severity: p.result, startMs: p.timestampMs, endMs: p.timestampMs, minActual: p.numericValue, maxActual: p.numericValue, latestActual: p.numericValue, expectedLow: p.expectedLow, expectedHigh: p.expectedHigh, machineState: p.machineState, systemState: p.systemState, pointCount: 0, recommendedAction: p.rule?.recommendedAction, ruleRow: p.rule?.row }; } current.endMs = p.timestampMs; current.minActual = Math.min(current.minActual, p.numericValue); current.maxActual = Math.max(current.maxActual, p.numericValue); current.latestActual = p.numericValue; current.pointCount += 1; } if (current) events.push(finalize(current)); } return events.sort((a,b) => PRIORITY[b.severity] - PRIORITY[a.severity] || (b.durationMs || 0) - (a.durationMs || 0)); }
+      function finalize(e) { return { id: e.id, system: e.system, subsystem: e.subsystem, component: e.component, signal: e.signal, severity: e.severity, startTimestamp: new Date(e.startMs).toISOString(), endTimestamp: new Date(e.endMs).toISOString(), startTimestampMs: e.startMs, endTimestampMs: e.endMs, durationMs: Math.max(0, e.endMs - e.startMs), minActual: e.minActual, maxActual: e.maxActual, latestActual: e.latestActual, expectedLow: e.expectedLow, expectedHigh: e.expectedHigh, machineState: e.machineState, systemState: e.systemState, pointCount: e.pointCount, recommendedAction: e.recommendedAction, ruleRow: e.ruleRow }; }
+      function buildSignalSummaries(points, rules, events) { return rules.map(rule => { const pts = points.filter(p => p.system === rule.system && normalize(p.signal) === rule.normSignal); const evs = events.filter(e => e.system === rule.system && normalize(e.signal) === rule.normSignal); const latest = pts.at(-1); const status = pts.length ? highest(pts.map(p => p.result)) : 'no_data'; return { system: rule.system, subsystem: rule.subsystem, component: latest?.component || '', signal: rule.signal, status, latestActual: latest?.numericValue, expectedLow: latest?.expectedLow ?? rule.low, expectedHigh: latest?.expectedHigh ?? rule.high, currentState: latest?.machineState || 'Unknown', deviationAmount: evs[0] ? Math.max(Math.abs(evs[0].latestActual - evs[0].expectedHigh), Math.abs(evs[0].expectedLow - evs[0].latestActual)) : 0, totalDeviationDurationMs: evs.reduce((sum,e) => sum + (e.durationMs || 0), 0), eventCount: evs.length, recommendedAction: rule.recommendedAction }; }); }
+      function buildTimelineRows(points, events, rules, startMs, endMs) { return MAP_SYSTEMS.map(system => { const sysRules = rules.filter(r => r.system === system); const sysPoints = points.filter(p => p.system === system).sort((a,b) => a.timestampMs - b.timestampMs); const segments = buildDeviationTimeline(sysPoints, events.filter(e => e.system === system), startMs, endMs, system); return { system, status: sysRules.length ? (sysPoints.length ? highest(sysPoints.map(p => p.result)) : 'no_data') : 'no_rule', segments: segments.length ? segments : (Number.isFinite(startMs) && Number.isFinite(endMs) ? [{ system, startMs, endMs, status: sysRules.length ? 'no_data' : 'no_rule' }] : []) }; }); }
+      function buildDeviationTimeline(points, events, startMs, endMs, system) { if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return []; const segs = []; let cur = null; for (const p of points) { const event = events.find(e => e.signal === p.signal && p.timestampMs >= e.startTimestampMs && p.timestampMs <= e.endTimestampMs); const status = p.result || 'no_data'; if (!cur || cur.status !== status || cur.eventId !== event?.id) { if (cur) segs.push(cur); cur = { system, startMs: p.timestampMs, endMs: p.timestampMs, status, eventId: event?.id, label: event ? `${event.signal}: ${event.severity}` : status }; } else cur.endMs = p.timestampMs; } if (cur) segs.push(cur); return segs; }
+      function buildStateTimeline(series, startMs, endMs) { const machine = series.Machine || []; if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return []; const relevant = machine.filter(s => s.timestampMs >= startMs && s.timestampMs <= endMs); const states = relevant.length ? relevant : machine.slice(-1); return states.map((s,i) => ({ startMs: Math.max(startMs, s.timestampMs), endMs: i < states.length - 1 ? states[i+1].timestampMs : endMs, status: 'ok', label: s.value })); }
     }
 
     $('autocollectInput').addEventListener('change', e => { app.autocollectFile = e.target.files[0] || null; $('autocollectName').textContent = app.autocollectFile?.name || 'No file selected'; renderAnalysisWorkspace(); });
     $('rulesInput').addEventListener('change', e => { app.rulesFile = e.target.files[0] || null; $('rulesName').textContent = app.rulesFile?.name || 'No file selected'; renderAnalysisWorkspace(); });
-    $('startAnalysis').onclick = startAnalysis;
-    $('cancelAnalysis').onclick = cancelAnalysis;
-    $('openRadar').onclick = showServiceRadar;
-    $('viewDiagnosticsReady').onclick = openDiagnostics;
-    $('diagnosticsFromAnalysis').onclick = openDiagnostics;
-    $('diagnosticsFromRadar').onclick = openDiagnostics;
-    $('diagnosticsFromDrill').onclick = openDiagnostics;
-    $('backToAnalysis').onclick = showAnalysisWorkspace;
-    $('backToRadar').onclick = showServiceRadar;
-    $('resetReady').onclick = resetAnalysis;
-    $('resetFromRadar').onclick = resetAnalysis;
-    $('resetFromDiagnostics').onclick = resetAnalysis;
-    $('showIssues').onclick = () => { app.systemFilter = 'issues'; renderServiceRadar(); };
-    $('showAllSystems').onclick = () => { app.systemFilter = 'all'; renderServiceRadar(); };
-    $('closeDiagnostics').onclick = () => app.lastView === 'radar' ? showServiceRadar() : app.lastView === 'drilldown' ? showDrilldown() : showAnalysisWorkspace();
+    $('startAnalysis').onclick = startAnalysis; $('cancelAnalysis').onclick = cancelAnalysis; $('openRadar').onclick = showServiceRadar; $('viewDiagnosticsReady').onclick = openDiagnostics; $('diagnosticsFromAnalysis').onclick = openDiagnostics; $('diagnosticsFromRadar').onclick = openDiagnostics; $('diagnosticsFromDrill').onclick = openDiagnostics; $('backToAnalysis').onclick = showAnalysisWorkspace; $('backToRadar').onclick = showServiceRadar; $('resetReady').onclick = resetAnalysis; $('resetFromRadar').onclick = resetAnalysis; $('resetFromDiagnostics').onclick = resetAnalysis; $('showIssues').onclick = () => { app.systemFilter = 'issues'; renderServiceRadar(); }; $('showAllSystems').onclick = () => { app.systemFilter = 'all'; renderServiceRadar(); }; $('closeDiagnostics').onclick = () => app.lastView === 'radar' ? showServiceRadar() : app.lastView === 'drilldown' ? showDrilldown() : showAnalysisWorkspace();
     renderAnalysisWorkspace();
   </script>
 </body>
