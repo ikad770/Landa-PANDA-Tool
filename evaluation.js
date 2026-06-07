@@ -73,31 +73,67 @@ export function parseThreshold(value) {
   return n === null ? null : n;
 }
 
+export function parseRangeSpec(value) {
+  const raw = normalizeText(value);
+  if (!raw) return null;
+  const normalized = raw.replace(/[–—]/g, '-').replace(/\.\./g, '-');
+  const plusMinus = normalized.match(/(?:±|\+\/-)\s*([-+]?\d*\.?\d+(?:e[-+]?\d+)?)/i);
+  const target = parseNumber(normalized);
+  if (plusMinus && target !== null) {
+    const delta = Math.abs(Number(plusMinus[1]));
+    return { low: target - delta, high: target + delta, target };
+  }
+  const range = normalized.match(/([-+]?\d*\.?\d+(?:e[-+]?\d+)?)\s*(?:to|-|–|—)\s*([-+]?\d*\.?\d+(?:e[-+]?\d+)?)/i);
+  if (range) {
+    const a = Number(range[1]);
+    const b = Number(range[2]);
+    if (Number.isFinite(a) && Number.isFinite(b)) return { low: Math.min(a, b), high: Math.max(a, b), target: (a + b) / 2 };
+  }
+  return null;
+}
+
+function getRowValue(row, candidates) {
+  const normalized = Object.fromEntries(Object.entries(row || {}).map(([key, value]) => [normalizeToken(key), value]));
+  for (const name of candidates) {
+    const value = row?.[name] ?? normalized[normalizeToken(name)];
+    if (normalizeText(value)) return value;
+  }
+  return '';
+}
+
 export function expectedValuesFromRow(row) {
   const expectedByState = {};
+  const expectedRangeByState = {};
   for (const [state, column] of Object.entries(EXPECTED_STATE_COLUMNS)) {
-    const expected = parseNumber(row[column]);
-    if (expected !== null) expectedByState[state] = expected;
+    const raw = getRowValue(row, [column, `${state} Expected`, `Expected ${state} Value`, state]);
+    const range = parseRangeSpec(raw);
+    const expected = parseNumber(raw);
+    if (range) {
+      expectedByState[state] = range.target;
+      expectedRangeByState[state] = { low: range.low, high: range.high };
+    } else if (expected !== null) expectedByState[state] = expected;
   }
-  const genericExpected = parseNumber(row.Expected ?? row['Expected Value'] ?? row['Expected value'] ?? row['Expected']);
-  return { expectedByState, genericExpected };
+  const genericRaw = getRowValue(row, ['Expected', 'Expected Value', 'Expected value', 'Target', 'Target Value', 'Allowed Range', 'Spec Range']);
+  const genericExpectedRange = parseRangeSpec(genericRaw);
+  const genericExpected = genericExpectedRange?.target ?? parseNumber(genericRaw);
+  return { expectedByState, expectedRangeByState, genericExpected, genericExpectedRange };
 }
 
 export function selectExpected(rule, stateContext) {
   const candidates = [stateContext?.systemState, stateContext?.machineState].map(normalizeState).filter(Boolean);
   for (const state of candidates) {
-    if (Object.prototype.hasOwnProperty.call(rule.expectedByState || {}, state)) return { value: rule.expectedByState[state], state, source: 'state' };
+    if (Object.prototype.hasOwnProperty.call(rule.expectedByState || {}, state)) return { value: rule.expectedByState[state], range: rule.expectedRangeByState?.[state] || null, state, source: 'state' };
     const matchingKey = Object.keys(rule.expectedByState || {}).find(key => normalizeState(key) === state);
-    if (matchingKey) return { value: rule.expectedByState[matchingKey], state, source: 'state' };
+    if (matchingKey) return { value: rule.expectedByState[matchingKey], range: rule.expectedRangeByState?.[matchingKey] || null, state, source: 'state' };
   }
-  if (rule.genericExpected !== null && rule.genericExpected !== undefined) return { value: rule.genericExpected, state: null, source: 'generic' };
+  if (rule.genericExpected !== null && rule.genericExpected !== undefined) return { value: rule.genericExpected, range: rule.genericExpectedRange || null, state: null, source: 'generic' };
   return { value: null, state: candidates[0] || null, source: 'missing' };
 }
 
-export function computeAllowedRange(rule, expected) {
+export function computeAllowedRange(rule, expected, expectedSelection = null) {
   const tol = rule.tolerance;
-  let allowedLow = null;
-  let allowedHigh = null;
+  let allowedLow = expectedSelection?.range?.low ?? rule.expectedLow ?? rule.genericExpectedRange?.low ?? null;
+  let allowedHigh = expectedSelection?.range?.high ?? rule.expectedHigh ?? rule.genericExpectedRange?.high ?? null;
   let source = '';
   if (tol?.mode === 'max') { allowedLow = -Infinity; allowedHigh = tol.value; source = 'max'; }
   else if (tol?.mode === 'min') { allowedLow = tol.value; allowedHigh = Infinity; source = 'min'; }
@@ -132,17 +168,17 @@ export function computeAllowedRange(rule, expected) {
 
 export function evaluateValue(rule, actual, stateContext) {
   const checkType = inferCheckType(rule);
-  if (actual === null || actual === undefined || !Number.isFinite(actual)) return { status: 'needs_validation', blocker: 'no_numeric_value', reason: 'No numeric value' };
-  if (PENDING_CHECK_TYPES.has(checkType)) return { status: 'evaluator_pending', blocker: 'unsupported_evaluator', reason: 'Evaluator is pending implementation' };
+  if (actual === null || actual === undefined || !Number.isFinite(actual)) return { status: 'no_data', blocker: 'no_numeric_value', reason: 'No numeric value in matched source row' };
+  if (PENDING_CHECK_TYPES.has(checkType)) return { status: 'needs_configuration', blocker: 'unsupported_evaluator', reason: 'Evaluator is pending implementation' };
   if (!checkType) return { status: 'needs_configuration', blocker: 'missing_threshold_or_tolerance', reason: 'Rule has no usable expected/tolerance/threshold configuration' };
-  if (!SUPPORTED_CHECK_TYPES.has(checkType)) return { status: 'needs_validation', blocker: 'unsupported_evaluator', reason: `Unsupported check type: ${rule.checkType || 'blank'}` };
+  if (!SUPPORTED_CHECK_TYPES.has(checkType)) return { status: 'needs_configuration', blocker: 'unsupported_evaluator', reason: `Unsupported check type: ${rule.checkType || 'blank'}` };
   const hasExplicitThresholds = rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
-  const requiresStateExpected = Object.keys(rule.expectedByState || {}).length > 0 && !hasExplicitThresholds;
+  const requiresStateExpected = Object.keys(rule.expectedByState || {}).length > 0 && rule.genericExpected === null && !hasExplicitThresholds;
   if (requiresStateExpected && (!stateContext || stateContext.status === 'missing')) return { status: 'needs_validation', blocker: 'missing_state', reason: 'Missing Machine State' };
   const expected = selectExpected(rule, stateContext);
   const hasAnyThreshold = rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
   if (expected.source === 'missing' && !hasAnyThreshold && !['above threshold', 'below threshold', 'max', 'min'].includes(checkType)) return { status: 'needs_configuration', blocker: 'missing_expected_value', reason: 'Missing expected value for current state' };
-  const range = computeAllowedRange(rule, expected.value);
+  const range = computeAllowedRange(rule, expected.value, expected);
   if (!range && checkType !== 'exact') return { status: 'needs_configuration', blocker: 'missing_threshold_or_tolerance', reason: 'Rule has no tolerance or thresholds' };
   let low = range?.low ?? expected.value;
   let high = range?.high ?? expected.value;

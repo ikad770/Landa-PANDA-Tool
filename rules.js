@@ -1,15 +1,39 @@
 import { ADAPTERS } from './adapters.js';
-import { expectedValuesFromRow, inferCheckType, normalizeCheckType, normalizeText, normalizeToken, parseThreshold, parseTolerance, validateRule } from './evaluation.js';
+import { expectedValuesFromRow, inferCheckType, normalizeCheckType, normalizeText, normalizeToken, parseRangeSpec, parseThreshold, parseTolerance, validateRule } from './evaluation.js';
 
-const REQUIRED_HEADERS = ['System', 'Subsystem', 'Component', 'Log Signal Name', 'Log Source'];
+const HEADER_ALIASES = {
+  System: ['System', 'Machine System', 'PANDA System'],
+  Subsystem: ['Subsystem', 'Sub System', 'Sub-system'],
+  Component: ['Component', 'Machine Component'],
+  'Log Signal Name': ['Log Signal Name', 'Signal Name', 'Log Signal', 'Signal', 'Parameter Signal'],
+  'Log Source': ['Log Source', 'Source', 'LogSource', 'Log File', 'Data Source']
+};
+const REQUIRED_HEADER_GROUPS = ['System', 'Log Signal Name', 'Log Source'];
 
 function headerKey(value) {
-  return normalizeText(value).toLowerCase();
+  return normalizeToken(value);
+}
+
+function rowHasHeader(row, canonical) {
+  const keys = new Set(row.map(headerKey));
+  return (HEADER_ALIASES[canonical] || [canonical]).some(alias => keys.has(headerKey(alias)));
 }
 
 function getCell(row, candidates) {
-  for (const name of candidates) if (row[name] !== undefined && normalizeText(row[name]) !== '') return row[name];
+  const normalized = Object.fromEntries(Object.entries(row || {}).map(([key, value]) => [headerKey(key), value]));
+  for (const name of candidates) {
+    const value = row[name] ?? normalized[headerKey(name)];
+    if (value !== undefined && normalizeText(value) !== '') return value;
+  }
   return '';
+}
+
+function canonicalizeHeader(name, idx) {
+  const clean = normalizeText(name) || `Column ${idx + 1}`;
+  for (const [canonical, aliases] of Object.entries(HEADER_ALIASES)) {
+    if (aliases.some(alias => headerKey(alias) === headerKey(clean))) return canonical;
+  }
+  return clean;
 }
 
 export function parseRulesWorkbook(XLSX, buffer, audit) {
@@ -20,20 +44,18 @@ export function parseRulesWorkbook(XLSX, buffer, audit) {
   if (!sheet) throw new Error('Rules workbook does not contain a readable sheet.');
   audit.rulesSheetFound = true;
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-  const headerIndex = rows.findIndex(row => {
-    const keys = row.map(headerKey);
-    return REQUIRED_HEADERS.every(required => keys.includes(headerKey(required)));
-  });
-  if (headerIndex < 0) throw new Error('Could not detect the real Rules header row with System, Subsystem, Component, Log Signal Name, and Log Source.');
+  const headerIndex = rows.findIndex(row => REQUIRED_HEADER_GROUPS.every(required => rowHasHeader(row, required)));
+  if (headerIndex < 0) throw new Error('Could not detect the real Rules header row with System, Log Signal Name, and Log Source.');
   audit.rulesHeaderRow = headerIndex + 1;
   const rawHeader = rows[headerIndex].map(normalizeText);
-  const normalizedHeaderByIndex = rawHeader.map((name, idx) => name || `Column ${idx + 1}`);
+  const normalizedHeaderByIndex = rawHeader.map(canonicalizeHeader);
   const rules = [];
   for (let i = headerIndex + 1; i < rows.length; i += 1) {
     const values = rows[i];
     if (!values.some(cell => normalizeText(cell))) continue;
     const row = Object.fromEntries(normalizedHeaderByIndex.map((name, idx) => [name, values[idx] ?? '']));
-    const { expectedByState, genericExpected } = expectedValuesFromRow(row);
+    const { expectedByState, expectedRangeByState, genericExpected, genericExpectedRange } = expectedValuesFromRow(row);
+    const explicitRange = parseRangeSpec(getCell(row, ['Allowed Range', 'Spec Range', 'Expected Range']));
     const rawLogSource = normalizeText(getCell(row, ['Log Source', 'Source', 'LogSource']));
     const logSource = canonicalLogSource(rawLogSource);
     const checkType = normalizeText(getCell(row, ['Check Type', 'Check', 'Validation Type']));
@@ -54,7 +76,11 @@ export function parseRulesWorkbook(XLSX, buffer, audit) {
       checkType,
       checkTypeNormalized: normalizeCheckType(checkType),
       expectedByState,
+      expectedRangeByState,
       genericExpected,
+      genericExpectedRange,
+      expectedLow: explicitRange?.low ?? genericExpectedRange?.low ?? null,
+      expectedHigh: explicitRange?.high ?? genericExpectedRange?.high ?? null,
       tolerance: parseTolerance(getCell(row, ['Spec Tolerance', 'Tolerance', 'Allowed Tolerance', 'Limit', 'Threshold', 'Allowed Range'])),
       warningLow: parseThreshold(getCell(row, ['Warning Low', 'Warning Min', 'WarningLow'])),
       warningHigh: parseThreshold(getCell(row, ['Warning High', 'Warning Max', 'WarningHigh'])),

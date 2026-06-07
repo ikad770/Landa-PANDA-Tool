@@ -1,4 +1,4 @@
-import { MACHINE_IMAGE_SRC, SYSTEM_HOTSPOTS } from './config.js';
+import { MACHINE_IMAGE_SRC, RADAR_SYSTEMS, SYSTEM_HOTSPOTS } from './config.js';
 import { $, ISSUE_STATUSES, OPERATIONAL_STATUSES, blockerLabel, chooseInitialParameter, chooseInitialSystem, deviationText, escapeAttr, escapeHtml, expectedText, fmtDuration, fmtNum, fmtTime, getServiceDecision, normalizeStatus, priority, renderComparisonGauge, renderEmptyState, renderKpiCard, renderStateTimeline, renderStatusBadge, renderSystemHealthDonut, shortStatusLabel, statusClass, statusIcon, statusLabel, validateAnalysisResult } from './render.js';
 
 export { chooseInitialSystem, validateAnalysisResult } from './render.js';
@@ -45,7 +45,7 @@ function renderKpis(result, decision) {
 function renderMachineMap(result, app, handlers, decision) {
   const healthBySystem = Object.fromEntries((result.systemHealth || []).map(item => [item.system, item]));
   const selectedSystem = app.selectedSystem || decision.primarySystem || chooseInitialSystem(result);
-  const systems = Object.keys(SYSTEM_HOTSPOTS).filter(system => {
+  const systems = RADAR_SYSTEMS.filter(system => SYSTEM_HOTSPOTS[system]).filter(system => {
     const status = normalizeStatus(healthBySystem[system]?.status || 'no_rule');
     return app.systemFilter === 'all' || ISSUE_STATUSES.has(status);
   });

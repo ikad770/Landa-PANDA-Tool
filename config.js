@@ -51,7 +51,8 @@ export const MAX_INVALID_TIMESTAMP_EXAMPLES = 5;
 export const MAX_DEVIATION_EVENTS_PER_RULE = 200;
 export const MIN_DEVIATION_GAP_MS = 30000;
 
-export const SYSTEMS = ['DPS', 'DFES', 'MSPS', 'ITS', 'IPS', 'Ventilation', 'ECS', 'IRD', 'QCS', 'BSS', 'STS', 'IPU', 'ICS', 'FEC', 'CWS', 'PSS', 'Dryer'];
+export const RADAR_SYSTEMS = ['DPS', 'DFES', 'MSPS', 'ITS', 'IPS', 'ICS', 'Ventilation', 'ECS', 'IRD', 'QCS', 'BSS', 'STS', 'IPU'];
+export const SYSTEMS = [...RADAR_SYSTEMS, 'FEC', 'CWS', 'PSS', 'Dryer'];
 export const MACHINE_STATE_SYSTEMS = ['Machine', 'BSS', 'IPS', 'PSS', 'Dryer', 'IPU', 'Ventilation', 'CWS', 'IRD', 'DFES', 'DPS', 'QCS', 'ICS', 'ECS', 'MSPS', 'ITS'];
 
 export const SYSTEM_HOTSPOTS = {
