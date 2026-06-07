@@ -1,22 +1,15 @@
-import { STATUS_LABEL, STATUS_PRIORITY } from './config.js';
+import { STATUS_LABEL, STATUS_PRIORITY, STATUS_TAXONOMY } from './config.js';
 import { formatRange } from './evaluation.js';
+import { buildServiceDecision } from './service-decision.js';
 
-export const STATUS_META = {
-  critical: { label: 'Critical', icon: '⚠', tone: 'red', short: 'Critical' },
-  warning: { label: 'Warning', icon: '!', tone: 'amber', short: 'Warning' },
-  needs_validation: { label: 'Needs validation', icon: '◇', tone: 'blue', short: 'Validate' },
-  needs_configuration: { label: 'Needs configuration', icon: '⚙', tone: 'purple', short: 'Configure' },
-  ok: { label: 'OK', icon: '✓', tone: 'green', short: 'OK' },
-  no_data: { label: 'No data', icon: '∅', tone: 'gray', short: 'No data' },
-  no_rule: { label: 'No rule', icon: '—', tone: 'muted', short: 'No rule' },
-  not_analyzed: { label: 'Not analyzed', icon: '○', tone: 'neutral', short: 'Pending' }
-};
+export const STATUS_META = STATUS_TAXONOMY;
 
 const TAXONOMY = new Set(Object.keys(STATUS_META));
+export const OPERATIONAL_STATUSES = new Set(['critical', 'warning']);
 export const ISSUE_STATUSES = new Set(['critical', 'warning', 'needs_validation', 'needs_configuration']);
 
 export const $ = id => document.getElementById(id);
-export const statusClass = status => normalizeStatus(status).replace(/_/g, '-');
+export const statusClass = status => STATUS_META[normalizeStatus(status)]?.cssClass || normalizeStatus(status).replace(/_/g, '-');
 export const fmtNum = value => Number.isFinite(value) ? Number(value).toFixed(Math.abs(value) >= 100 ? 1 : 2).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1') : '—';
 export const fmtTime = ms => Number.isFinite(ms) ? new Date(ms).toLocaleString() : '—';
 export const fmtShortTime = ms => Number.isFinite(ms) ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
@@ -33,8 +26,17 @@ export function statusLabel(status) {
   return STATUS_META[normalized]?.label || STATUS_LABEL[status] || status || 'No data';
 }
 
+export function shortStatusLabel(status) {
+  return STATUS_META[normalizeStatus(status)]?.shortLabel || statusLabel(status);
+}
+
 export function statusIcon(status) {
   return STATUS_META[normalizeStatus(status)]?.icon || '○';
+}
+
+export function getServiceDecision(result) {
+  if (!result) return buildServiceDecision({});
+  return result.serviceDecision || buildServiceDecision(result);
 }
 
 export function priority(status) {
@@ -42,6 +44,8 @@ export function priority(status) {
 }
 
 export function chooseInitialSystem(result) {
+  const decision = getServiceDecision(result);
+  if (decision.primarySystem) return decision.primarySystem;
   const health = result?.systemHealth || [];
   const order = ['critical', 'warning', 'needs_validation', 'needs_configuration', 'ok', 'no_data', 'no_rule'];
   for (const status of order) {
@@ -70,7 +74,11 @@ export function validateAnalysisResult(result) {
 
 export function renderStatusBadge(status, text = statusLabel(status), extraClass = '') {
   const normalized = normalizeStatus(status);
-  return `<span class="status-badge ${statusClass(normalized)} ${extraClass}"><span class="status-icon">${statusIcon(normalized)}</span><span>${text}</span></span>`;
+  return `<span class="status-badge ${statusClass(normalized)} ${extraClass}"><span class="status-icon">${statusIcon(normalized)}</span><span>${escapeHtml(text)}</span></span>`;
+}
+
+export function renderKpiCard({ label, value, subtitle, status = 'not_analyzed', icon = null } = {}) {
+  return `<article class="kpi-card ${statusClass(status)}"><div class="kpi-icon">${escapeHtml(icon || statusIcon(status))}</div><span>${escapeHtml(label || 'Metric')}</span><strong>${escapeHtml(value ?? '—')}</strong><small>${escapeHtml(subtitle || '')}</small></article>`;
 }
 
 export function hasExpectedRange(item = {}) {
@@ -151,7 +159,8 @@ export function renderSystemHealthDonut(health = {}, summaries = []) {
 
 export function groupParameters(summaries = []) {
   const groups = [
-    { key: 'attention', label: 'Requires Attention', statuses: ['critical', 'warning'], rows: [] },
+    { key: 'critical', label: 'Critical', statuses: ['critical'], rows: [] },
+    { key: 'warning', label: 'Warning', statuses: ['warning'], rows: [] },
     { key: 'validation', label: 'Needs Validation', statuses: ['needs_validation'], rows: [] },
     { key: 'configuration', label: 'Needs Configuration', statuses: ['needs_configuration'], rows: [] },
     { key: 'healthy', label: 'Healthy', statuses: ['ok'], rows: [] },
@@ -169,8 +178,8 @@ export function groupParameters(summaries = []) {
 export function renderParameterCard(row, selectedId) {
   return `<button class="param-card ${statusClass(row.status)}" data-rule="${escapeAttr(row.ruleId)}" aria-pressed="${row.ruleId === selectedId}">
     <span class="param-status">${statusIcon(row.status)}</span>
-    <span class="param-main"><b>${escapeHtml(row.signal || 'Unnamed signal')}</b><small>${escapeHtml(row.component || row.subsystem || 'No component')}</small>${renderComparisonGauge({ actual: row.latestActual, expectedLow: row.expectedLow, expectedHigh: row.expectedHigh, status: row.status })}</span>
-    <span class="param-side"><b>${fmtNum(row.latestActual)}</b><small>${expectedText(row)}</small><small>${row.eventCount || 0} events</small></span>
+    <span class="param-main"><b>${escapeHtml(row.signal || 'Unnamed signal')}</b><small>${escapeHtml(row.component || row.subsystem || 'No component')}</small></span>
+    <span class="param-side"><b>${fmtNum(row.latestActual)}</b><small>${expectedText(row)}</small><small>${row.eventCount || 0} events · ${fmtDuration(row.totalDeviationDurationMs)}</small></span>
   </button>`;
 }
 
@@ -218,6 +227,21 @@ export function renderActualExpectedChart(chart = [], selected = {}, events = []
 
 export function renderEmptyState(title, message, status = 'not_analyzed') {
   return `<div class="empty-state ${statusClass(status)}">${renderStatusBadge(status)}<h2>${escapeHtml(title)}</h2><p>${escapeHtml(message)}</p></div>`;
+}
+
+export function renderFindingItem(item = {}) {
+  const status = normalizeStatus(item.severity || item.status);
+  return `<div class="finding-item ${statusClass(status)}"><span>${statusIcon(status)}</span><b>${fmtTime(item.startTimestampMs || item.timestampMs)}</b><strong>${escapeHtml(item.system || 'System')} · ${escapeHtml(item.signal || 'Signal')}</strong><small>Actual ${fmtNum(item.latestActual ?? item.actual)} vs ${escapeHtml(expectedText(item))}</small></div>`;
+}
+
+export function renderActionItem(item = {}, index = 0) {
+  const status = normalizeStatus(item.status || item.severity);
+  return `<div class="action-row-card ${statusClass(status)}"><span class="priority-number">${index + 1}</span><div><strong>${escapeHtml(item.action || item.text || 'Review selected condition.')}</strong><small>${escapeHtml(item.impact || statusLabel(status))} · ${escapeHtml(item.system || 'Machine')}</small></div></div>`;
+}
+
+export function renderRuleSummary(item = {}) {
+  const missing = hasExpectedRange(item) ? '' : '<small class="missing-field">Missing: Expected value / Spec Tolerance</small>';
+  return `<div class="compact-item ${statusClass(item.status)}"><strong>Excel row ${escapeHtml(item.ruleRow || '—')}</strong><small>${escapeHtml(item.system || 'System')} · ${escapeHtml(item.subsystem || 'No subsystem')}</small><small>Source: ${escapeHtml(item.source || item.sourceType || '—')}</small><small>Signal: ${escapeHtml(item.signal || '—')}</small><small>Check: ${escapeHtml(item.checkType || 'Configured rule')}</small><small>Expected: ${escapeHtml(expectedText(item))}</small>${missing}<small>Action: ${escapeHtml(item.recommendedAction || item.latestReason || blockerLabel(item.blocker))}</small></div>`;
 }
 
 export function blockerLabel(blocker) {

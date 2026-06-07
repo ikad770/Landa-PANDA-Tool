@@ -58,29 +58,19 @@ export const SIGNAL_ALIASES = {
   waterflowmeteractualvalue: ['waterflowmeteractualvalve']
 };
 
-export const STATUS_PRIORITY = {
-  critical: 70,
-  warning: 60,
-  needs_validation: 50,
-  needs_configuration: 45,
-  evaluator_pending: 40,
-  ok: 30,
-  no_data: 20,
-  no_rule: 10,
-  not_analyzed: 0
+export const STATUS_TAXONOMY = {
+  critical: { key: 'critical', label: 'Critical', shortLabel: 'Critical', icon: '⚠', cssClass: 'critical', priority: 70, colorRole: 'critical', explanation: 'A fully evaluated actual value is outside a configured critical threshold.' },
+  warning: { key: 'warning', label: 'Warning', shortLabel: 'Warning', icon: '!', cssClass: 'warning', priority: 60, colorRole: 'warning', explanation: 'A fully evaluated actual value is outside the permitted or warning range.' },
+  needs_validation: { key: 'needs_validation', label: 'Validation required', shortLabel: 'Validate', icon: '◇', cssClass: 'needs-validation', priority: 50, colorRole: 'validation', explanation: 'Source data was found, but missing or invalid context prevents evaluation.' },
+  needs_configuration: { key: 'needs_configuration', label: 'Configuration required', shortLabel: 'Configure', icon: '⚙', cssClass: 'needs-configuration', priority: 45, colorRole: 'configuration', explanation: 'Valid log data was found, but the rule lacks expected values, tolerances, thresholds, or evaluator support.' },
+  ok: { key: 'ok', label: 'OK', shortLabel: 'OK', icon: '✓', cssClass: 'ok', priority: 30, colorRole: 'ok', explanation: 'The rule was fully evaluated and relevant values are inside the configured range.' },
+  no_data: { key: 'no_data', label: 'No data', shortLabel: 'No data', icon: '∅', cssClass: 'no-data', priority: 20, colorRole: 'no-data', explanation: 'A valid rule exists, but no matching log value was found.' },
+  no_rule: { key: 'no_rule', label: 'No rule', shortLabel: 'No rule', icon: '—', cssClass: 'no-rule', priority: 10, colorRole: 'no-data', explanation: 'No evaluation rule exists for this system.' },
+  not_analyzed: { key: 'not_analyzed', label: 'Not analyzed', shortLabel: 'Pending', icon: '○', cssClass: 'not-analyzed', priority: 0, colorRole: 'no-data', explanation: 'No AnalysisResult is available yet.' }
 };
 
-export const STATUS_LABEL = {
-  critical: 'Critical',
-  warning: 'Warning',
-  needs_validation: 'Needs validation',
-  needs_configuration: 'Needs configuration',
-  evaluator_pending: 'Evaluator pending',
-  ok: 'OK',
-  no_data: 'No data',
-  no_rule: 'No rule',
-  not_analyzed: 'Not analyzed'
-};
+export const STATUS_PRIORITY = { ...Object.fromEntries(Object.entries(STATUS_TAXONOMY).map(([key, meta]) => [key, meta.priority])), evaluator_pending: STATUS_TAXONOMY.needs_validation.priority };
+export const STATUS_LABEL = Object.fromEntries(Object.entries(STATUS_TAXONOMY).map(([key, meta]) => [key, meta.label]));
 
 export const EXPECTED_STATE_COLUMNS = {
   on: 'Expected ON',
