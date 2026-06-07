@@ -10,7 +10,7 @@ export function createStateIndex() {
       for (const system of MACHINE_STATE_SYSTEMS) {
         const raw = row[system] ?? row[system.toUpperCase()] ?? row[system.toLowerCase()];
         const clean = normalizeText(raw);
-        if (clean && clean !== '---') previous[system] = clean;
+        if (clean && clean !== '---' && clean.toLowerCase() !== 'null') previous[system] = clean;
         const current = previous[system];
         if (!current) continue;
         const target = series[system] || (series[system] = []);

@@ -9,7 +9,7 @@ const statusClass = s => String(s || 'no_data').replace(/_/g, '-');
 
 export function chooseInitialSystem(result) {
   const health = result?.systemHealth || [];
-  const order = ['critical', 'warning', 'needs_validation', 'evaluator_pending', 'ok', 'no_data'];
+  const order = ['critical', 'warning', 'needs_validation', 'needs_configuration', 'evaluator_pending', 'ok', 'no_data'];
   for (const status of order) {
     const found = health.find(h => h.status === status && (status !== 'no_data' || h.rules > 0));
     if (found) return found.system;
@@ -55,15 +55,15 @@ function renderRadarEmpty(message) {
 function renderKpis(result) {
   const systemsAtRisk = result.systemHealth.filter(s => ['critical', 'warning'].includes(s.status)).length;
   const critical = result.deviationEvents.filter(e => e.severity === 'critical').length;
-  const coverage = result.metadata.rulesValid ? Math.round(result.metadata.rulesEvaluated / result.metadata.rulesValid * 100) : 0;
-  const latest = result.deviationEvents[0];
-  const actions = result.deviationEvents.filter(e => e.recommendedAction && e.recommendedAction !== 'No configured action for this rule').length;
+  const signalCoverage = `${result.metadata.relevantSignalsFound || 0} / ${result.metadata.relevantSignalsRequired || 0}`;
+  const fullyEvaluated = `${result.metadata.rulesEvaluated || 0} / ${result.metadata.rulesValid || 0}`;
   $('kpiRow').innerHTML = [
     kpi('Systems at risk', systemsAtRisk),
     kpi('Critical alerts', critical),
-    kpi('Evaluation coverage', `${coverage}%`),
-    kpi('Open preventive actions', actions),
-    kpi('Latest deviation', latest ? fmtTime(latest.endTimestampMs) : 'None')
+    kpi('Signal Match Coverage', signalCoverage),
+    kpi('Rules Fully Evaluated', fullyEvaluated),
+    kpi('Values Requiring Validation', result.metadata.needsValidationPoints || 0),
+    kpi('Values Requiring Configuration', result.metadata.needsConfigurationPoints || 0)
   ].join('');
 }
 function kpi(label, value) { return `<article class="kpi-card"><span>${label}</span><strong>${value}</strong></article>`; }
@@ -79,23 +79,42 @@ function renderMachineMap(result, app, handlers) {
 
 function machineFallbackSvg(className, compact = false) {
   const viewBox = compact ? '0 0 720 260' : '0 0 1100 420';
-  const body = compact
-    ? '<rect x="75" y="92" width="485" height="88" rx="28"></rect><rect x="165" y="48" width="270" height="72" rx="22"></rect><circle cx="145" cy="195" r="28"></circle><circle cx="505" cy="195" r="28"></circle><path d="M92 153h445M210 72h190M585 120h70v60h-70z"></path>'
-    : '<rect x="90" y="162" width="760" height="138" rx="38"></rect><rect x="245" y="82" width="390" height="118" rx="30"></rect><rect x="700" y="120" width="120" height="180" rx="24"></rect><circle cx="190" cy="322" r="42"></circle><circle cx="720" cy="322" r="42"></circle><path d="M130 238h660M300 126h280M875 185h115v82H875z"></path>';
-  return `<svg class="${className}" viewBox="${viewBox}" role="img" aria-label="CSS fallback silhouette of Landa Digital Printing machine" hidden><defs><linearGradient id="machineFallbackBody" x1="0" x2="1"><stop offset="0" stop-color="#294760"/><stop offset="1" stop-color="#142538"/></linearGradient></defs><g fill="url(#machineFallbackBody)" stroke="rgba(238,246,255,.28)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">${body}</g><g fill="none" stroke="rgba(57,199,243,.45)" stroke-width="4" stroke-linecap="round"><path d="M155 255h585"/><path d="M330 152h220"/></g></svg>`;
+  const scale = compact ? 'scale(.66) translate(35 20)' : '';
+  return `<svg class="${className}" viewBox="${viewBox}" role="img" aria-label="Inline SVG fallback of a long Landa industrial digital printing machine" hidden>
+    <defs>
+      <linearGradient id="machineBody" x1="0" x2="1"><stop offset="0" stop-color="#3b4652"/><stop offset=".55" stop-color="#202a35"/><stop offset="1" stop-color="#111923"/></linearGradient>
+      <linearGradient id="machineTop" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#5d6975"/><stop offset="1" stop-color="#252f3a"/></linearGradient>
+      <filter id="softShadow"><feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#000" flood-opacity=".42"/></filter>
+    </defs>
+    <g transform="${scale}" filter="url(#softShadow)">
+      <ellipse cx="560" cy="344" rx="440" ry="36" fill="rgba(0,0,0,.34)"/>
+      <path d="M96 244 L162 156 L332 118 L888 136 Q958 140 988 196 L1014 278 Q1020 300 998 306 L130 306 Q84 304 96 244Z" fill="url(#machineBody)" stroke="rgba(238,246,255,.22)" stroke-width="4"/>
+      <path d="M146 222 L194 162 Q214 139 248 135 L328 128 L306 230 Z" fill="#f7fbff" opacity=".96"/>
+      <path d="M176 214 L212 170 Q228 153 254 150 L300 146 L286 215 Z" fill="#16202b" stroke="#e9f5ff" stroke-width="5"/>
+      <path d="M332 128 L858 142 Q912 145 938 184 L970 246 L310 246 Z" fill="url(#machineTop)" opacity=".96"/>
+      <path d="M330 166 H880" stroke="#42d6ff" stroke-width="12" stroke-linecap="round" opacity=".88"/>
+      <path d="M356 198 H850" stroke="rgba(255,255,255,.28)" stroke-width="3" stroke-linecap="round"/>
+      <g fill="#101820" stroke="rgba(238,246,255,.18)" stroke-width="3"><rect x="360" y="206" width="96" height="72" rx="10"/><rect x="480" y="206" width="96" height="72" rx="10"/><rect x="600" y="206" width="96" height="72" rx="10"/><rect x="720" y="206" width="96" height="72" rx="10"/></g>
+      <path d="M846 164 Q930 170 954 226 L974 278 H858 Z" fill="#151f2a"/>
+      <g fill="#0b1118"><circle cx="196" cy="314" r="22"/><circle cx="382" cy="314" r="22"/><circle cx="738" cy="314" r="22"/><circle cx="928" cy="314" r="22"/></g>
+    </g>
+  </svg>`;
 }
+
 
 function hotspot(system, health = { status: 'no_rule', label: 'Rules not configured' }) {
   const cfg = SYSTEM_HOTSPOTS[system];
   if (!cfg) return '';
   const cls = statusClass(health.status);
-  const dx = cfg.labelX - cfg.x; const dy = cfg.labelY - cfg.y;
-  return `<button class="hotspot ${cls}" data-system="${system}" style="--x:${cfg.x}%;--y:${cfg.y}%;--lx:${cfg.labelX}%;--ly:${cfg.labelY}%;--dx:${dx}%;--dy:${dy}%"><span class="node"></span><span class="connector"></span><span class="label-card"><b>${system}</b><small>${STATUS_LABEL[health.status] || health.status}</small></span></button>`;
+  const ax = cfg.anchorX ?? cfg.x; const ay = cfg.anchorY ?? cfg.y;
+  const dx = cfg.labelX - ax; const dy = cfg.labelY - ay;
+  return `<button class="hotspot ${cls} ${cfg.side || 'right'}" data-system="${system}" style="--x:${ax}%;--y:${ay}%;--lx:${cfg.labelX}%;--ly:${cfg.labelY}%;--dx:${dx}%;--dy:${dy}%"><span class="node"></span><span class="connector"></span><span class="label-card"><b>${system}</b><small>${STATUS_LABEL[health.status] || health.status}</small></span></button>`;
 }
+
 
 function selectedEvent(result, id) { return result.deviationEvents.find(e => e.id === id) || result.deviationEvents[0] || null; }
 function selectedBlocker(result) {
-  return (result.signalSummaries || []).find(s => ['needs_validation', 'evaluator_pending'].includes(s.status) && s.matchedRows > 0) || null;
+  return (result.signalSummaries || []).find(s => ['needs_validation', 'needs_configuration', 'evaluator_pending'].includes(s.status) && s.matchedRows > 0) || null;
 }
 function blockerLabel(key) { return ({ invalid_timestamp: 'Invalid timestamp', no_numeric_value: 'No numeric value', missing_state: 'Missing Machine State', missing_expected_value: 'Missing expected value for current state', missing_threshold_or_tolerance: 'Rule has no tolerance or thresholds', unsupported_evaluator: 'Unsupported check type' })[key] || key || 'Needs validation'; }
 function renderActiveIssue(result, selectedId) {
@@ -105,8 +124,8 @@ function renderActiveIssue(result, selectedId) {
     if (blocker) {
       $('activeIssue').innerHTML = `<div class="issue-head ${statusClass(blocker.status)}"><span>${STATUS_LABEL[blocker.status]}</span><h2>${blocker.system} · ${blocker.subsystem || 'No subsystem'}</h2><p>${blocker.signal}</p></div>
         <div class="comparison-grid"><div class="comparison"><span>Actual</span><strong>${fmtNum(blocker.latestActual)}</strong></div><div class="comparison"><span>State</span><strong>${blocker.currentSystemState || blocker.currentMachineState || '—'}</strong></div><div class="comparison"><span>Rule row</span><strong>${blocker.ruleRow || '—'}</strong></div></div>
-        <div class="issue-facts"><div><span>Machine state</span><b>${blocker.currentMachineState || '—'}</b></div><div><span>System state</span><b>${blocker.currentSystemState || '—'}</b></div><div><span>Evaluation blocker</span><b>${blockerLabel(blocker.blocker)}</b></div><div><span>Source file</span><b>${blocker.sourceFile || '—'}</b></div></div>
-        <div class="action-box"><span>Required correction</span><strong>${blocker.latestReason || blockerLabel(blocker.blocker)}</strong></div>`;
+        <div class="issue-facts"><div><span>Raw timestamp</span><b>${blocker.rawTimestamp || blocker.firstRawTimestamp || '—'}</b></div><div><span>Timestamp status</span><b>${blocker.timestampStatus || '—'}</b></div><div><span>Source file</span><b>${blocker.sourceFile || '—'}</b></div><div><span>Rule row</span><b>${blocker.ruleRow || '—'}</b></div></div>
+        <div class="action-box"><span>Required correction</span><strong>${blocker.blocker === 'invalid_timestamp' ? 'Support timestamp format MM/DD/YYYY HH:mm:ss:ffffff.' : blocker.status === 'needs_configuration' ? 'Configure Expected Printing and Spec Tolerance in the Rules Excel.' : blocker.latestReason || blockerLabel(blocker.blocker)}</strong></div>`;
       return;
     }
     $('activeIssue').innerHTML = `<div class="empty-state"><p class="brand-eyebrow">Active Issue</p><h2>No active deviation detected</h2><p class="muted">No fake alerts are generated. Missing values remain missing.</p></div>`;
@@ -167,16 +186,18 @@ export function renderDrilldown(app, handlers) {
     <section class="drill-bottom panel pad"><h3>Deviations and related rules</h3>${result.deviationEvents.filter(e => e.system === system).slice(0, 8).map(e => `<div class="compact-item ${statusClass(e.severity)}"><strong>${e.signal}</strong><small>${fmtTime(e.startTimestampMs)} · ${fmtDuration(e.durationMs)} · Rule row ${e.ruleRow}</small></div>`).join('') || '<div class="compact-item">No active deviation detected</div>'}</section>`;
   $('drilldownRoot').querySelectorAll('[data-rule]').forEach(el => el.addEventListener('click', () => handlers.selectRule(el.dataset.rule)));
 }
-function parameterCard(s, selectedId) { const range = Number.isFinite(s.expectedLow) || Number.isFinite(s.expectedHigh) ? formatRange(s.expectedLow, s.expectedHigh) : `Expected range unavailable · Reason: ${s.latestReason || blockerLabel(s.blocker)}`; return `<button class="param-card ${statusClass(s.status)}" data-rule="${s.ruleId}" aria-pressed="${s.ruleId === selectedId}"><span><b>${s.signal}</b><small>${s.component || 'No component'} · ${STATUS_LABEL[s.status] || s.status}</small><small>State ${s.currentSystemState || s.currentMachineState || '—'} · Rule row ${s.ruleRow}</small></span><span><b>${fmtNum(s.latestActual)}</b><small>${range}</small><small>${s.eventCount} events · ${fmtDuration(s.totalDeviationDurationMs)}</small></span></button>`; }
+function parameterCard(s, selectedId) { const range = Number.isFinite(s.expectedLow) || Number.isFinite(s.expectedHigh) ? formatRange(s.expectedLow, s.expectedHigh) : 'Expected: Not configured'; return `<button class="param-card ${statusClass(s.status)}" data-rule="${s.ruleId}" aria-pressed="${s.ruleId === selectedId}"><span><b>${s.signal}</b><small>${s.component || 'No component'} · ${STATUS_LABEL[s.status] || s.status}</small><small>State ${s.currentSystemState || s.currentMachineState || '—'} · Rule row ${s.ruleRow}</small></span><span><b>${fmtNum(s.latestActual)}</b><small>${range}</small><small>${s.eventCount} events · ${fmtDuration(s.totalDeviationDurationMs)}</small></span></button>`; }
 function chartSvg(chart, selected) {
-  if (!chart.length) return '<div class="chart-empty">No chart samples available</div>';
+  if (!chart.length) return '<div class="chart-empty">No chart samples available for this parameter yet</div>';
   const ys = chart.flatMap(p => [p.actual, p.expectedLow, p.expectedHigh].filter(Number.isFinite)); const min = Math.min(...ys); const max = Math.max(...ys); const span = max - min || 1;
   const path = chart.filter(p => Number.isFinite(p.actual)).map((p, i, rows) => `${i ? 'L' : 'M'} ${40 + i / Math.max(1, rows.length - 1) * 520} ${260 - ((p.actual - min) / span * 220)}`).join(' ');
   const hasRange = Number.isFinite(selected?.expectedLow) || Number.isFinite(selected?.expectedHigh);
-  return `<svg class="big-chart" viewBox="0 0 600 300"><path d="${path}" class="actual-line"></path><text x="40" y="24">${hasRange ? `Expected ${formatRange(selected.expectedLow, selected.expectedHigh)}` : `Expected range unavailable`}</text><text x="40" y="44">${hasRange ? '' : `Reason: ${selected?.latestReason || blockerLabel(selected?.blocker)}`}</text></svg>`;
+  return `<div class="chart-banner">${hasRange ? `Expected ${formatRange(selected.expectedLow, selected.expectedHigh)}` : selected?.blocker === 'missing_state' ? 'Machine State context is unavailable.' : 'Expected range is not configured for this rule.'}</div><svg class="big-chart" viewBox="0 0 600 300"><path d="${path}" class="actual-line"></path><text x="40" y="24">Actual value trend</text></svg>`;
 }
-function eventDetails(result, selected) { const ev = selected && result.deviationEvents.find(e => e.system === selected.system && e.signal === selected.signal); if (ev) return `<div class="action-box"><strong>${STATUS_LABEL[ev.severity]} event</strong><span>${fmtTime(ev.startTimestampMs)} · ${fmtDuration(ev.durationMs)}</span><p>${ev.recommendedAction || 'No configured action for this rule'}</p></div>`; if (selected && ['needs_validation', 'evaluator_pending'].includes(selected.status)) return `<div class="action-box"><strong>${STATUS_LABEL[selected.status]}</strong><span>Actual ${fmtNum(selected.latestActual)} · Rule row ${selected.ruleRow}</span><p>${selected.latestReason || blockerLabel(selected.blocker)}</p></div>`; return '<div class="action-box">No active deviation detected</div>'; }
+function eventDetails(result, selected) { const ev = selected && result.deviationEvents.find(e => e.system === selected.system && e.signal === selected.signal); if (ev) return `<div class="action-box"><strong>${STATUS_LABEL[ev.severity]} event</strong><span>${fmtTime(ev.startTimestampMs)} · ${fmtDuration(ev.durationMs)}</span><p>${ev.recommendedAction || 'No configured action for this rule'}</p></div>`; if (selected && ['needs_validation', 'needs_configuration', 'evaluator_pending'].includes(selected.status)) return `<div class="action-box"><strong>${STATUS_LABEL[selected.status]}</strong><span>Actual ${fmtNum(selected.latestActual)} · Rule row ${selected.ruleRow}</span><p>${selected.latestReason || blockerLabel(selected.blocker)}</p></div>`; return '<div class="action-box">No active deviation detected</div>'; }
 
 export function renderDiagnostics(result) {
-  $('diagnosticsPre').textContent = result?.diagnosticsSummary ? JSON.stringify(result.diagnosticsSummary, null, 2) : 'No diagnostics available.';
+  const d = result?.diagnosticsSummary;
+  if (!d) { $('diagnosticsPre').textContent = 'No diagnostics available.'; return; }
+  $('diagnosticsPre').textContent = JSON.stringify({ timestampParsing: d.timestampParsing, ruleCoverage: d.ruleCoverage, dataTimeRanges: d.dataTimeRanges, sourceStats: d.sourceStats, evaluationBlockers: d.evaluationBlockers, reasons: d.reasons, parserWarnings: d.parserWarnings }, null, 2);
 }

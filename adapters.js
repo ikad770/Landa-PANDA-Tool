@@ -18,26 +18,38 @@ export function normalizeHeader(value) {
     .trim();
 }
 
+export function cleanTimestampValue(value) {
+  return String(value ?? '')
+    .replace(/\uFEFF/g, '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\uFFFD/g, '')
+    .replace(/\n/g, '')
+    .trim();
+}
+
 function localEpoch(year, month, day, hour, minute, second, fraction) {
-  const ms = Number(String(fraction || '').slice(0, 3).padEnd(3, '0')) || 0;
-  return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second), ms).getTime();
+  const milliseconds = Number(String(fraction || '').padEnd(3, '0').slice(0, 3)) || 0;
+  const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second), milliseconds);
+  if (date.getFullYear() !== Number(year) || date.getMonth() !== Number(month) - 1 || date.getDate() !== Number(day) || date.getHours() !== Number(hour) || date.getMinutes() !== Number(minute) || date.getSeconds() !== Number(second) || date.getMilliseconds() !== milliseconds) return null;
+  const ts = date.getTime();
+  return Number.isFinite(ts) ? ts : null;
 }
 
 export function parseSlashTimestamp(value, order) {
-  const text = String(value || '').trim();
-  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$/);
+  if (!['MDY', 'DMY'].includes(order)) return null;
+  const text = cleanTimestampValue(value);
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})(?:(?:[:.])(\d{1,6}))?$/);
   if (!match) return null;
   const first = Number(match[1]);
   const second = Number(match[2]);
   const month = order === 'DMY' ? second : first;
   const day = order === 'DMY' ? first : second;
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  const ts = localEpoch(match[3], month, day, match[4], match[5], match[6], match[7]);
-  return Number.isFinite(ts) ? ts : null;
+  return localEpoch(match[3], month, day, match[4], match[5], match[6], match[7]);
 }
 
 export function parseIsoTimestamp(value) {
-  const text = String(value || '').trim();
+  const text = cleanTimestampValue(value);
   const match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?/);
   if (!match) return null;
   const ts = localEpoch(match[1], match[2], match[3], match[4], match[5], match[6], match[7]);
@@ -95,7 +107,7 @@ export function getAdapter(sourceType) {
 }
 
 function aliasesFor(token) {
-  return new Set([token, ...(SIGNAL_ALIASES[token] || [])]);
+  return new Set([token, ...(SIGNAL_ALIASES[token] || []), ...Object.entries(SIGNAL_ALIASES).filter(([, aliases]) => aliases.includes(token)).map(([key]) => key)]);
 }
 
 export function matchRuleForRow(adapter, row, rules) {

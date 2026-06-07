@@ -99,7 +99,9 @@ function renderProgress(progress) {
   $('processingHeadline').textContent = APP_STAGES.find(([key]) => key === progress.stage)?.[1] || 'Processing';
   $('processingSubhead').textContent = progress.message || 'Processing';
   $('currentSource').textContent = progress.currentSource || '—';
-  $('currentFile').textContent = progress.currentFile || '—';
+  const currentFilePath = progress.currentFile || '';
+  $('currentFile').textContent = currentFilePath ? currentFilePath.split(/[\\/!]+/).filter(Boolean).at(-1) : '—';
+  $('currentFile').title = currentFilePath;
   $('filesCount').textContent = `${progress.filesCompleted || 0} / ${progress.filesTotal || 0}`;
   $('relevantValues').textContent = progress.relevantValuesFound || 0;
   $('signalsMatched').textContent = progress.signalsMatched || 0;
@@ -126,12 +128,12 @@ function renderReady() {
   $('readyEyebrow').textContent = validation.status === 'completed_with_warnings' ? 'Ready with warnings' : 'Analysis complete';
   $('readyTitle').textContent = validation.status === 'completed_with_warnings' ? 'Service Radar ready with evaluation blockers' : 'Compact AnalysisResult finalized';
   $('readySubtitle').textContent = validation.status === 'completed_with_warnings' ? `${validation.reason} ${topBlocker ? `Top blocker: ${topBlocker.label}` : ''}` : 'Service Radar is ready. Diagnostics remain separate from operational findings.';
-  $('readyRules').textContent = `${meta.rulesEvaluated} / ${meta.rulesValid}`;
+  $('readyRules').textContent = `${meta.rulesEvaluated || 0} / ${meta.rulesValid || 0}`;
   $('readySignals').textContent = `${meta.relevantSignalsFound} / ${meta.relevantSignalsRequired}`;
   $('readyRelevantValues').textContent = meta.relevantValuesFound || 0;
   $('readyFullyEvaluated').textContent = meta.fullyEvaluatedPoints || 0;
-  $('readyNeedsValidation').textContent = meta.blockedPoints || 0;
-  $('readySystems').textContent = meta.systemsEvaluated;
+  $('readyNeedsValidation').textContent = meta.needsValidationPoints || 0;
+  $('readySystems').textContent = meta.needsConfigurationPoints || 0;
   $('readyDeviations').textContent = meta.deviationsFound;
   $('readyTime').textContent = fmtDuration(meta.analysisTimeMs);
   $('readyTopBlocker').textContent = topBlocker?.label || 'None';
