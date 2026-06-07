@@ -1,11 +1,11 @@
 import { EXPECTED_STATE_COLUMNS, PENDING_CHECK_TYPES, SUPPORTED_CHECK_TYPES } from './config.js';
 
 export function normalizeToken(value) {
-  return String(value ?? '').replace(/\uFEFF/g, '').replace(/[_\s\-./\\:()\[\]]+/g, '').trim().toLowerCase();
+  return String(value ?? '').replace(/\uFEFF/g, '').replace(/\u00A0/g, ' ').replace(/\uFFFD/g, '').replace(/[_\s\-./\\:()\[\]]+/g, '').trim().toLowerCase();
 }
 
 export function normalizeText(value) {
-  return String(value ?? '').replace(/\uFEFF/g, '').replace(/\s+/g, ' ').trim();
+  return String(value ?? '').replace(/\uFEFF/g, '').replace(/\u00A0/g, ' ').replace(/\uFFFD/g, '').replace(/\s+/g, ' ').trim();
 }
 
 export function normalizeCheckType(value) {
@@ -19,7 +19,7 @@ export function normalizeCheckType(value) {
 export function normalizeState(value) {
   const key = normalizeToken(value);
   const aliases = {
-    on: 'on', run: 'on', running: 'on', standby: 'standby', standbystate: 'standby', idle: 'standby',
+    on: 'on', initializing: 'on', init: 'on', run: 'on', running: 'on', standby: 'standby', standbyby: 'standby', standbystate: 'standby', idle: 'standby',
     ready: 'ready', prepare2print: 'prepare2print', preparetoprint: 'prepare2print', prep2print: 'prepare2print',
     printing: 'printing', print: 'printing', printend: 'printend', printended: 'printend', recovery: 'recovery', recovering: 'recovery',
     error: 'error', fault: 'error'
@@ -118,14 +118,14 @@ export function evaluateValue(rule, actual, stateContext) {
   if (requiresStateExpected && (!stateContext || stateContext.status === 'missing')) return { status: 'needs_validation', blocker: 'missing_state', reason: 'Missing Machine State' };
   const expected = selectExpected(rule, stateContext);
   const hasAnyThreshold = rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
-  if (expected.source === 'missing' && !hasAnyThreshold && !['above threshold', 'below threshold', 'max', 'min'].includes(checkType)) return { status: 'needs_validation', blocker: 'missing_expected_value', reason: 'Missing expected value for current state' };
+  if (expected.source === 'missing' && !hasAnyThreshold && !['above threshold', 'below threshold', 'max', 'min'].includes(checkType)) return { status: 'needs_configuration', blocker: 'missing_expected_value', reason: 'Missing expected value for current state' };
   const range = computeAllowedRange(rule, expected.value);
-  if (!range && checkType !== 'exact') return { status: 'needs_validation', blocker: 'missing_threshold_or_tolerance', reason: 'Rule has no tolerance or thresholds' };
+  if (!range && checkType !== 'exact') return { status: 'needs_configuration', blocker: 'missing_threshold_or_tolerance', reason: 'Rule has no tolerance or thresholds' };
   let low = range?.low ?? expected.value;
   let high = range?.high ?? expected.value;
   if (checkType === 'above threshold' || checkType === 'min') high = Infinity;
   if (checkType === 'below threshold' || checkType === 'max') low = -Infinity;
-  if (checkType === 'exact' && expected.value === null) return { status: 'needs_validation', blocker: 'missing_expected_value', reason: 'Missing exact expected value' };
+  if (checkType === 'exact' && expected.value === null) return { status: 'needs_configuration', blocker: 'missing_expected_value', reason: 'Missing exact expected value' };
   const criticalLow = range?.criticalLow;
   const criticalHigh = range?.criticalHigh;
   const warningLow = range?.warningLow;
@@ -146,7 +146,6 @@ export function validateRule(rule) {
   if (!SUPPORTED_CHECK_TYPES.has(rule.checkTypeNormalized)) return 'unsupported_check_type';
   const hasExpected = Object.keys(rule.expectedByState || {}).length > 0 || rule.genericExpected !== null;
   const hasLimit = rule.tolerance || rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
-  if (!hasExpected && !hasLimit) return 'missing_expected_or_limit';
   return 'valid';
 }
 

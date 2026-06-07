@@ -40,3 +40,91 @@
   display: none;
 }
 .issue-head.needs-validation span,.issue-head.evaluator-pending span{color:#5aa7ff}.compact-item.needs-validation,.compact-item.evaluator-pending,.param-card.needs-validation,.param-card.evaluator-pending{border-color:rgba(90,167,255,.45)}.hotspot.evaluator-pending .node{background:#5aa7ff;box-shadow:0 0 0 7px rgba(90,167,255,.14),0 0 30px rgba(90,167,255,.75)}
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.shell,
+.workspace-hero,
+.radar-grid,
+.bottom-grid,
+.drill-layout,
+.panel,
+.metric,
+.kpi-card,
+.sequence-step,
+.drill-left,
+.drill-center,
+.drill-right,
+.drill-bottom,
+.compact-item,
+.param-card {
+  min-width: 0;
+}
+
+.processing-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.processing-stat,
+.metric {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.processing-stat-value,
+.metric b,
+.kpi-card strong,
+.issue-facts b,
+.compact-item small,
+.compact-item span {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.issue-facts b,
+.compact-item,
+.param-card,
+.chart-banner,
+pre {
+  overflow-wrap: anywhere;
+}
+
+.machine-panel { min-height: 680px; }
+.machine-stage { height: 680px; min-height: 560px; }
+.hotspot { position: absolute; left: var(--x); top: var(--y); width: 0; height: 0; padding: 0; border: 0; background: transparent; z-index: 5; overflow: visible; }
+.hotspot .node { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 999px; background: var(--gray); box-shadow: 0 0 0 6px rgba(123,135,150,.14); }
+.hotspot.ok .node { background: var(--green); box-shadow: 0 0 0 6px rgba(67,209,125,.14), 0 0 22px rgba(67,209,125,.35); }
+.hotspot.warning .node { background: var(--amber); box-shadow: 0 0 0 7px rgba(244,197,66,.15), 0 0 26px rgba(244,197,66,.55); }
+.hotspot.critical .node { background: var(--red); box-shadow: 0 0 0 8px rgba(255,95,104,.17), 0 0 34px rgba(255,95,104,.72); }
+.hotspot.needs-validation .node,
+.hotspot.needs-configuration .node { background: #5aa7ff; box-shadow: 0 0 0 7px rgba(90,167,255,.14), 0 0 28px rgba(90,167,255,.6); }
+.hotspot.no-rule { opacity: .42; }
+.hotspot .connector { position: absolute; left: 0; top: 0; width: max(2px, hypot(var(--dx), var(--dy))); height: 1px; background: linear-gradient(90deg, rgba(238,246,255,.58), rgba(57,199,243,.18)); transform-origin: 0 0; transform: rotate(atan2(var(--dy), var(--dx))); }
+.hotspot .label-card { position: absolute; left: calc(var(--dx) - 48px); top: calc(var(--dy) - 18px); min-width: 96px; max-width: 132px; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(148,163,184,.25); background: rgba(9,18,29,.82); box-shadow: 0 12px 32px rgba(0,0,0,.26); text-align: center; }
+.hotspot .label-card b,
+.hotspot .label-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hotspot .label-card small { color: var(--muted); font-size: 10px; }
+
+.chart-banner { margin: 0 0 10px; padding: 10px 12px; border: 1px solid rgba(57,199,243,.22); border-radius: 14px; background: rgba(57,199,243,.09); color: #d9f4ff; }
+.drill-layout { grid-template-columns: minmax(240px, .72fr) minmax(420px, 1.55fr) minmax(320px, .9fr); align-items: start; }
+.drill-center { min-height: 520px; }
+.drill-right { display: grid; gap: 14px; }
+.param-list { max-height: 620px; }
+.param-card { grid-template-columns: minmax(0,1fr) minmax(120px,.38fr); }
+
+@media (max-width: 1100px) {
+  .processing-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 650px) {
+  .processing-stats { grid-template-columns: 1fr; }
+  .hotspot .label-card { transform: scale(.86); }
+}
