@@ -23,24 +23,24 @@ export const SYSTEMS = ['DPS', 'DFES', 'MSPS', 'ITS', 'IPS', 'Ventilation', 'ECS
 export const MACHINE_STATE_SYSTEMS = ['Machine', 'BSS', 'IPS', 'PSS', 'Dryer', 'IPU', 'Ventilation', 'CWS', 'IRD', 'DFES', 'DPS', 'QCS', 'ICS', 'ECS', 'MSPS', 'ITS'];
 
 export const SYSTEM_HOTSPOTS = {
-  DPS: { anchorX: 13, anchorY: 61, labelX: 5, labelY: 40, side: 'left' },
-  DFES: { anchorX: 18, anchorY: 45, labelX: 6, labelY: 24, side: 'left' },
-  MSPS: { anchorX: 24, anchorY: 68, labelX: 10, labelY: 82, side: 'left' },
-  ITS: { anchorX: 29, anchorY: 39, labelX: 22, labelY: 15, side: 'left' },
-  IPS: { anchorX: 40, anchorY: 36, labelX: 36, labelY: 11, side: 'top' },
-  ICS: { anchorX: 50, anchorY: 34, labelX: 50, labelY: 8, side: 'top' },
-  Ventilation: { anchorX: 58, anchorY: 28, labelX: 64, labelY: 10, side: 'top' },
-  ECS: { anchorX: 66, anchorY: 38, labelX: 75, labelY: 16, side: 'right' },
-  IRD: { anchorX: 70, anchorY: 58, labelX: 79, labelY: 45, side: 'right' },
-  QCS: { anchorX: 74, anchorY: 43, labelX: 86, labelY: 29, side: 'right' },
-  BSS: { anchorX: 78, anchorY: 64, labelX: 88, labelY: 73, side: 'right' },
-  STS: { anchorX: 84, anchorY: 49, labelX: 94, labelY: 54, side: 'right' },
-  IPU: { anchorX: 89, anchorY: 65, labelX: 94, labelY: 83, side: 'right' },
-  FEC: { anchorX: 93, anchorY: 52, labelX: 94, labelY: 36, side: 'right' },
-  CWS: { anchorX: 34, anchorY: 70, labelX: 28, labelY: 88, side: 'bottom' },
-  PSS: { anchorX: 55, anchorY: 72, labelX: 53, labelY: 91, side: 'bottom' },
-  Dryer: { anchorX: 68, anchorY: 71, labelX: 70, labelY: 90, side: 'bottom' },
-  LLCI: { anchorX: 46, anchorY: 58, labelX: 43, labelY: 78, side: 'bottom' }
+  DPS: { anchorX: 14, anchorY: 60, labelX: 6, labelY: 39, labelAlign: 'left', region: 'front_cockpit' },
+  DFES: { anchorX: 18, anchorY: 45, labelX: 7, labelY: 24, labelAlign: 'left', region: 'front_cockpit' },
+  MSPS: { anchorX: 23, anchorY: 68, labelX: 10, labelY: 82, labelAlign: 'left', region: 'front_cockpit' },
+  ITS: { anchorX: 28, anchorY: 39, labelX: 22, labelY: 14, labelAlign: 'center', region: 'front_cockpit' },
+  IPS: { anchorX: 39, anchorY: 38, labelX: 35, labelY: 10, labelAlign: 'center', region: 'central_print_engine' },
+  ICS: { anchorX: 49, anchorY: 35, labelX: 49, labelY: 8, labelAlign: 'center', region: 'central_print_engine' },
+  Ventilation: { anchorX: 58, anchorY: 30, labelX: 63, labelY: 10, labelAlign: 'center', region: 'central_print_engine' },
+  ECS: { anchorX: 66, anchorY: 39, labelX: 74, labelY: 16, labelAlign: 'center', region: 'central_print_engine' },
+  IRD: { anchorX: 70, anchorY: 58, labelX: 80, labelY: 43, labelAlign: 'right', region: 'right_imaging_delivery' },
+  QCS: { anchorX: 75, anchorY: 43, labelX: 87, labelY: 27, labelAlign: 'right', region: 'right_imaging_delivery' },
+  BSS: { anchorX: 78, anchorY: 64, labelX: 88, labelY: 72, labelAlign: 'right', region: 'right_imaging_delivery' },
+  STS: { anchorX: 84, anchorY: 49, labelX: 94, labelY: 54, labelAlign: 'right', region: 'right_imaging_delivery' },
+  IPU: { anchorX: 89, anchorY: 66, labelX: 94, labelY: 84, labelAlign: 'right', region: 'right_imaging_delivery' },
+  FEC: { anchorX: 93, anchorY: 52, labelX: 95, labelY: 36, labelAlign: 'right', region: 'right_imaging_delivery' },
+  CWS: { anchorX: 34, anchorY: 70, labelX: 28, labelY: 89, labelAlign: 'center', region: 'lower_services' },
+  PSS: { anchorX: 55, anchorY: 72, labelX: 53, labelY: 91, labelAlign: 'center', region: 'lower_services' },
+  Dryer: { anchorX: 68, anchorY: 71, labelX: 70, labelY: 90, labelAlign: 'center', region: 'right_imaging_delivery' },
+  LLCI: { anchorX: 46, anchorY: 58, labelX: 43, labelY: 78, labelAlign: 'center', region: 'central_print_engine' }
 };
 
 export const REQUIRED_SOURCE_PATHS = {
