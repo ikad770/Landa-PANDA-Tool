@@ -64,7 +64,7 @@ To use the real machine image locally, place the image at:
 assets/landa-machine.png
 ```
 
-The application will automatically use it. If the image is missing, the built-in CSS/SVG fallback is displayed.
+The application will automatically use it. If the image is missing, the built-in CSS/SVG fallback is displayed. This fallback is expected until the binary asset is added manually and must not be treated as a data or code failure.
 
 
 ## Files

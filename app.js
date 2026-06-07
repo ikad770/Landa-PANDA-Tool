@@ -55,8 +55,13 @@ function handleWorkerMessage(message) {
   } else if (message.type === 'complete') {
     finishWorker();
     const result = message.analysisResult || message.result;
-    validateAnalysisResult(result);
+    const validation = validateAnalysisResult(result);
+    if (!validation.valid) {
+      failAnalysis(validation.reason);
+      return;
+    }
     app.analysisResult = result;
+    app.analysisResult.validation = validation;
     app.selectedSystem = chooseInitialSystem(app.analysisResult);
     app.selectedEventId = app.analysisResult.deviationEvents[0]?.id || null;
     renderReady();
@@ -116,11 +121,20 @@ function renderSequence(activeStage) {
 
 function renderReady() {
   const meta = app.analysisResult.metadata;
+  const validation = app.analysisResult.validation || { status: 'completed' };
+  const topBlocker = app.analysisResult.diagnosticsSummary?.evaluationBlockers?.topBlocker;
+  $('readyEyebrow').textContent = validation.status === 'completed_with_warnings' ? 'Ready with warnings' : 'Analysis complete';
+  $('readyTitle').textContent = validation.status === 'completed_with_warnings' ? 'Service Radar ready with evaluation blockers' : 'Compact AnalysisResult finalized';
+  $('readySubtitle').textContent = validation.status === 'completed_with_warnings' ? `${validation.reason} ${topBlocker ? `Top blocker: ${topBlocker.label}` : ''}` : 'Service Radar is ready. Diagnostics remain separate from operational findings.';
   $('readyRules').textContent = `${meta.rulesEvaluated} / ${meta.rulesValid}`;
   $('readySignals').textContent = `${meta.relevantSignalsFound} / ${meta.relevantSignalsRequired}`;
+  $('readyRelevantValues').textContent = meta.relevantValuesFound || 0;
+  $('readyFullyEvaluated').textContent = meta.fullyEvaluatedPoints || 0;
+  $('readyNeedsValidation').textContent = meta.blockedPoints || 0;
   $('readySystems').textContent = meta.systemsEvaluated;
   $('readyDeviations').textContent = meta.deviationsFound;
   $('readyTime').textContent = fmtDuration(meta.analysisTimeMs);
+  $('readyTopBlocker').textContent = topBlocker?.label || 'None';
 }
 
 function showServiceRadar() {

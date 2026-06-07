@@ -39,3 +39,4 @@
 .machine-fallback[hidden] {
   display: none;
 }
+.issue-head.needs-validation span,.issue-head.evaluator-pending span{color:#5aa7ff}.compact-item.needs-validation,.compact-item.evaluator-pending,.param-card.needs-validation,.param-card.evaluator-pending{border-color:rgba(90,167,255,.45)}.hotspot.evaluator-pending .node{background:#5aa7ff;box-shadow:0 0 0 7px rgba(90,167,255,.14),0 0 30px rgba(90,167,255,.75)}

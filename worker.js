@@ -33,12 +33,12 @@ function createAudit() {
   return {
     rulesFileLoaded: false, rulesSheetFound: false, rulesHeaderRow: null, rulesParsed: 0, validRules: 0, invalidRules: 0,
     opcZipFound: false, requiredSources: [], sourceFilesFound: {}, sourceFilesParsed: {}, rowsScanned: {}, relevantRowsMatched: {}, matchedSignals: {}, missingSignals: {},
-    machineStateRows: 0, machineStateTransitions: 0, evaluatedPoints: 0, deviationEvents: 0, systemsEvaluated: 0, resultCommitted: false, resultSchemaValid: false
+    machineStateRows: 0, machineStateTransitions: 0, classifiedPoints: 0, fullyEvaluatedPoints: 0, blockedPoints: 0, evaluatedPoints: 0, deviationEvents: 0, systemsEvaluated: 0, resultCommitted: false, resultSchemaValid: false
   };
 }
 
 function createDiagnostics() {
-  return { analysisAudit, reasons: [], parserWarnings: [], parserErrors: [], invalidTimestamps: {}, firstInvalidTimestamp: {}, analysisPlan: {}, archiveIndex: {}, rules: [] };
+  return { analysisAudit, reasons: [], parserWarnings: [], parserErrors: [], invalidTimestamps: {}, firstInvalidTimestamp: {}, analysisPlan: {}, archiveIndex: {}, rules: [], sourceTimeRangeByAdapter: {}, machineStatesTimeRange: { firstTimestampMs: null, lastTimestampMs: null }, overlapByAdapter: {}, evaluationBlockers: { totals: {}, bySystem: {}, byRule: {}, topBlocker: null } };
 }
 
 function assertNotCancelled() { if (cancelled) throw new Error('Analysis cancelled'); }
@@ -171,6 +171,7 @@ async function parseMachineStates(files, stateIndex, plan) {
       analysisAudit.machineStateRows += 1;
       const timestampMs = ADAPTERS.MachineStates.getTimestampMs(row);
       if (!timestampMs) return recordInvalidTimestamp('MachineStates', file.path, row.Timestamp || row.Time || row.DateTime, rowNo);
+      noteMachineStateTimestamp(timestampMs);
       stateIndex.addRow(timestampMs, row);
     });
     progressState.filesCompleted += 1;
@@ -219,7 +220,7 @@ async function parseCsvFile(file, adapter, onRow) {
 }
 
 function createRuntime(rule) {
-  return { rule, ruleId: rule.id, matchedRows: 0, numericRows: 0, evaluatedCounts: {}, blockers: {}, firstTimestampMs: Infinity, lastTimestampMs: -Infinity, latestPoint: null, minActual: Infinity, maxActual: -Infinity, sumActual: 0, chartReservoir: [], evidence: [], stateCoverage: {}, activeDeviation: null, deviationEvents: [] };
+  return { rule, ruleId: rule.id, matchedRows: 0, numericRows: 0, classifiedPoints: 0, fullyEvaluatedPoints: 0, blockedPoints: 0, evaluatedCounts: {}, blockers: { invalid_timestamp: 0, no_numeric_value: 0, missing_state: 0, missing_expected_value: 0, missing_threshold_or_tolerance: 0, unsupported_evaluator: 0 }, firstTimestampMs: Infinity, lastTimestampMs: -Infinity, latestPoint: null, minActual: Infinity, maxActual: -Infinity, sumActual: 0, chartReservoir: [], evidence: [], stateCoverage: {}, activeDeviation: null, deviationEvents: [] };
 }
 
 function evaluateMatchedRow(rule, adapter, row, sourceFile, rowNo, stateIndex, runtime) {
@@ -228,23 +229,43 @@ function evaluateMatchedRow(rule, adapter, row, sourceFile, rowNo, stateIndex, r
   if (!analysisAudit.matchedSignals[rule.sourceType]) analysisAudit.matchedSignals[rule.sourceType] = {};
   analysisAudit.matchedSignals[rule.sourceType][rule.signal] = (analysisAudit.matchedSignals[rule.sourceType][rule.signal] || 0) + 1;
   const timestampMs = adapter.getTimestampMs(row);
-  if (!timestampMs) { count(runtime.blockers, 'invalid_timestamp'); return recordInvalidTimestamp(rule.sourceType, sourceFile.path, row.Timestamp || row.Time || row.DateTime, rowNo); }
+  if (!timestampMs) {
+    recordClassification(runtime, { status: 'needs_validation', blocker: 'invalid_timestamp' });
+    recordInvalidTimestamp(rule.sourceType, sourceFile.path, row.Timestamp || row.Time || row.DateTime, rowNo);
+    return;
+  }
+  noteSourceTimestamp(rule.sourceType, timestampMs);
   const actual = adapter.getNumericValue(row);
   if (actual !== null) runtime.numericRows += 1;
   const stateContext = stateIndex.getStateAt(timestampMs, rule.system);
   const result = evaluateValue(rule, actual, stateContext);
-  count(runtime.evaluatedCounts, result.status);
-  if (result.blocker) count(runtime.blockers, result.blocker);
-  if (['ok', 'warning', 'critical'].includes(result.status)) analysisAudit.evaluatedPoints += 1;
+  recordClassification(runtime, result);
   runtime.firstTimestampMs = Math.min(runtime.firstTimestampMs, timestampMs);
   runtime.lastTimestampMs = Math.max(runtime.lastTimestampMs, timestampMs);
   if (Number.isFinite(actual)) { runtime.minActual = Math.min(runtime.minActual, actual); runtime.maxActual = Math.max(runtime.maxActual, actual); runtime.sumActual += actual; }
-  const point = { t: timestampMs, actual, expectedLow: result.expectedLow, expectedHigh: result.expectedHigh, status: result.status, machineState: stateContext.machineState, systemState: stateContext.systemState, component: adapter.getComponent(row) || rule.component, row: rowNo };
+  const point = { t: timestampMs, actual, expectedLow: result.expectedLow, expectedHigh: result.expectedHigh, status: result.status, blocker: result.blocker || null, reason: result.reason || '', machineState: stateContext.machineState, systemState: stateContext.systemState, stateContextStatus: stateContext.status, component: adapter.getComponent(row) || rule.component, subsystem: adapter.getSubsystem(row, rule), signal: rule.signal, source: sourceFile.sourceType, file: sourceFile.path, ruleRow: rule.row, row: rowNo };
   runtime.latestPoint = point;
   count(runtime.stateCoverage, `${stateContext.machineState || 'unknown'} / ${stateContext.systemState || 'unknown'}`);
   addSample(runtime.chartReservoir, point, MAX_CHART_POINTS_PER_RULE);
   addEvidence(runtime, point, rule, sourceFile, result);
   updateDeviation(runtime, point, rule, result);
+}
+
+function recordClassification(runtime, result) {
+  if (!result?.status) return;
+  runtime.classifiedPoints += 1;
+  analysisAudit.classifiedPoints += 1;
+  count(runtime.evaluatedCounts, result.status);
+  if (['ok', 'warning', 'critical'].includes(result.status)) {
+    runtime.fullyEvaluatedPoints += 1;
+    analysisAudit.fullyEvaluatedPoints += 1;
+    analysisAudit.evaluatedPoints = analysisAudit.fullyEvaluatedPoints;
+  }
+  if (['needs_validation', 'evaluator_pending'].includes(result.status)) {
+    runtime.blockedPoints += 1;
+    analysisAudit.blockedPoints += 1;
+  }
+  if (result.blocker) count(runtime.blockers, result.blocker);
 }
 
 function updateDeviation(runtime, point, rule, result) {
@@ -286,7 +307,7 @@ function addSample(points, point, max) {
 
 function addEvidence(runtime, point, rule, file, result) {
   if (runtime.evidence.length >= MAX_EVIDENCE_PREVIEW_PER_RULE) return;
-  runtime.evidence.push({ timestampMs: point.t, source: file.sourceType, file: file.path, ruleRow: rule.row, system: rule.system, signal: rule.signal, actual: point.actual, expected: formatRange(result.expectedLow, result.expectedHigh), result: result.status, reason: result.reason, machineState: point.machineState, systemState: point.systemState });
+  runtime.evidence.push({ timestampMs: point.t, source: file.sourceType, file: file.path, row: point.row, ruleRow: rule.row, system: rule.system, subsystem: point.subsystem || rule.subsystem, component: point.component || rule.component, signal: rule.signal, actual: point.actual, expected: Number.isFinite(result.expectedLow) || Number.isFinite(result.expectedHigh) ? formatRange(result.expectedLow, result.expectedHigh) : 'Expected range unavailable', expectedLow: result.expectedLow, expectedHigh: result.expectedHigh, result: result.status, blocker: result.blocker || null, reason: result.reason, machineState: point.machineState, systemState: point.systemState });
 }
 
 function finalizeResult(rules, plan, stateIndex, runtimes) {
@@ -301,8 +322,10 @@ function finalizeResult(rules, plan, stateIndex, runtimes) {
   const endTimestampMs = timestamps.length ? Math.max(...timestamps) : null;
   const evidence = runtimeList.flatMap(runtime => runtime.evidence).sort((a, b) => b.timestampMs - a.timestampMs).slice(0, 30);
   const chartSeries = Object.fromEntries(runtimeList.map(runtime => [runtime.ruleId, runtime.chartReservoir.sort((a, b) => a.t - b.t)]));
+  diagnostics.evaluationBlockers = buildEvaluationBlockers(runtimeList);
+  diagnostics.overlapByAdapter = buildOverlapDiagnostics();
   const result = {
-    metadata: { createdAt: new Date().toISOString(), startTimestampMs, endTimestampMs, timeRange: startTimestampMs ? `${new Date(startTimestampMs).toLocaleString()} – ${new Date(endTimestampMs).toLocaleString()}` : 'No evaluated time range', rulesTotal: rules.length, rulesValid: plan.validRules.length, rulesEvaluated: runtimeList.filter(runtime => runtime.matchedRows > 0 && Object.keys(runtime.evaluatedCounts).length > 0).length, systemsWithRules: plan.systems.size, systemsEvaluated: analysisAudit.systemsEvaluated, relevantSignalsRequired: [...plan.requiredSignals.values()].reduce((sum, set) => sum + set.size, 0), relevantSignalsFound: new Set(runtimeList.filter(runtime => runtime.matchedRows).map(runtime => `${runtime.rule.system}::${runtime.rule.signal}`)).size, relevantValuesFound: progressState.relevantValuesFound, evaluatedPoints: analysisAudit.evaluatedPoints, deviationsFound: deviationEvents.length, analysisTimeMs: Math.round(performance.now() - startedAt), blockingReason: blockingReason() },
+    metadata: { createdAt: new Date().toISOString(), startTimestampMs, endTimestampMs, timeRange: startTimestampMs ? `${new Date(startTimestampMs).toLocaleString()} – ${new Date(endTimestampMs).toLocaleString()}` : 'No evaluated time range', rulesTotal: rules.length, rulesValid: plan.validRules.length, rulesEvaluated: runtimeList.filter(runtime => runtime.matchedRows > 0 && Object.keys(runtime.evaluatedCounts).length > 0).length, systemsWithRules: plan.systems.size, systemsEvaluated: analysisAudit.systemsEvaluated, relevantSignalsRequired: [...plan.requiredSignals.values()].reduce((sum, set) => sum + set.size, 0), relevantSignalsFound: new Set(runtimeList.filter(runtime => runtime.matchedRows).map(runtime => `${runtime.rule.system}::${runtime.rule.signal}`)).size, relevantValuesFound: progressState.relevantValuesFound, classifiedPoints: analysisAudit.classifiedPoints, fullyEvaluatedPoints: analysisAudit.fullyEvaluatedPoints, blockedPoints: analysisAudit.blockedPoints, evaluatedPoints: analysisAudit.fullyEvaluatedPoints, deviationsFound: deviationEvents.length, analysisTimeMs: Math.round(performance.now() - startedAt), blockingReason: blockingReason() },
     systemHealth,
     activeFindings: deviationEvents.slice(0, 10),
     deviationEvents,
@@ -320,7 +343,7 @@ function runtimeToSummary(runtime) {
   const status = highest(runtime.evaluatedCounts, runtime.matchedRows ? 'needs_validation' : 'no_data');
   const latest = runtime.latestPoint;
   const fallbackRange = computeAllowedRange(runtime.rule, runtime.rule.genericExpected) || {};
-  return { ruleId: runtime.ruleId, ruleRow: runtime.rule.row, system: runtime.rule.system, subsystem: runtime.rule.subsystem, component: latest?.component || runtime.rule.component, signal: runtime.rule.signal, status, matchedRows: runtime.matchedRows, numericRows: runtime.numericRows, evaluatedCounts: runtime.evaluatedCounts, blockers: runtime.blockers, latestActual: latest?.actual ?? null, expectedLow: latest?.expectedLow ?? fallbackRange.low ?? null, expectedHigh: latest?.expectedHigh ?? fallbackRange.high ?? null, currentMachineState: latest?.machineState || null, currentSystemState: latest?.systemState || null, eventCount: runtime.deviationEvents.length, totalDeviationDurationMs: runtime.deviationEvents.reduce((sum, event) => sum + event.durationMs, 0), minActual: Number.isFinite(runtime.minActual) ? runtime.minActual : null, maxActual: Number.isFinite(runtime.maxActual) ? runtime.maxActual : null, averageActual: runtime.numericRows ? runtime.sumActual / runtime.numericRows : null, recommendedAction: runtime.rule.recommendedAction || runtime.rule.warningAction || runtime.rule.criticalAction || '' };
+  return { ruleId: runtime.ruleId, ruleRow: runtime.rule.row, system: runtime.rule.system, subsystem: latest?.subsystem || runtime.rule.subsystem, component: latest?.component || runtime.rule.component, signal: runtime.rule.signal, status, blocker: topCount(runtime.blockers)?.key || null, blockerCounts: runtime.blockers, blockers: runtime.blockers, matchedRows: runtime.matchedRows, numericRows: runtime.numericRows, classifiedPoints: runtime.classifiedPoints, fullyEvaluatedPoints: runtime.fullyEvaluatedPoints, blockedPoints: runtime.blockedPoints, evaluatedCounts: runtime.evaluatedCounts, latestActual: latest?.actual ?? null, expectedLow: latest?.expectedLow ?? fallbackRange.low ?? null, expectedHigh: latest?.expectedHigh ?? fallbackRange.high ?? null, currentMachineState: latest?.machineState || null, currentSystemState: latest?.systemState || null, stateContextStatus: latest?.stateContextStatus || null, latestReason: latest?.reason || null, sourceFile: latest?.file || null, eventCount: runtime.deviationEvents.length, totalDeviationDurationMs: runtime.deviationEvents.reduce((sum, event) => sum + event.durationMs, 0), minActual: Number.isFinite(runtime.minActual) ? runtime.minActual : null, maxActual: Number.isFinite(runtime.maxActual) ? runtime.maxActual : null, averageActual: runtime.numericRows ? runtime.sumActual / runtime.numericRows : null, recommendedAction: runtime.rule.recommendedAction || runtime.rule.warningAction || runtime.rule.criticalAction || '' };
 }
 
 function highest(counts, fallback) {
@@ -331,8 +354,8 @@ function systemHealthFor(system, plan, summaries) {
   if (!plan.rulesBySystem.has(system)) return { system, status: 'no_rule', rules: 0, evaluated: 0, deviations: 0, label: 'Rules not configured' };
   const rows = summaries.filter(summary => summary.system === system);
   const status = highest(Object.fromEntries(rows.map(row => [row.status, 1])), 'no_data');
-  const blocker = rows.find(row => row.status === 'needs_validation')?.blockers || null;
-  return { system, status, rules: plan.rulesBySystem.get(system).length, evaluated: rows.filter(row => row.matchedRows > 0 && row.numericRows > 0).length, matchedRows: rows.reduce((sum, row) => sum + row.matchedRows, 0), deviations: rows.reduce((sum, row) => sum + row.eventCount, 0), latestSignal: rows[0]?.signal || null, blocker, label: status === 'no_data' ? 'No matching source values' : status };
+  const blocker = topCount(rows.reduce((acc, row) => mergeCounts(acc, row.blockerCounts || row.blockers || {}), {}));
+  return { system, status, rules: plan.rulesBySystem.get(system).length, evaluated: rows.reduce((sum, row) => sum + row.fullyEvaluatedPoints, 0), classifiedPoints: rows.reduce((sum, row) => sum + row.classifiedPoints, 0), blockedPoints: rows.reduce((sum, row) => sum + row.blockedPoints, 0), matchedRows: rows.reduce((sum, row) => sum + row.matchedRows, 0), deviations: rows.reduce((sum, row) => sum + row.eventCount, 0), latestSignal: rows[0]?.signal || null, blocker: blocker?.key || null, label: status === 'no_data' ? 'No matching source values' : STATUS_LABEL_SAFE(status) };
 }
 
 function buildStateTimeline(machineRows, start, end) {
@@ -346,11 +369,12 @@ function buildTimelineRows(systemHealth, events) {
 
 function blockingReason() {
   if (!analysisAudit.rulesParsed) return 'No Rules Excel rows were parsed.';
-  if (!analysisAudit.validRules) return 'Rules were parsed, but no valid evaluable rules were found.';
+  if (!analysisAudit.validRules) return 'Rules were parsed, but no valid rules were available.';
   const missingSource = analysisAudit.requiredSources.find(source => !analysisAudit.sourceFilesFound[source]);
-  if (missingSource) return `Rules loaded, but no ${missingSource} files were found.`;
-  if (!progressState.relevantValuesFound) return 'Rules loaded, but no matching source signals were found.';
-  if (!analysisAudit.evaluatedPoints) return 'Source values were found, but they could not be evaluated.';
+  if (missingSource) return `Rules require ${missingSource}, but no matching files were found.`;
+  if (!progressState.relevantValuesFound) return 'Required log files were parsed, but no rule signals matched.';
+  if (!analysisAudit.classifiedPoints) return 'Matching source rows were found, but no evaluation classification was produced.';
+  if (analysisAudit.blockedPoints > 0 && analysisAudit.fullyEvaluatedPoints === 0) return 'All matched values require validation. Open Service Radar to review the blockers.';
   return '';
 }
 
@@ -359,10 +383,63 @@ export function validateAnalysisResult(result) {
     if (!result?.[key]) return { valid: false, reason: `AnalysisResult is missing ${key}.` };
   }
   if (!result.metadata.rulesValid) return { valid: false, reason: 'No valid rules are available for evaluation.' };
-  if (!result.metadata.relevantValuesFound) return { valid: false, reason: blockingReason() };
-  if (!result.metadata.evaluatedPoints) return { valid: false, reason: blockingReason() || 'Matching log values were found, but no evaluated points were created.' };
-  return { valid: true, reason: '' };
+  if (!result.metadata.relevantValuesFound) return { valid: false, reason: result.metadata.blockingReason || 'No relevant source values were found.' };
+  if (!result.metadata.classifiedPoints) return { valid: false, reason: result.metadata.blockingReason || 'Matching source rows were found, but no evaluation classification was produced.' };
+  if (result.metadata.blockedPoints > 0) return { valid: true, status: 'completed_with_warnings', reason: 'Matching values were found, but some or all evaluations require validation.' };
+  return { valid: true, status: 'completed', reason: '' };
 }
+
+function noteMachineStateTimestamp(timestampMs) {
+  const range = diagnostics.machineStatesTimeRange;
+  range.firstTimestampMs = range.firstTimestampMs === null ? timestampMs : Math.min(range.firstTimestampMs, timestampMs);
+  range.lastTimestampMs = range.lastTimestampMs === null ? timestampMs : Math.max(range.lastTimestampMs, timestampMs);
+}
+
+function noteSourceTimestamp(source, timestampMs) {
+  const range = diagnostics.sourceTimeRangeByAdapter[source] || (diagnostics.sourceTimeRangeByAdapter[source] = { firstTimestampMs: null, lastTimestampMs: null });
+  range.firstTimestampMs = range.firstTimestampMs === null ? timestampMs : Math.min(range.firstTimestampMs, timestampMs);
+  range.lastTimestampMs = range.lastTimestampMs === null ? timestampMs : Math.max(range.lastTimestampMs, timestampMs);
+}
+
+function buildOverlapDiagnostics() {
+  const machine = diagnostics.machineStatesTimeRange;
+  const byAdapter = {};
+  for (const [source, range] of Object.entries(diagnostics.sourceTimeRangeByAdapter)) {
+    const overlaps = machine.firstTimestampMs !== null && range.firstTimestampMs !== null && range.firstTimestampMs <= machine.lastTimestampMs && machine.firstTimestampMs <= range.lastTimestampMs;
+    byAdapter[source] = { firstTimestampMs: range.firstTimestampMs, lastTimestampMs: range.lastTimestampMs, machineStatesFirstTimestampMs: machine.firstTimestampMs, machineStatesLastTimestampMs: machine.lastTimestampMs, overlapsMachineStates: overlaps };
+    if (['BSSNotifications', 'IPSNotifications', 'FECNotifications'].includes(source) && !overlaps) diagnostics.reasons.push(`${source}: Log values and MachineStates do not overlap in time.`);
+  }
+  return byAdapter;
+}
+
+function buildEvaluationBlockers(runtimes) {
+  const totals = {};
+  const bySystem = {};
+  const byRule = {};
+  for (const runtime of runtimes) {
+    byRule[runtime.ruleId] = { ruleRow: runtime.rule.row, system: runtime.rule.system, signal: runtime.rule.signal, blockers: runtime.blockers };
+    bySystem[runtime.rule.system] = bySystem[runtime.rule.system] || {};
+    mergeCounts(bySystem[runtime.rule.system], runtime.blockers);
+    mergeCounts(totals, runtime.blockers);
+  }
+  const top = topCount(totals);
+  return { totals, bySystem, byRule, topBlocker: top ? { reason: top.key, count: top.value, label: blockerLabel(top.key) } : null };
+}
+
+function mergeCounts(target, source) {
+  for (const [key, value] of Object.entries(source || {})) target[key] = (target[key] || 0) + (value || 0);
+  return target;
+}
+
+function topCount(counts) {
+  return Object.entries(counts || {}).filter(([, value]) => value > 0).sort((a, b) => b[1] - a[1]).map(([key, value]) => ({ key, value }))[0] || null;
+}
+
+function blockerLabel(key) {
+  return ({ invalid_timestamp: 'Invalid timestamp', no_numeric_value: 'No numeric value', missing_state: 'Missing Machine State', missing_expected_value: 'Missing expected value for current state', missing_threshold_or_tolerance: 'Rule has no tolerance or thresholds', unsupported_evaluator: 'Unsupported check type' })[key] || key || 'Needs validation';
+}
+
+function STATUS_LABEL_SAFE(status) { return status === 'needs_validation' ? 'Needs validation' : status === 'evaluator_pending' ? 'Evaluator pending' : status; }
 
 function recordInvalidTimestamp(source, file, raw, row) {
   const key = `${source}:${file}`;
