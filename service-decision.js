@@ -100,8 +100,7 @@ function bySystemPriority(a, b) {
 
 function buildRecommendedAction(status, finding, groups) {
   if (finding?.recommendedAction && ['critical', 'warning'].includes(status)) return finding.recommendedAction;
-  if (status === 'critical') return `Investigate ${finding?.system || 'the affected system'} immediately and compare ${finding?.signal || 'the selected signal'} with its configured critical limits.`;
-  if (status === 'warning') return `Review ${finding?.system || 'the affected system'} warning deviation for ${finding?.signal || 'the selected signal'} during the recorded machine state.`;
+  if (status === 'critical' || status === 'warning') return 'No service action configured for this rule.';
   if (status === 'needs_validation') return validationAction(groups.validationProblems);
   if (status === 'needs_configuration') return configurationAction(groups.configurationProblems);
   if (status === 'no_data') return 'Collect logs that contain the required signal for the configured rule before evaluating operation.';

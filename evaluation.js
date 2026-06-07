@@ -9,22 +9,42 @@ export function normalizeText(value) {
 }
 
 export function normalizeCheckType(value) {
-  const type = normalizeText(value || 'range').toLowerCase();
-  if (['within range', 'expected range', 'value range'].includes(type)) return 'range';
-  if (['maximum', 'max threshold'].includes(type)) return 'max';
-  if (['minimum', 'min threshold'].includes(type)) return 'min';
+  const type = normalizeText(value).toLowerCase();
+  if (!type) return '';
+  if (['within range', 'expected range', 'value range', 'absolute range'].includes(type)) return 'range';
+  if (['percent range', 'percentage range', 'range percent'].includes(type)) return 'range_percent';
+  if (['maximum', 'max threshold', 'below threshold'].includes(type)) return 'max';
+  if (['minimum', 'min threshold', 'above threshold'].includes(type)) return 'min';
   return type;
+}
+
+export function inferCheckType(rule) {
+  const explicit = normalizeCheckType(rule?.checkType);
+  if (explicit) return explicit;
+  if (rule?.criticalLow !== null || rule?.criticalHigh !== null || rule?.warningLow !== null || rule?.warningHigh !== null) return 'range';
+  if (rule?.tolerance?.mode === 'max') return 'max';
+  if (rule?.tolerance?.mode === 'min') return 'min';
+  if (rule?.tolerance?.mode === 'percent') return 'range_percent';
+  if (rule?.tolerance?.mode === 'absolute') return 'range';
+  return '';
 }
 
 export function normalizeState(value) {
   const key = normalizeToken(value);
   const aliases = {
-    on: 'on', initializing: 'on', init: 'on', run: 'on', running: 'on', standby: 'standby', standbyby: 'standby', standbystate: 'standby', idle: 'standby',
-    ready: 'ready', prepare2print: 'prepare2print', preparetoprint: 'prepare2print', prep2print: 'prepare2print',
-    printing: 'printing', print: 'printing', printend: 'printend', printended: 'printend', recovery: 'recovery', recovering: 'recovery',
-    error: 'error', fault: 'error'
+    on: 'ON',
+    standby: 'Standby',
+    standbystate: 'Standby',
+    ready: 'Ready',
+    prepare2print: 'Prepare2Print',
+    preparetoprint: 'Prepare2Print',
+    prep2print: 'Prepare2Print',
+    printing: 'Printing',
+    printend: 'PrintEnd',
+    recovery: 'Recovery',
+    error: 'Error'
   };
-  return aliases[key] || key || '';
+  return aliases[key] || normalizeText(value) || '';
 }
 
 export function parseNumber(value) {
@@ -67,6 +87,8 @@ export function selectExpected(rule, stateContext) {
   const candidates = [stateContext?.systemState, stateContext?.machineState].map(normalizeState).filter(Boolean);
   for (const state of candidates) {
     if (Object.prototype.hasOwnProperty.call(rule.expectedByState || {}, state)) return { value: rule.expectedByState[state], state, source: 'state' };
+    const matchingKey = Object.keys(rule.expectedByState || {}).find(key => normalizeState(key) === state);
+    if (matchingKey) return { value: rule.expectedByState[matchingKey], state, source: 'state' };
   }
   if (rule.genericExpected !== null && rule.genericExpected !== undefined) return { value: rule.genericExpected, state: null, source: 'generic' };
   return { value: null, state: candidates[0] || null, source: 'missing' };
@@ -109,9 +131,10 @@ export function computeAllowedRange(rule, expected) {
 }
 
 export function evaluateValue(rule, actual, stateContext) {
-  const checkType = normalizeCheckType(rule.checkType);
+  const checkType = inferCheckType(rule);
   if (actual === null || actual === undefined || !Number.isFinite(actual)) return { status: 'needs_validation', blocker: 'no_numeric_value', reason: 'No numeric value' };
   if (PENDING_CHECK_TYPES.has(checkType)) return { status: 'evaluator_pending', blocker: 'unsupported_evaluator', reason: 'Evaluator is pending implementation' };
+  if (!checkType) return { status: 'needs_configuration', blocker: 'missing_threshold_or_tolerance', reason: 'Rule has no usable expected/tolerance/threshold configuration' };
   if (!SUPPORTED_CHECK_TYPES.has(checkType)) return { status: 'needs_validation', blocker: 'unsupported_evaluator', reason: `Unsupported check type: ${rule.checkType || 'blank'}` };
   const hasExplicitThresholds = rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
   const requiresStateExpected = Object.keys(rule.expectedByState || {}).length > 0 && !hasExplicitThresholds;
@@ -135,15 +158,38 @@ export function evaluateValue(rule, actual, stateContext) {
   const outsideAllowed = !isCritical && !isWarning && (actual < low || actual > high);
   const status = isCritical ? 'critical' : isWarning || outsideAllowed ? 'warning' : 'ok';
   const deviation = actual > high ? actual - high : actual < low ? actual - low : 0;
-  return { status, expectedValue: expected.value, expectedState: expected.state, expectedLow: low, expectedHigh: high, allowedLow: range?.allowedLow ?? low, allowedHigh: range?.allowedHigh ?? high, warningLow, warningHigh, criticalLow, criticalHigh, deviation, reason: status === 'ok' ? 'Within allowed range' : isCritical ? 'Outside critical threshold' : 'Outside warning/allowed range' };
+  const deviationDirection = actual > high ? 'above' : actual < low ? 'below' : 'within';
+  const distanceFromNearestLimit = actual < low ? low - actual : actual > high ? actual - high : Math.min(Math.abs(actual - low), Math.abs(high - actual));
+  return { status, evaluator: rule.checkType ? checkType : `inferred ${checkType}`, expectedValue: expected.value, expectedState: expected.state, expectedLow: low, expectedHigh: high, allowedLow: range?.allowedLow ?? low, allowedHigh: range?.allowedHigh ?? high, warningLow, warningHigh, criticalLow, criticalHigh, deviation, deviationDirection, distanceFromNearestLimit, reason: status === 'ok' ? 'Within allowed range' : isCritical ? 'Outside critical threshold' : 'Outside warning/allowed range' };
+}
+
+export function summarizeStateComparisons(points = []) {
+  const byState = new Map();
+  for (const point of points) {
+    if (!Number.isFinite(point.actual)) continue;
+    const state = point.expectedState || normalizeState(point.machineState || point.systemState) || 'Unsupported';
+    const row = byState.get(state) || { state, expected: point.expected ?? point.expectedValue ?? null, allowedLow: point.allowedLow ?? point.expectedLow ?? null, allowedHigh: point.allowedHigh ?? point.expectedHigh ?? null, sampleCount: 0, sumActual: 0, averageActual: null, minActual: Infinity, maxActual: -Infinity, okCount: 0, warningCount: 0, criticalCount: 0, outOfRangeDurationMs: 0, outOfRangeCount: 0, status: 'no_data' };
+    row.sampleCount += 1;
+    row.sumActual += point.actual;
+    row.averageActual = row.sumActual / row.sampleCount;
+    row.minActual = Math.min(row.minActual, point.actual);
+    row.maxActual = Math.max(row.maxActual, point.actual);
+    if (point.status === 'ok') row.okCount += 1;
+    if (point.status === 'warning') { row.warningCount += 1; row.outOfRangeCount += 1; }
+    if (point.status === 'critical') { row.criticalCount += 1; row.outOfRangeCount += 1; }
+    row.status = row.criticalCount ? 'critical' : row.warningCount ? 'warning' : row.okCount ? 'ok' : 'no_data';
+    byState.set(state, row);
+  }
+  return [...byState.values()].map(row => ({ ...row, minActual: Number.isFinite(row.minActual) ? row.minActual : null, maxActual: Number.isFinite(row.maxActual) ? row.maxActual : null, outOfRangePercent: row.sampleCount ? (row.outOfRangeCount / row.sampleCount) * 100 : 0 }));
 }
 
 export function validateRule(rule) {
   if (!rule.logSource) return 'missing_source';
   if (!rule.signal) return 'missing_signal';
   if (!rule.system) return 'missing_system';
-  if (PENDING_CHECK_TYPES.has(rule.checkTypeNormalized)) return 'valid';
-  if (!SUPPORTED_CHECK_TYPES.has(rule.checkTypeNormalized)) return 'unsupported_check_type';
+  const inferred = inferCheckType(rule);
+  if (PENDING_CHECK_TYPES.has(inferred)) return 'valid';
+  if (inferred && !SUPPORTED_CHECK_TYPES.has(inferred)) return 'unsupported_check_type';
   const hasExpected = Object.keys(rule.expectedByState || {}).length > 0 || rule.genericExpected !== null;
   const hasLimit = rule.tolerance || rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
   return 'valid';

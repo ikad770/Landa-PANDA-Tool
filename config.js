@@ -73,15 +73,15 @@ export const STATUS_PRIORITY = { ...Object.fromEntries(Object.entries(STATUS_TAX
 export const STATUS_LABEL = Object.fromEntries(Object.entries(STATUS_TAXONOMY).map(([key, meta]) => [key, meta.label]));
 
 export const EXPECTED_STATE_COLUMNS = {
-  on: 'Expected ON',
-  standby: 'Expected Standby',
-  ready: 'Expected Ready',
-  prepare2print: 'Expected Prepare2Print',
-  printing: 'Expected Printing',
-  printend: 'Expected PrintEnd',
-  recovery: 'Expected Recovery',
-  error: 'Expected Error'
+  ON: 'Expected ON',
+  Standby: 'Expected Standby',
+  Ready: 'Expected Ready',
+  Prepare2Print: 'Expected Prepare2Print',
+  Printing: 'Expected Printing',
+  PrintEnd: 'Expected PrintEnd',
+  Recovery: 'Expected Recovery',
+  Error: 'Expected Error'
 };
 
-export const SUPPORTED_CHECK_TYPES = new Set(['range', 'above threshold', 'below threshold', 'exact', 'max', 'min']);
+export const SUPPORTED_CHECK_TYPES = new Set(['range', 'range_percent', 'above threshold', 'below threshold', 'exact', 'max', 'min']);
 export const PENDING_CHECK_TYPES = new Set(['delta', 'trend', 'flatline']);

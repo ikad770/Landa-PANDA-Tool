@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { ADAPTERS, matchRuleForRow, parseSlashTimestamp } from '../adapters.js';
-import { evaluateValue, normalizeToken } from '../evaluation.js';
+import { evaluateValue, inferCheckType, normalizeState, normalizeToken, parseTolerance, summarizeStateComparisons } from '../evaluation.js';
 import { createStateIndex } from '../machine-states.js';
 import { chooseInitialParameter, chooseInitialSystem, getServiceDecision, groupParameters, normalizeStatus, renderActualExpectedChart, renderComparisonGauge, validateAnalysisResult } from '../render.js';
 import { buildServiceDecision } from '../service-decision.js';
 import { renderHotspot } from '../render-radar.js';
+import { sortComparisonRows } from '../render-drilldown.js';
 
 function baseResult(overrides = {}) {
   const metadata = {
@@ -77,7 +78,7 @@ assert.equal(decision.systemsRequiringAttentionCount, 2, 'Systems Requiring Atte
 assert.equal(decision.operationalFindings.length, 1, 'Operational findings come from real deviation events');
 assert.equal(decision.configurationProblems.length, 1, 'Configuration issues are separated at rule level');
 assert.equal(decision.validationProblems.length, 1, 'Validation issues are separated at rule level');
-assert.match(decision.nextRecommendedAction, /warning deviation/, 'Operational warning produces a service action without treating configuration as a deviation');
+assert.equal(decision.nextRecommendedAction, 'No service action configured for this rule.', 'Operational warning does not invent a service action when the rule has none');
 assert.equal(decision.primarySystem, 'IPS', 'Primary system selection prefers systems at operational risk');
 assert.equal(getServiceDecision(uiResult).machineStatus, 'warning', 'Renderer helper uses the same serviceDecision model');
 
@@ -157,5 +158,64 @@ assert.equal(evaluateValue(thresholdRule, 16, { status: 'missing' }).status, 'wa
 const css = fs.readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
 assert.match(css, /html,\s*\nbody\s*{[^}]*overflow-x:\s*hidden/s, 'No page-level overflow CSS regression');
 assert.match(css, /\.processing-stats\s*{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/s, 'Processing stats four-column layout exists');
+
+
+
+const blankRangeRule = { checkType: '', expectedByState: { ON: 0 }, genericExpected: null, tolerance: parseTolerance('±2'), warningLow: null, warningHigh: null, criticalLow: null, criticalHigh: null };
+assert.deepEqual(parseTolerance('±2'), { mode: 'absolute', value: 2 }, '±2 tolerance parses as absolute');
+assert.deepEqual(parseTolerance('+/-2'), { mode: 'absolute', value: 2 }, '+/-2 tolerance parses as absolute');
+assert.deepEqual(parseTolerance(2), { mode: 'absolute', value: 2 }, 'numeric Excel tolerance parses as absolute');
+assert.deepEqual(parseTolerance('±10'), { mode: 'absolute', value: 10 }, '±10 tolerance parses as absolute');
+assert.deepEqual(parseTolerance('±0.02'), { mode: 'absolute', value: 0.02 }, 'decimal tolerance parses as absolute');
+assert.deepEqual(parseTolerance('±150'), { mode: 'absolute', value: 150 }, 'large absolute tolerance parses');
+assert.deepEqual(parseTolerance('±10%'), { mode: 'percent', value: 10 }, '±10% tolerance parses as percent');
+assert.deepEqual(parseTolerance('+/-10%'), { mode: 'percent', value: 10 }, '+/-10% tolerance parses as percent');
+assert.deepEqual(parseTolerance('10%'), { mode: 'percent', value: 10 }, 'bare percent tolerance parses');
+assert.deepEqual(parseTolerance('60 Max'), { mode: 'max', value: 60 }, 'max tolerance parses');
+assert.deepEqual(parseTolerance('2500 Max'), { mode: 'max', value: 2500 }, '2500 Max tolerance parses');
+assert.deepEqual(parseTolerance('2000 Max'), { mode: 'max', value: 2000 }, '2000 Max tolerance parses');
+assert.deepEqual(parseTolerance('10 Min'), { mode: 'min', value: 10 }, 'min tolerance parses');
+assert.equal(inferCheckType(blankRangeRule), 'range', 'Blank Check Type + Expected + ±2 infers Range');
+assert.equal(inferCheckType({ ...blankRangeRule, tolerance: parseTolerance('60 Max') }), 'max', 'Blank Check Type + 60 Max infers max');
+assert.equal(inferCheckType({ ...blankRangeRule, tolerance: parseTolerance('10 Min') }), 'min', 'Blank Check Type + 10 Min infers min');
+assert.equal(inferCheckType({ ...blankRangeRule, tolerance: parseTolerance('±10%') }), 'range_percent', '±10% produces percentage range');
+assert.equal(normalizeState('On'), 'ON', 'On normalizes to ON');
+assert.equal(normalizeState('Prepare To Print'), 'Prepare2Print', 'Prepare To Print normalizes to Prepare2Print');
+assert.equal(normalizeState('Print End'), 'PrintEnd', 'Print End normalizes to PrintEnd');
+assert.equal(normalizeState('Initializing'), 'Initializing', 'Unsupported states are preserved');
+const tubResult = evaluateValue(blankRangeRule, -9.12, { status: 'matched', machineState: 'On', systemState: 'On' });
+assert.equal(tubResult.status, 'warning', 'TubActualLevelMM -9.12 against 0 ±2 returns Warning');
+assert.equal(tubResult.expectedLow, -2, 'TubActualLevelMM allowed low is -2');
+assert.equal(tubResult.expectedHigh, 2, 'TubActualLevelMM allowed high is 2');
+assert.equal(Number(tubResult.distanceFromNearestLimit.toFixed(2)), 7.12, 'TubActualLevelMM deviation distance is 7.12');
+const fillRule = { ...blankRangeRule, expectedByState: { ON: 25 } };
+const fillResult = evaluateValue(fillRule, 29.2, { status: 'matched', machineState: 'On', systemState: 'On' });
+assert.equal(fillResult.status, 'warning', 'FillActualTemperatureC 29.2 against 25 ±2 returns Warning');
+assert.equal(fillResult.expectedLow, 23, 'FillActualTemperatureC allowed low is 23');
+assert.equal(fillResult.expectedHigh, 27, 'FillActualTemperatureC allowed high is 27');
+assert.equal(Number(fillResult.distanceFromNearestLimit.toFixed(2)), 2.2, 'FillActualTemperatureC deviation distance is 2.2');
+assert.equal(evaluateValue(fillRule, 25.5, { status: 'matched', machineState: 'ON', systemState: 'ON' }).status, 'ok', 'Actual 25.5 against 25 ±2 returns OK');
+assert.equal(evaluateValue(fillRule, 29.2, { status: 'matched', machineState: 'ON', systemState: 'ON' }).status, 'warning', 'Outside expected range does not become Critical without a critical rule');
+const percentResult = evaluateValue({ ...fillRule, tolerance: parseTolerance('10%') }, 28, { status: 'matched', machineState: 'ON', systemState: 'ON' });
+assert.equal(percentResult.expectedLow, 22.5, 'Percent tolerance computes low band');
+assert.equal(percentResult.expectedHigh, 27.5, 'Percent tolerance computes high band');
+const changingRule = { ...blankRangeRule, expectedByState: { ON: 25, Printing: 40 } };
+assert.equal(evaluateValue(changingRule, 25, { status: 'matched', machineState: 'ON', systemState: 'ON' }).expectedValue, 25, 'Expected band uses ON expected value');
+assert.equal(evaluateValue(changingRule, 40, { status: 'matched', machineState: 'Printing', systemState: 'Printing' }).expectedValue, 40, 'Expected band changes when Machine State changes');
+const stateSummary = summarizeStateComparisons([
+  { machineState: 'ON', expectedState: 'ON', expected: 25, allowedLow: 23, allowedHigh: 27, expectedLow: 23, expectedHigh: 27, actual: 25, status: 'ok' },
+  { machineState: 'ON', expectedState: 'ON', expected: 25, allowedLow: 23, allowedHigh: 27, expectedLow: 23, expectedHigh: 27, actual: 29, status: 'warning' },
+  { machineState: 'ON', expectedState: 'ON', expected: 25, allowedLow: 23, allowedHigh: 27, expectedLow: 23, expectedHigh: 27, actual: 24, status: 'ok' }
+])[0];
+assert.equal(stateSummary.sampleCount, 3, 'State summary sample count is correct');
+assert.equal(stateSummary.averageActual, 26, 'State summary average is correct');
+assert.equal(stateSummary.minActual, 24, 'State summary minimum is correct');
+assert.equal(stateSummary.maxActual, 29, 'State summary maximum is correct');
+assert.equal(sortComparisonRows([{ status: 'ok', signal: 'C' }, { status: 'needs_configuration', signal: 'D' }, { status: 'warning', signal: 'B' }, { status: 'critical', signal: 'A' }, { status: 'needs_validation', signal: 'E' }, { status: 'no_data', signal: 'F' }]).map(row => row.status).join(','), 'critical,warning,ok,needs_validation,needs_configuration,no_data', 'Comparison Matrix sort order is correct');
+assert.equal(evaluateValue({ checkType: '', expectedByState: {}, genericExpected: null, tolerance: null, warningLow: null, warningHigh: null, criticalLow: null, criticalHigh: null }, 10, { status: 'matched', machineState: 'ON', systemState: 'ON' }).status, 'needs_configuration', 'Needs Configuration is used only when configuration is genuinely missing');
+assert.match(css, /--accent-cyan:#39c7f3/, 'Cyan accent mapping exists');
+assert.match(css, /--status-ok:#43d17d/, 'OK green mapping exists');
+assert.match(css, /--status-warning:#f4c542/, 'Warning amber mapping exists');
+assert.match(css, /--status-critical:#ff5f68/, 'Critical red mapping exists');
 
 console.log('module tests passed');

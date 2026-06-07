@@ -126,12 +126,13 @@ export function renderComparisonGauge(options = {}) {
   const lowLabel = Number.isFinite(opts.criticalLow) ? opts.criticalLow : Number.isFinite(opts.warningLow) ? opts.warningLow : expectedLow;
   const highLabel = Number.isFinite(opts.criticalHigh) ? opts.criticalHigh : Number.isFinite(opts.warningHigh) ? opts.warningHigh : expectedHigh;
   const marker = hasActual ? pct(actual, bounds) : 50;
-  return `<div class="comparison-gauge ${statusClass(opts.status)}" role="img" aria-label="Actual versus expected comparison">
+  const expectedMarker = Number.isFinite(opts.expected ?? opts.expectedValue) ? pct(opts.expected ?? opts.expectedValue, bounds) : pct((expectedLow + expectedHigh) / 2, bounds);
+  return `<div class="comparison-gauge ${statusClass(opts.status)} ${Number.isFinite(opts.criticalLow) || Number.isFinite(opts.criticalHigh) ? 'has-critical' : ''}" role="img" aria-label="Actual versus expected comparison">
     <div class="gauge-track">
       <span class="gauge-zone critical-low" style="left:0;width:${pct(Number.isFinite(opts.warningLow) ? opts.warningLow : expectedLow, bounds)}%"></span>
       <span class="gauge-zone expected" style="left:${pct(expectedLow, bounds)}%;width:${Math.max(2, pct(expectedHigh, bounds) - pct(expectedLow, bounds))}%"></span>
       <span class="gauge-zone critical-high" style="left:${pct(Number.isFinite(opts.warningHigh) ? opts.warningHigh : expectedHigh, bounds)}%;right:0"></span>
-      ${hasActual ? `<span class="gauge-marker" style="left:${marker}%"><b>${fmtNum(actual)}${opts.unit ? ` ${opts.unit}` : ''}</b></span>` : ''}
+      <span class="gauge-expected-marker" style="left:${expectedMarker}%"><b>${fmtNum(opts.expected ?? opts.expectedValue)}</b></span>${hasActual ? `<span class="gauge-marker" style="left:${marker}%"><b>${fmtNum(actual)}${opts.unit ? ` ${opts.unit}` : ''}</b></span>` : ''}
     </div>
     <div class="gauge-labels"><span>${fmtNum(lowLabel)}</span><strong>Expected ${formatRange(opts.expectedLow, opts.expectedHigh)}</strong><span>${fmtNum(highLabel)}</span></div>
   </div>`;
@@ -195,9 +196,9 @@ export function renderStateTimeline({ stateTimeline = [], events = [], selectedE
 }
 
 export function renderActualExpectedChart(chart = [], selected = {}, events = []) {
-  const samples = chart.filter(point => Number.isFinite(point.actual));
+  const samples = chart.filter(point => Number.isFinite(point.actual)).sort((a, b) => (a.t || 0) - (b.t || 0));
   if (!samples.length) return renderEmptyState('No chart samples available', 'The parameter has no numeric samples in the current AnalysisResult.', 'no_data');
-  const expectedValues = samples.flatMap(point => [point.expectedLow, point.expectedHigh]).filter(Number.isFinite);
+  const expectedValues = samples.flatMap(point => [point.expectedLow, point.expectedHigh, point.expectedValue, point.expected]).filter(Number.isFinite);
   const values = [...samples.map(point => point.actual), ...expectedValues];
   let min = Math.min(...values), max = Math.max(...values);
   const spanY = max - min || Math.max(1, Math.abs(max) || 1);
@@ -207,20 +208,32 @@ export function renderActualExpectedChart(chart = [], selected = {}, events = []
   const spanX = last - first || 1;
   const x = (point, idx) => Number.isFinite(point.t) ? 56 + ((point.t - first) / spanX) * 704 : 56 + (idx / Math.max(1, samples.length - 1)) * 704;
   const y = value => 310 - ((value - min) / (max - min || 1)) * 250;
-  const path = samples.map((point, idx) => `${idx ? 'L' : 'M'} ${x(point, idx).toFixed(1)} ${y(point.actual).toFixed(1)}`).join(' ');
-  const hasRange = hasExpectedRange(selected) || expectedValues.length;
-  const low = Number.isFinite(selected.expectedLow) ? selected.expectedLow : Math.min(...expectedValues);
-  const high = Number.isFinite(selected.expectedHigh) ? selected.expectedHigh : Math.max(...expectedValues);
-  const band = hasRange && Number.isFinite(low) && Number.isFinite(high) ? `<rect class="expected-band" x="56" y="${y(high)}" width="704" height="${Math.max(2, y(low) - y(high))}"></rect><line class="expected-line" x1="56" x2="760" y1="${y(low)}" y2="${y(low)}"></line><line class="expected-line" x1="56" x2="760" y1="${y(high)}" y2="${y(high)}"></line>` : '';
+  const actualPath = samples.map((point, idx) => `${idx ? 'L' : 'M'} ${x(point, idx).toFixed(1)} ${y(point.actual).toFixed(1)}`).join(' ');
+  const expectedSamples = samples.filter(point => Number.isFinite(point.expectedLow) && Number.isFinite(point.expectedHigh));
+  const hasRange = expectedSamples.length > 0;
+  const band = hasRange ? expectedSamples.slice(0, -1).map((point, idx) => {
+    const next = expectedSamples[idx + 1];
+    const x1 = x(point, samples.indexOf(point));
+    const x2 = x(next, samples.indexOf(next));
+    return `<polygon class="expected-band" points="${x1.toFixed(1)},${y(point.expectedHigh).toFixed(1)} ${x2.toFixed(1)},${y(point.expectedHigh).toFixed(1)} ${x2.toFixed(1)},${y(point.expectedLow).toFixed(1)} ${x1.toFixed(1)},${y(point.expectedLow).toFixed(1)}"></polygon>`;
+  }).join('') : '';
+  const expectedPath = samples.filter(point => Number.isFinite(point.expectedValue ?? point.expected)).map((point, idx) => `${idx ? 'L' : 'M'} ${x(point, samples.indexOf(point)).toFixed(1)} ${y(point.expectedValue ?? point.expected).toFixed(1)}`).join(' ');
+  const stateLines = samples.filter((point, idx) => idx > 0 && (point.machineState !== samples[idx - 1].machineState || point.systemState !== samples[idx - 1].systemState)).slice(0, 80).map(point => `<line class="state-divider" x1="${x(point, samples.indexOf(point)).toFixed(1)}" x2="${x(point, samples.indexOf(point)).toFixed(1)}" y1="46" y2="330"><title>${escapeHtml(point.machineState || point.systemState || 'State transition')}</title></line>`).join('');
+  const stateStrip = samples.slice(0, -1).filter((point, idx) => idx === 0 || point.machineState !== samples[idx - 1].machineState).slice(0, 80).map((point, idx, rows) => {
+    const next = rows[idx + 1] || samples.at(-1);
+    const left = x(point, samples.indexOf(point));
+    const right = x(next, samples.indexOf(next));
+    return `<rect class="state-band state-${slug(point.machineState || point.systemState)}" x="${left.toFixed(1)}" y="334" width="${Math.max(2, right - left).toFixed(1)}" height="12"><title>${escapeHtml(point.machineState || point.systemState || 'State')}</title></rect>`;
+  }).join('');
   const eventMarkers = events.slice(0, 24).map(event => `<line class="chart-event ${statusClass(event.severity)}" x1="${56 + ((event.startTimestampMs - first) / spanX) * 704}" x2="${56 + ((event.startTimestampMs - first) / spanX) * 704}" y1="46" y2="330"><title>${escapeHtml(`${fmtTime(event.startTimestampMs)} ${event.severity}`)}</title></line>`).join('');
-  const points = samples.filter((_, idx) => idx % Math.max(1, Math.floor(samples.length / 18)) === 0).map((point, idx) => `<circle class="chart-point ${statusClass(point.status || selected.status)}" cx="${x(point, idx)}" cy="${y(point.actual)}" r="3"><title>${escapeHtml(`${fmtTime(point.t)} · Actual ${fmtNum(point.actual)} · ${point.machineState || 'No state'} · ${statusLabel(point.status || selected.status)}`)}</title></circle>`).join('');
+  const points = samples.filter(point => ['warning', 'critical'].includes(normalizeStatus(point.status))).slice(0, 120).map((point, idx) => `<circle class="chart-point ${statusClass(point.status)}" cx="${x(point, samples.indexOf(point)).toFixed(1)}" cy="${y(point.actual).toFixed(1)}" r="3"><title>${escapeHtml(`${fmtTime(point.t)}\nState: ${point.machineState || '—'}\nSystem State: ${point.systemState || '—'}\nActual: ${fmtNum(point.actual)}${selected.unit || ''}\nExpected: ${fmtNum(point.expectedValue ?? point.expected)}${selected.unit || ''}\nAllowed: ${formatRange(point.expectedLow, point.expectedHigh)}${selected.unit || ''}\nDeviation: ${point.deviationDirection === 'below' ? '-' : point.deviationDirection === 'above' ? '+' : ''}${fmtNum(Math.abs(point.deviation || 0))}${selected.unit || ''}\nStatus: ${statusLabel(point.status)}`)}</title></circle>`).join('');
   return `<div class="chart-shell">
     ${!hasRange ? '<div class="chart-banner needs-configuration">Expected range is not configured for this rule.</div>' : ''}
     ${selected.stateContextStatus === 'missing' || selected.blocker === 'missing_state' ? '<div class="chart-banner needs-validation">Machine State context is unavailable; chart still shows actual values.</div>' : ''}
     <svg class="actual-expected-chart" viewBox="0 0 820 380" role="img" aria-label="Actual versus expected chart">
       <line class="chart-axis" x1="56" x2="760" y1="330" y2="330"></line><line class="chart-axis" x1="56" x2="56" y1="40" y2="330"></line>
-      ${band}${eventMarkers}<path class="actual-line" d="${path}"></path>${points}
-      <text x="56" y="26">Actual vs Expected</text><text x="56" y="356">${fmtShortTime(first)}</text><text x="704" y="356">${fmtShortTime(last)}</text>
+      ${band}${expectedPath ? `<path class="expected-value-line" d="${expectedPath}"></path>` : ''}${stateLines}${eventMarkers}<path class="actual-line" d="${actualPath}"></path>${points}${stateStrip}
+      <text x="56" y="26">Actual vs state-dependent Expected</text><text x="56" y="356">${fmtShortTime(first)}</text><text x="704" y="356">${fmtShortTime(last)}</text>
     </svg>
   </div>`;
 }

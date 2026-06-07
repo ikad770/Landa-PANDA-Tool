@@ -36,8 +36,8 @@ function renderKpis(result, decision) {
     renderKpiCard({ label: 'Systems at Risk', value: kpis.systemsAtRisk || 0, subtitle: 'Critical / Warning only', status: (kpis.systemsAtRisk || 0) ? 'warning' : 'ok', icon: '◎' }),
     renderKpiCard({ label: 'Critical Findings', value: kpis.criticalFindings || 0, subtitle: 'Active deviation events', status: (kpis.criticalFindings || 0) ? 'critical' : 'ok' }),
     renderKpiCard({ label: 'Warning Findings', value: kpis.warningFindings || 0, subtitle: 'Outside permitted range', status: (kpis.warningFindings || 0) ? 'warning' : 'ok' }),
-    renderKpiCard({ label: 'Evaluation Readiness', value: `${kpis.evaluationReadiness?.evaluated || 0}/${kpis.evaluationReadiness?.total || 0}`, subtitle: 'Rules fully evaluable / valid', status: decision.analysisCompleteness?.percent === 100 ? 'ok' : 'needs_configuration', icon: '↔' }),
-    renderKpiCard({ label: 'Validation / Configuration', value: `${kpis.validationIssues || 0}/${kpis.configurationIssues || 0}`, subtitle: 'Rule-level issues', status: kpis.validationIssues ? 'needs_validation' : kpis.configurationIssues ? 'needs_configuration' : 'ok', icon: '◇' }),
+    renderKpiCard({ label: 'Fully Evaluated Rules', value: `${kpis.evaluationReadiness?.evaluated || 0}/${kpis.evaluationReadiness?.total || 0}`, subtitle: 'At least one successful comparison', status: decision.analysisCompleteness?.percent === 100 ? 'ok' : 'needs_configuration', icon: '↔' }),
+    renderKpiCard({ label: 'Rules Requiring Configuration', value: kpis.configurationIssues || 0, subtitle: `${kpis.validationIssues || 0} validation blockers`, status: kpis.configurationIssues ? 'needs_configuration' : kpis.validationIssues ? 'needs_validation' : 'ok', icon: '⚙' }),
     renderKpiCard({ label: 'Signal Coverage', value: `${kpis.signalCoverage?.found || 0}/${kpis.signalCoverage?.required || 0}`, subtitle: 'Matched / required signals', status: (kpis.signalCoverage?.found || 0) >= (kpis.signalCoverage?.required || 1) ? 'ok' : 'no_data', icon: '⌁' })
   ].join('');
 }
