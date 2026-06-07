@@ -1,4 +1,5 @@
 import { APP_STAGES } from './config.js';
+import { getServiceDecision } from './render.js';
 import { chooseInitialSystem, renderDiagnostics, renderServiceRadar, validateAnalysisResult } from './render-radar.js';
 import { renderDrilldown } from './render-drilldown.js';
 
@@ -124,17 +125,18 @@ function renderSequence(activeStage) {
 function renderReady() {
   const meta = app.analysisResult.metadata;
   const validation = app.analysisResult.validation || { status: 'completed' };
+  const decision = getServiceDecision(app.analysisResult);
   const topBlocker = app.analysisResult.diagnosticsSummary?.evaluationBlockers?.topBlocker;
-  $('readyEyebrow').textContent = validation.status === 'completed_with_warnings' ? 'Ready with warnings' : 'Analysis complete';
-  $('readyTitle').textContent = validation.status === 'completed_with_warnings' ? 'Service Radar ready with evaluation blockers' : 'Compact AnalysisResult finalized';
-  $('readySubtitle').textContent = validation.status === 'completed_with_warnings' ? `${validation.reason} ${topBlocker ? `Top blocker: ${topBlocker.label}` : ''}` : 'Service Radar is ready. Diagnostics remain separate from operational findings.';
-  $('readyRules').textContent = `${meta.rulesEvaluated || 0} / ${meta.rulesValid || 0}`;
-  $('readySignals').textContent = `${meta.relevantSignalsFound} / ${meta.relevantSignalsRequired}`;
-  $('readyRelevantValues').textContent = meta.relevantValuesFound || 0;
-  $('readyFullyEvaluated').textContent = meta.fullyEvaluatedPoints || 0;
-  $('readyNeedsValidation').textContent = meta.needsValidationPoints || 0;
-  $('readySystems').textContent = meta.needsConfigurationPoints || 0;
-  $('readyDeviations').textContent = meta.deviationsFound;
+  $('readyEyebrow').textContent = validation.status === 'completed_with_warnings' ? 'Ready with service actions' : 'Analysis complete';
+  $('readyTitle').textContent = decision.machineStatusLabel || 'Service Radar ready';
+  $('readySubtitle').textContent = decision.machineSummary || 'Service Radar is ready. Diagnostics remain separate from operational findings.';
+  $('readyRules').textContent = `${decision.kpis.evaluationReadiness.evaluated || 0} / ${decision.kpis.evaluationReadiness.total || 0}`;
+  $('readySignals').textContent = `${decision.kpis.signalCoverage.found} / ${decision.kpis.signalCoverage.required}`;
+  $('readyRelevantValues').textContent = `${decision.systemsAtRiskCount || 0}`;
+  $('readyFullyEvaluated').textContent = `${decision.fullyEvaluatedSystems.length || 0}`;
+  $('readyNeedsValidation').textContent = `${decision.validationProblems.length || 0}`;
+  $('readySystems').textContent = `${decision.configurationProblems.length || 0}`;
+  $('readyDeviations').textContent = `${decision.operationalFindings.length || 0}`;
   $('readyTime').textContent = fmtDuration(meta.analysisTimeMs);
   $('readyTopBlocker').textContent = topBlocker?.label || 'None';
 }

@@ -1,4 +1,4 @@
-import { $, blockerLabel, chooseInitialParameter, chooseInitialSystem, deviationText, escapeAttr, escapeHtml, expectedText, fmtDuration, fmtNum, fmtTime, groupParameters, hasExpectedRange, normalizeStatus, priority, renderActualExpectedChart, renderComparisonGauge, renderEmptyState, renderParameterCard, renderStateTimeline, renderStatusBadge, renderSystemHealthDonut, statusClass, statusLabel } from './render.js';
+import { $, blockerLabel, chooseInitialParameter, chooseInitialSystem, deviationText, escapeAttr, escapeHtml, expectedText, fmtDuration, fmtNum, fmtTime, getServiceDecision, groupParameters, hasExpectedRange, normalizeStatus, priority, renderActualExpectedChart, renderComparisonGauge, renderEmptyState, renderParameterCard, renderStateTimeline, renderStatusBadge, renderSystemHealthDonut, statusClass, statusLabel } from './render.js';
 
 export function renderDrilldown(app, handlers) {
   const result = app.analysisResult;
@@ -6,7 +6,8 @@ export function renderDrilldown(app, handlers) {
     $('drilldownRoot').innerHTML = renderEmptyState('No analysis loaded', 'Run an analysis before opening Drill-Down.', 'not_analyzed');
     return;
   }
-  const system = app.selectedSystem || chooseInitialSystem(result);
+  const decision = getServiceDecision(result);
+  const system = app.selectedSystem || decision.primarySystem || chooseInitialSystem(result);
   app.selectedSystem = system;
   const health = (result.systemHealth || []).find(item => item.system === system) || { system, status: 'no_rule', label: 'Rules not configured' };
   const summaries = (result.signalSummaries || []).filter(item => item.system === system).sort((a, b) => priority(b.status) - priority(a.status) || String(a.signal).localeCompare(String(b.signal)));
@@ -14,9 +15,9 @@ export function renderDrilldown(app, handlers) {
   if (selected && app.selectedRuleId !== selected.ruleId) app.selectedRuleId = selected.ruleId;
   const chart = selected ? result.chartSeries?.[selected.ruleId] || [] : [];
   const events = selected ? (result.deviationEvents || []).filter(event => event.system === selected.system && event.signal === selected.signal) : [];
-  $('drillSubtitle').textContent = `${system || 'No system selected'} · ${statusLabel(health.status)} · ${summaries.length} parameters`;
+  $('drillSubtitle').textContent = `${system || 'No system selected'} · ${statusLabel(health.status)} · ${summaries.length} parameters · ${result.metadata?.timeRange || 'No evaluated time range'}`;
   $('drilldownRoot').innerHTML = `
-    <section class="drill-summary panel pad">${renderSummaryBar(health, summaries, selected)}</section>
+    <section class="drill-summary panel pad"><div class="breadcrumbs">Analysis Workspace → Analysis Summary → Service Radar → ${escapeHtml(system || 'System')}</div>${renderSummaryBar(health, summaries, selected)}</section>
     <section class="drilldown-main">
       <aside class="parameter-nav panel pad"><div class="panel-title"><h2>Parameter navigator</h2></div>${renderParameterNavigator(summaries, selected?.ruleId)}</aside>
       <section class="chart-panel panel pad"><div class="chart-heading"><div>${renderStatusBadge(selected?.status || health.status)}<h2>${escapeHtml(selected?.signal || 'No parameter selected')}</h2><p>${escapeHtml(selected?.component || selected?.subsystem || 'Select a parameter to investigate.')}</p></div><div class="legend"><span class="actual-key"></span>Actual <span class="expected-key"></span>Expected range</div></div>${selected ? renderActualExpectedChart(chart, selected, events) : renderEmptyState('No parameter selected', 'This system has no parameter summaries in the AnalysisResult.', health.status)}${renderStateTimeline({ stateTimeline: result.stateTimeline || [], events })}</section>
@@ -55,9 +56,22 @@ function fact(label, value) {
 function renderBottomInvestigation(result, selected, events) {
   if (!selected) return renderEmptyState('No investigation selected', 'Choose a parameter to view events, related rule, and evidence samples.', 'not_analyzed');
   const evidence = (result.evidence || []).filter(item => item.ruleRow === selected.ruleRow || item.signal === selected.signal).slice(0, 8);
-  return `<div class="investigation-grid">
-    <div><h3>Deviation events</h3>${events.slice(0, 8).map(event => `<div class="compact-item ${statusClass(event.severity)}"><strong>${escapeHtml(event.signal)}</strong><small>${fmtTime(event.startTimestampMs)} · ${fmtDuration(event.durationMs)} · Actual ${fmtNum(event.latestActual)} vs ${escapeHtml(expectedText(event))}</small></div>`).join('') || '<div class="compact-item ok">No deviation events for this parameter.</div>'}</div>
-    <div><h3>Related rule</h3><div class="compact-item ${statusClass(selected.status)}"><strong>Excel row ${escapeHtml(selected.ruleRow || '—')}</strong><small>${escapeHtml(selected.signal)} · ${escapeHtml(expectedText(selected))}</small><small>${escapeHtml(selected.latestReason || blockerLabel(selected.blocker))}</small></div></div>
-    <div><h3>Evidence samples</h3>${evidence.map(sample => `<div class="compact-item ${statusClass(sample.result)}"><strong>${fmtTime(sample.timestampMs)}</strong><small>Actual ${fmtNum(sample.actual)} · ${escapeHtml(sample.machineState || 'No state')} · ${escapeHtml(sample.file || '')}</small></div>`).join('') || '<div class="compact-item no-data">No evidence samples included for this parameter.</div>'}</div>
+  return `<div class="investigation-grid four">
+    <div><h3>Recent occurrences</h3>${renderOccurrences(selected, events)}</div>
+    <div><h3>Related rule</h3>${renderRuleSummary(selected)}</div>
+    <div><h3>Latest evidence</h3>${evidence.map(sample => `<div class="compact-item ${statusClass(sample.result)}"><strong>${fmtTime(sample.timestampMs)}</strong><small>Actual ${fmtNum(sample.actual)} · ${escapeHtml(sample.machineState || 'No state')} · ${escapeHtml(sample.source || '')}</small></div>`).join('') || '<div class="compact-item no-data">No bounded evidence samples were included for this parameter.</div>'}</div>
+    <div><h3>Recommended actions</h3><div class="compact-item ${statusClass(selected.status)}"><strong>${escapeHtml(selected.recommendedAction || selected.latestReason || blockerLabel(selected.blocker))}</strong><small>${escapeHtml(selected.system)} · row ${escapeHtml(selected.ruleRow || '—')}</small></div></div>
   </div>`;
+}
+
+function renderOccurrences(selected, events) {
+  const status = normalizeStatus(selected.status);
+  if (status === 'needs_configuration') return '<div class="compact-item needs-configuration">No operational occurrences can be calculated until the rule is fully configured.</div>';
+  if (!events.length) return '<div class="compact-item ok">No operational deviation occurrences were calculated for this parameter.</div>';
+  return `<div class="occurrence-table"><div class="occurrence-head"><span>Start</span><span>End</span><span>Duration</span><span>Maximum deviation</span><span>Machine State</span><span>Severity</span></div>${events.slice(0, 8).map(event => `<div class="occurrence-row ${statusClass(event.severity)}"><span>${fmtTime(event.startTimestampMs)}</span><span>${fmtTime(event.endTimestampMs)}</span><span>${fmtDuration(event.durationMs)}</span><span>${fmtNum(event.maximumDeviation)}</span><span>${escapeHtml([...(event.machineStatesSeen || [])][0] || '—')}</span><span>${statusLabel(event.severity)}</span></div>`).join('')}</div>`;
+}
+
+function renderRuleSummary(selected) {
+  const missing = hasExpectedRange(selected) ? '' : '<small class="missing-field">Missing: Expected value / Spec Tolerance</small>';
+  return `<div class="compact-item ${statusClass(selected.status)}"><strong>Excel row ${escapeHtml(selected.ruleRow || '—')}</strong><small>${escapeHtml(selected.system)} · ${escapeHtml(selected.subsystem || 'No subsystem')}</small><small>Signal: ${escapeHtml(selected.signal)}</small><small>Check: ${escapeHtml(selected.checkType || 'Configured rule')}</small><small>Expected: ${escapeHtml(expectedText(selected))}</small>${missing}<small>Action: ${escapeHtml(selected.recommendedAction || selected.latestReason || blockerLabel(selected.blocker))}</small></div>`;
 }

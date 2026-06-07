@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import { ADAPTERS, matchRuleForRow, parseSlashTimestamp } from '../adapters.js';
 import { evaluateValue, normalizeToken } from '../evaluation.js';
 import { createStateIndex } from '../machine-states.js';
-import { chooseInitialParameter, chooseInitialSystem, groupParameters, normalizeStatus, renderActualExpectedChart, renderComparisonGauge, validateAnalysisResult } from '../render.js';
+import { chooseInitialParameter, chooseInitialSystem, getServiceDecision, groupParameters, normalizeStatus, renderActualExpectedChart, renderComparisonGauge, validateAnalysisResult } from '../render.js';
+import { buildServiceDecision } from '../service-decision.js';
 import { renderHotspot } from '../render-radar.js';
 
 function baseResult(overrides = {}) {
@@ -65,12 +66,50 @@ const uiResult = baseResult({
     { ruleId: 'OK', system: 'QCS', signal: 'Quality', status: 'ok', latestActual: 1, expectedLow: 0, expectedHigh: 2, eventCount: 0 },
     { ruleId: 'NODATA', system: 'BSS', signal: 'Missing', status: 'no_data', latestActual: null, eventCount: 0 }
   ],
-  chartSeries: { CONFIG: [{ t: 1, actual: 674.54, status: 'needs_configuration' }], WARN: [{ t: 1, actual: 31, expectedLow: 20, expectedHigh: 25, status: 'warning' }] }
+  chartSeries: { CONFIG: [{ t: 1, actual: 674.54, status: 'needs_configuration' }], WARN: [{ t: 1, actual: 31, expectedLow: 20, expectedHigh: 25, status: 'warning' }] },
+  deviationEvents: [{ id: 'DW', system: 'IPS', signal: 'Pressure', severity: 'warning', latestActual: 31, expectedLow: 20, expectedHigh: 25, startTimestampMs: 1, endTimestampMs: 2, maximumDeviation: 6, machineStatesSeen: ['Printing'] }]
 });
+
+const decision = buildServiceDecision(uiResult);
+assert.equal(decision.machineStatus, 'warning', 'serviceDecision machine status prioritizes operational warning over configuration issues');
+assert.equal(decision.systemsAtRiskCount, 1, 'Systems at Risk counts only critical/warning systems');
+assert.equal(decision.systemsRequiringAttentionCount, 2, 'Systems Requiring Attention includes operational and configuration/validation systems');
+assert.equal(decision.operationalFindings.length, 1, 'Operational findings come from real deviation events');
+assert.equal(decision.configurationProblems.length, 1, 'Configuration issues are separated at rule level');
+assert.equal(decision.validationProblems.length, 1, 'Validation issues are separated at rule level');
+assert.match(decision.nextRecommendedAction, /warning deviation/, 'Operational warning produces a service action without treating configuration as a deviation');
+assert.equal(decision.primarySystem, 'IPS', 'Primary system selection prefers systems at operational risk');
+assert.equal(getServiceDecision(uiResult).machineStatus, 'warning', 'Renderer helper uses the same serviceDecision model');
+
+const operationalResult = baseResult({
+  metadata: { rulesEvaluated: 1, blockedPoints: 0, needsValidationPoints: 0, needsConfigurationPoints: 0 },
+  systemHealth: [{ system: 'BSS', status: 'critical', rules: 1, deviations: 1 }],
+  deviationEvents: [{ id: 'D1', system: 'BSS', signal: 'FillActualTemperatureC', severity: 'critical', latestActual: 91.2, expectedHigh: 90, startTimestampMs: 1, endTimestampMs: 2, machineStatesSeen: ['Printing'] }],
+  signalSummaries: [{ ruleId: 'R1', system: 'BSS', signal: 'FillActualTemperatureC', status: 'critical', latestActual: 91.2, expectedLow: 80, expectedHigh: 90, eventCount: 1, fullyEvaluatedPoints: 1 }],
+  chartSeries: { R1: [{ t: 1, actual: 91.2, expectedLow: 80, expectedHigh: 90, status: 'critical' }] }
+});
+assert.equal(buildServiceDecision(operationalResult).machineStatus, 'critical', 'Operational issue status is critical when a critical event exists');
+assert.match(buildServiceDecision(operationalResult).machineSummary, /FillActualTemperatureC/, 'Machine summary names the responsible parameter');
+
+const configOnlyResult = baseResult({
+  metadata: { rulesEvaluated: 0, blockedPoints: 1, needsValidationPoints: 0, needsConfigurationPoints: 1 },
+  systemHealth: [{ system: 'BSS', status: 'needs_configuration', rules: 1, deviations: 0 }],
+  signalSummaries: [{ ruleId: 'C1', ruleRow: 6, system: 'BSS', signal: 'TankActualLevelMM', status: 'needs_configuration', latestActual: 674.54, blocker: 'missing_threshold_or_tolerance', matchedRows: 3 }],
+  chartSeries: { C1: [{ t: 1, actual: 674.54, status: 'needs_configuration' }] }
+});
+const configDecision = buildServiceDecision(configOnlyResult);
+assert.equal(configDecision.machineStatus, 'needs_configuration', 'Configuration-only problem is not counted as operational risk');
+assert.equal(configDecision.systemsAtRiskCount, 0, 'Systems at Risk excludes configuration-only systems');
+assert.match(configDecision.nextRecommendedAction, /Excel row 6|incomplete BSS rule/, 'Recommended configuration action points to Excel configuration');
+
+const validationOnlyResult = baseResult();
+assert.equal(buildServiceDecision(validationOnlyResult).machineStatus, 'needs_validation', 'Validation-only problem is distinct from configuration issue');
+
 assert.equal(normalizeStatus('evaluator_pending'), 'needs_validation', 'Evaluator pending is visualized as Needs Validation');
 assert.equal(chooseInitialSystem(uiResult), 'IPS', 'Initial selected system follows status priority');
 assert.equal(chooseInitialParameter(uiResult, 'BSS').ruleId, 'VALID', 'Initial selected parameter uses parameter status priority');
 const groups = groupParameters(uiResult.signalSummaries);
+assert.equal(groups.find(group => group.key === 'warning').rows[0].ruleId, 'WARN', 'Warning has its own parameter group');
 assert.equal(groups.find(group => group.key === 'configuration').rows[0].ruleId, 'CONFIG', 'Needs Configuration has its own parameter group');
 assert.equal(groups.find(group => group.key === 'validation').rows[0].ruleId, 'VALID', 'Needs Validation has its own parameter group');
 assert.match(renderComparisonGauge({ actual: 31, expectedLow: 20, expectedHigh: 25, warningLow: 18, warningHigh: 27, criticalLow: 15, criticalHigh: 30, status: 'warning' }), /gauge-marker/, 'Comparison gauge with full range renders actual marker');

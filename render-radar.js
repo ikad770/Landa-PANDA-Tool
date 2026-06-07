@@ -1,18 +1,23 @@
 import { MACHINE_IMAGE_SRC, SYSTEM_HOTSPOTS } from './config.js';
-import { $, ISSUE_STATUSES, blockerLabel, chooseInitialParameter, chooseInitialSystem, compactNumber, deviationText, escapeAttr, escapeHtml, expectedText, fmtDuration, fmtNum, fmtTime, hasExpectedRange, normalizeStatus, priority, renderComparisonGauge, renderEmptyState, renderStateTimeline, renderStatusBadge, renderSystemHealthDonut, statusClass, statusIcon, statusLabel, validateAnalysisResult } from './render.js';
+import { $, ISSUE_STATUSES, OPERATIONAL_STATUSES, blockerLabel, chooseInitialParameter, chooseInitialSystem, deviationText, escapeAttr, escapeHtml, expectedText, fmtDuration, fmtNum, fmtTime, getServiceDecision, normalizeStatus, priority, renderComparisonGauge, renderEmptyState, renderKpiCard, renderStateTimeline, renderStatusBadge, renderSystemHealthDonut, shortStatusLabel, statusClass, statusIcon, statusLabel, validateAnalysisResult } from './render.js';
 
 export { chooseInitialSystem, validateAnalysisResult } from './render.js';
 
 export function renderServiceRadar(app, handlers) {
   const result = app.analysisResult;
   if (!result) { renderRadarEmpty('Run an analysis to evaluate machine systems.'); return; }
-  if (!app.selectedSystem) app.selectedSystem = chooseInitialSystem(result);
-  if (!app.selectedEventId) app.selectedEventId = result.deviationEvents?.[0]?.id || null;
+  const decision = getServiceDecision(result);
+  if (!app.selectedSystem) app.selectedSystem = decision.primarySystem || chooseInitialSystem(result);
+  if (!app.selectedEventId) app.selectedEventId = decision.operationalFindings?.[0]?.id || null;
   $('radarSubtitle').textContent = result.metadata.timeRange || 'No evaluated time range';
-  renderKpis(result);
-  renderMachineMap(result, app, handlers);
-  renderActiveIssue(result, app, handlers);
-  renderBottomRow(result, app, handlers);
+  const statusNode = $('radarAnalysisStatus');
+  if (statusNode) statusNode.innerHTML = renderStatusBadge(decision.machineStatus, decision.machineStatusLabel);
+  const summaryNode = $('machineSummary');
+  if (summaryNode) summaryNode.innerHTML = `<div class="machine-summary ${statusClass(decision.machineStatus)}">${renderStatusBadge(decision.machineStatus)}<p>${escapeHtml(decision.machineSummary)}</p><small>Systems requiring attention: ${decision.systemsRequiringAttentionCount} · Systems at risk: ${decision.systemsAtRiskCount}</small></div>`;
+  renderKpis(result, decision);
+  renderMachineMap(result, app, handlers, decision);
+  renderActiveIssue(result, app, handlers, decision);
+  renderBottomRow(result, app, handlers, decision);
 }
 
 function renderRadarEmpty(message) {
@@ -25,31 +30,21 @@ function renderRadarEmpty(message) {
   $('serviceActions').innerHTML = '';
 }
 
-function renderKpis(result) {
-  const health = result.systemHealth || [];
-  const attention = health.filter(item => ISSUE_STATUSES.has(normalizeStatus(item.status))).length;
-  const critical = (result.deviationEvents || []).filter(event => normalizeStatus(event.severity) === 'critical').length;
-  const warning = (result.deviationEvents || []).filter(event => normalizeStatus(event.severity) === 'warning').length;
-  const validation = health.filter(item => normalizeStatus(item.status) === 'needs_validation').length;
-  const configuration = health.filter(item => normalizeStatus(item.status) === 'needs_configuration').length;
-  const coverage = `${result.metadata.relevantSignalsFound || 0}/${result.metadata.relevantSignalsRequired || 0}`;
+function renderKpis(result, decision) {
+  const kpis = decision.kpis || {};
   $('kpiRow').innerHTML = [
-    kpi('Systems requiring attention', attention, 'Machine systems not ready', attention ? 'warning' : 'ok'),
-    kpi('Critical findings', critical, 'Immediate service attention', critical ? 'critical' : 'ok'),
-    kpi('Warning findings', warning, 'Outside permitted range', warning ? 'warning' : 'ok'),
-    kpi('Rules fully evaluated', result.metadata.rulesEvaluated || 0, `${result.metadata.rulesValid || 0} configured valid rules`, 'ok'),
-    kpi('Validation / configuration', `${validation}/${configuration}`, `${compactNumber(result.metadata.blockedPoints || 0)} values blocked`, validation ? 'needs_validation' : configuration ? 'needs_configuration' : 'ok'),
-    kpi('Signal match coverage', coverage, 'Matched required signals', 'needs_validation')
+    renderKpiCard({ label: 'Systems at Risk', value: kpis.systemsAtRisk || 0, subtitle: 'Critical / Warning only', status: (kpis.systemsAtRisk || 0) ? 'warning' : 'ok', icon: '◎' }),
+    renderKpiCard({ label: 'Critical Findings', value: kpis.criticalFindings || 0, subtitle: 'Active deviation events', status: (kpis.criticalFindings || 0) ? 'critical' : 'ok' }),
+    renderKpiCard({ label: 'Warning Findings', value: kpis.warningFindings || 0, subtitle: 'Outside permitted range', status: (kpis.warningFindings || 0) ? 'warning' : 'ok' }),
+    renderKpiCard({ label: 'Evaluation Readiness', value: `${kpis.evaluationReadiness?.evaluated || 0}/${kpis.evaluationReadiness?.total || 0}`, subtitle: 'Rules fully evaluable / valid', status: decision.analysisCompleteness?.percent === 100 ? 'ok' : 'needs_configuration', icon: '↔' }),
+    renderKpiCard({ label: 'Validation / Configuration', value: `${kpis.validationIssues || 0}/${kpis.configurationIssues || 0}`, subtitle: 'Rule-level issues', status: kpis.validationIssues ? 'needs_validation' : kpis.configurationIssues ? 'needs_configuration' : 'ok', icon: '◇' }),
+    renderKpiCard({ label: 'Signal Coverage', value: `${kpis.signalCoverage?.found || 0}/${kpis.signalCoverage?.required || 0}`, subtitle: 'Matched / required signals', status: (kpis.signalCoverage?.found || 0) >= (kpis.signalCoverage?.required || 1) ? 'ok' : 'no_data', icon: '⌁' })
   ].join('');
 }
 
-function kpi(label, value, help, status) {
-  return `<article class="kpi-card ${statusClass(status)}"><div class="kpi-icon">${statusIcon(status)}</div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(help)}</small></article>`;
-}
-
-function renderMachineMap(result, app, handlers) {
+function renderMachineMap(result, app, handlers, decision) {
   const healthBySystem = Object.fromEntries((result.systemHealth || []).map(item => [item.system, item]));
-  const selectedSystem = app.selectedSystem || chooseInitialSystem(result);
+  const selectedSystem = app.selectedSystem || decision.primarySystem || chooseInitialSystem(result);
   const systems = Object.keys(SYSTEM_HOTSPOTS).filter(system => {
     const status = normalizeStatus(healthBySystem[system]?.status || 'no_rule');
     return app.systemFilter === 'all' || ISSUE_STATUSES.has(status);
@@ -63,7 +58,7 @@ function renderMachineMap(result, app, handlers) {
     <div class="hotspot-layer">${systems.map(system => renderHotspot(system, healthBySystem[system], selectedSystem, app.systemFilter)).join('')}</div>`;
   $('machineMap').querySelectorAll('[data-system]').forEach(el => el.addEventListener('click', () => {
     app.selectedSystem = el.dataset.system;
-    const event = (result.deviationEvents || []).find(item => item.system === app.selectedSystem);
+    const event = (decision.operationalFindings || []).find(item => item.system === app.selectedSystem);
     app.selectedEventId = event?.id || null;
     renderServiceRadar(app, handlers);
   }));
@@ -73,9 +68,10 @@ function renderMachineMap(result, app, handlers) {
 export function renderHotspot(system, health = {}, selectedSystem = '', filter = 'issues') {
   const map = SYSTEM_HOTSPOTS[system];
   const status = normalizeStatus(health?.status || 'no_rule');
-  const quiet = filter === 'all' && !ISSUE_STATUSES.has(status) ? 'quiet' : '';
+  const inactive = !ISSUE_STATUSES.has(status);
+  const quiet = filter === 'all' && inactive ? status === 'no_data' ? 'quiet no-data-quiet' : 'quiet no-rule-quiet' : '';
   const selected = system === selectedSystem ? 'selected' : '';
-  const findings = health?.deviations || health?.blockedPoints || 0;
+  const findings = OPERATIONAL_STATUSES.has(status) ? (health?.deviations || 1) : status === 'needs_validation' ? (health?.needsValidationRules || health?.blockedRules || 1) : status === 'needs_configuration' ? (health?.needsConfigurationRules || 1) : 0;
   const dxPct = map.labelX - map.anchorX;
   const dyPct = map.labelY - map.anchorY;
   const dx = dxPct * 9.8;
@@ -84,35 +80,34 @@ export function renderHotspot(system, health = {}, selectedSystem = '', filter =
   const angle = Math.atan2(dy, dx) * 180 / Math.PI;
   return `<button class="hotspot ${statusClass(status)} ${selected} ${quiet}" data-system="${escapeAttr(system)}" data-open-system="${escapeAttr(system)}" style="--anchor-x:${map.anchorX}%;--anchor-y:${map.anchorY}%;--lx:${dx - 54}px;--ly:${dy - 20}px;--line-length:${length}px;--line-angle:${angle}deg;" title="${escapeAttr(`${system}: ${statusLabel(status)}`)}">
     <span class="connector"></span><span class="node"><span>${statusIcon(status)}</span></span>
-    <span class="label-card ${map.labelAlign || 'center'}"><b>${escapeHtml(system)}</b><small>${ISSUE_STATUSES.has(status) ? `${findings || 1} ${status === 'critical' || status === 'warning' ? 'findings' : statusLabel(status)}` : statusLabel(status)}</small></span>
+    <span class="label-card ${map.labelAlign || 'center'}"><b>${escapeHtml(system)}</b><small>${ISSUE_STATUSES.has(status) ? `${findings} ${shortStatusLabel(status)}` : shortStatusLabel(status)}</small></span>
   </button>`;
 }
 
-function renderActiveIssue(result, app, handlers) {
-  const events = result.deviationEvents || [];
-  const selectedEvent = events.find(event => event.id === app.selectedEventId);
-  const selectedSystem = app.selectedSystem || selectedEvent?.system || chooseInitialSystem(result);
+function renderActiveIssue(result, app, handlers, decision) {
+  const selectedSystem = app.selectedSystem || decision.primarySystem || chooseInitialSystem(result);
+  const events = decision.operationalFindings || [];
+  const selectedEvent = events.find(event => event.id === app.selectedEventId && event.system === selectedSystem) || events.find(event => event.system === selectedSystem);
   const summaries = (result.signalSummaries || []).filter(row => row.system === selectedSystem).sort((a, b) => priority(b.status) - priority(a.status));
-  const selectedSummary = selectedEvent ? summaries.find(row => row.signal === selectedEvent.signal) : chooseInitialParameter(result, selectedSystem);
+  const selectedSummary = selectedEvent ? summaries.find(row => row.signal === selectedEvent.signal) : chooseInitialParameter({ signalSummaries: summaries }, selectedSystem);
   const item = selectedEvent || selectedSummary;
   if (!item) {
-    $('activeIssue').innerHTML = renderEmptyState('No active deviation', 'All fully evaluated parameters are currently within their configured ranges.', 'ok');
+    $('activeIssue').innerHTML = renderEmptyState('No rule configured', 'This system has no configured evaluation rules.', 'no_rule');
     return;
   }
   const status = normalizeStatus(item.severity || item.status);
   const actual = item.latestActual ?? item.firstActual;
-  const expected = { expectedLow: item.expectedLow, expectedHigh: item.expectedHigh };
   const health = (result.systemHealth || []).find(row => row.system === selectedSystem) || { system: selectedSystem, status };
   $('activeIssue').innerHTML = `<div class="issue-panel ${statusClass(status)}">
-    <div class="issue-top">${renderStatusBadge(status, statusLabel(status), 'active')}<button class="primary compact-open" id="openIssueDrill">Open Drill-Down</button></div>
+    <div class="issue-top">${renderStatusBadge(status, status === 'needs_configuration' ? 'Configuration Required' : statusLabel(status), 'active')}<button class="primary compact-open" id="openIssueDrill">Open Drill-Down</button></div>
     <h2>${escapeHtml(item.system || selectedSystem)} <span>${escapeHtml(item.subsystem || item.component || '')}</span></h2>
     <p class="issue-signal">${escapeHtml(item.signal || selectedSummary?.signal || 'Selected parameter')}</p>
     <div class="comparison-grid">
       <div><label>Actual</label><strong>${fmtNum(actual)}</strong></div>
-      <div><label>Expected</label><strong>${escapeHtml(expectedText(expected))}</strong></div>
-      <div><label>Deviation</label><strong>${escapeHtml(deviationText(actual, expected))}</strong></div>
+      <div><label>Expected</label><strong>${escapeHtml(expectedText(item))}</strong></div>
+      <div><label>Deviation</label><strong>${escapeHtml(deviationText(actual, item))}</strong></div>
     </div>
-    ${renderComparisonGauge({ actual, expectedLow: item.expectedLow, expectedHigh: item.expectedHigh, status })}
+    ${Number.isFinite(actual) ? renderComparisonGauge({ actual, expectedLow: item.expectedLow, expectedHigh: item.expectedHigh, warningLow: item.warningLow, warningHigh: item.warningHigh, criticalLow: item.criticalLow, criticalHigh: item.criticalHigh, status }) : ''}
     ${renderSystemHealthDonut(health, summaries)}
     <div class="issue-facts">
       <div><label>Machine State</label><b>${escapeHtml([...(item.machineStatesSeen || [])][0] || selectedSummary?.currentMachineState || '—')}</b></div>
@@ -122,43 +117,45 @@ function renderActiveIssue(result, app, handlers) {
       <div><label>Last detected</label><b>${fmtTime(item.endTimestampMs)}</b></div>
       <div><label>Rule row</label><b>${escapeHtml(item.ruleRow || selectedSummary?.ruleRow || '—')}</b></div>
     </div>
-    <div class="action-box ${statusClass(status)}"><strong>Recommended action</strong><p>${escapeHtml(actionFor(item, selectedSummary, status))}</p></div>
+    <div class="action-box ${statusClass(status)}"><strong>${status === 'needs_configuration' ? 'Required configuration action' : status === 'needs_validation' ? 'Required validation action' : 'Recommended action'}</strong><p>${escapeHtml(actionFor(item, selectedSummary, status, decision))}</p></div>
   </div>`;
   $('openIssueDrill').onclick = () => handlers.openDrilldown(item.system || selectedSystem);
 }
 
-function actionFor(item, summary, status) {
-  if (item.recommendedAction || summary?.recommendedAction) return item.recommendedAction || summary.recommendedAction;
-  if (status === 'needs_configuration') return `Actual values were found. Configure Expected and Tolerance in Excel row ${item.ruleRow || summary?.ruleRow || '—'}.`;
-  if (status === 'needs_validation') return summary?.latestReason || blockerLabel(summary?.blocker || item.blocker);
-  if (status === 'no_data') return 'A rule exists, but no matching source values were found.';
-  if (status === 'ok') return 'No service action required.';
-  return 'Review the selected rule and inspect the actual value against the configured range.';
+function actionFor(item, summary, status, decision) {
+  if (['critical', 'warning'].includes(status) && (item.recommendedAction || summary?.recommendedAction)) return item.recommendedAction || summary.recommendedAction;
+  if (status === 'needs_configuration') return decision.nextRecommendedAction || `Update Excel row ${item.ruleRow || summary?.ruleRow || '—'} with Expected value and Spec Tolerance.`;
+  if (status === 'needs_validation') return decision.nextRecommendedAction || summary?.latestReason || blockerLabel(summary?.blocker || item.blocker);
+  if (status === 'no_data') return 'A valid rule exists, but no matching signal was found in the uploaded logs.';
+  if (status === 'ok') return 'No service action is required for fully evaluated parameters.';
+  return decision.nextRecommendedAction || 'Review the selected rule and inspect the actual value against the configured range.';
 }
 
-function renderBottomRow(result, app, handlers) {
-  const events = result.deviationEvents || [];
+function renderBottomRow(result, app, handlers, decision) {
+  const events = decision.operationalFindings || [];
   $('deviationTimeline').innerHTML = renderStateTimeline({ stateTimeline: result.stateTimeline || [], events, selectedEventId: app.selectedEventId, onEvent: true });
   $('deviationTimeline').querySelectorAll('[data-event]').forEach(el => el.addEventListener('click', () => handlers.selectEvent(el.dataset.event)));
-  $('evidenceSummary').innerHTML = latestFindings(result);
-  $('serviceActions').innerHTML = recommendedActions(result);
+  $('evidenceSummary').innerHTML = latestFindings(result, decision);
+  $('serviceActions').innerHTML = recommendedActions(decision);
 }
 
-function latestFindings(result) {
-  const findings = [...(result.deviationEvents || [])].sort((a, b) => (b.startTimestampMs || 0) - (a.startTimestampMs || 0)).slice(0, 5);
-  if (!findings.length) return renderEmptyState('No active deviation', 'All fully evaluated parameters are currently within their configured ranges.', 'ok');
+function latestFindings(result, decision) {
+  const findings = [...(decision.operationalFindings || [])].sort((a, b) => (b.startTimestampMs || 0) - (a.startTimestampMs || 0)).slice(0, 5);
+  if (!findings.length) {
+    if (decision.configurationProblems.length) return renderEmptyState('Configuration required', `Actual values were found for ${decision.configurationProblems.length} rule${decision.configurationProblems.length === 1 ? '' : 's'}, but their rules are incomplete.`, 'needs_configuration');
+    if (decision.validationProblems.length) return renderEmptyState('Validation required', `Matching source values were found, but ${decision.validationProblems.length} rule${decision.validationProblems.length === 1 ? '' : 's'} need corrected context.`, 'needs_validation');
+    return renderEmptyState('No active operational issue', 'All fully evaluated parameters are currently inside their configured ranges.', 'ok');
+  }
   return findings.map(event => `<button class="finding-item ${statusClass(event.severity)}" data-event-ref="${escapeAttr(event.id)}"><span>${statusIcon(event.severity)}</span><b>${fmtTime(event.startTimestampMs)}</b><strong>${escapeHtml(event.system)} · ${escapeHtml(event.signal)}</strong><small>Actual ${fmtNum(event.latestActual)} vs ${escapeHtml(expectedText(event))}</small></button>`).join('');
 }
 
-function recommendedActions(result) {
-  const source = [...(result.deviationEvents || [])].filter(event => event.recommendedAction).slice(0, 3);
-  const configs = (result.signalSummaries || []).filter(row => normalizeStatus(row.status) === 'needs_configuration').slice(0, 3 - source.length);
-  const rows = [
-    ...source.map(event => ({ system: event.system, status: event.severity, action: event.recommendedAction, impact: statusLabel(event.severity) })),
-    ...configs.map(row => ({ system: row.system, status: row.status, action: `Configure Expected and Tolerance in Excel row ${row.ruleRow || '—'}.`, impact: 'Configuration required' }))
-  ].slice(0, 3);
-  if (!rows.length) return renderEmptyState('No service action queued', 'No active deviation or incomplete rule requires action right now.', 'ok');
-  return rows.map((row, idx) => `<div class="action-row-card ${statusClass(row.status)}"><span class="priority-number">${idx + 1}</span><div><strong>${escapeHtml(row.action)}</strong><small>${escapeHtml(row.impact)} · ${escapeHtml(row.system)}</small></div></div>`).join('');
+function recommendedActions(decision) {
+  const rows = [];
+  if (decision.nextRecommendedAction) rows.push({ system: decision.primarySystem || 'Machine', status: decision.machineStatus, action: decision.nextRecommendedAction, impact: decision.machineStatusLabel });
+  for (const event of (decision.operationalFindings || []).filter(event => event.recommendedAction)) rows.push({ system: event.system, status: event.severity, action: event.recommendedAction, impact: statusLabel(event.severity) });
+  for (const row of (decision.configurationProblems || [])) rows.push({ system: row.system, status: row.status, action: `Update Excel row ${row.ruleRow || '—'} with Expected value and Spec Tolerance.`, impact: 'Configuration required' });
+  if (!rows.length) return renderEmptyState('No service action required', 'No active deviation or incomplete rule requires action right now.', 'ok');
+  return rows.slice(0, 3).map((row, idx) => `<div class="action-row-card ${statusClass(row.status)}"><span class="priority-number">${idx + 1}</span><div><strong>${escapeHtml(row.action)}</strong><small>${escapeHtml(row.impact)} · ${escapeHtml(row.system)}</small></div></div>`).join('');
 }
 
 function machineFallbackSvg() {

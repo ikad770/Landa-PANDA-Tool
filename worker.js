@@ -6,6 +6,7 @@ import { APP_STAGES, MAX_CHART_POINTS_PER_RULE, MAX_DEVIATION_EVENTS_PER_RULE, M
 import { createStateIndex } from './machine-states.js';
 import { buildAnalysisPlan, parseRulesWorkbook, serializePlan } from './rules.js';
 import { computeAllowedRange, evaluateValue, formatRange, normalizeText } from './evaluation.js';
+import { buildServiceDecision } from './service-decision.js';
 
 let cancelled = false;
 let startedAt = 0;
@@ -369,6 +370,7 @@ function finalizeResult(rules, plan, stateIndex, runtimes) {
     evidence,
     diagnosticsSummary: { ...diagnostics, analysisAudit, analysisPlan: serializePlan(plan) }
   };
+  result.serviceDecision = buildServiceDecision(result);
   return result;
 }
 

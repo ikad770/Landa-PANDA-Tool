@@ -64,7 +64,7 @@
             <div class="metric"><label>Current source</label><b id="currentSource">—</b></div>
             <div class="metric"><label>Current file</label><b id="currentFile">—</b></div>
             <div class="metric"><label>Files completed</label><b id="filesCount">0 / 0</b></div>
-            <div class="metric"><label>Relevant values found</label><b id="relevantValues">0</b></div>
+            <div class="metric"><label>Systems at risk</label><b id="relevantValues">0</b></div>
             <div class="metric"><label>Signals matched</label><b id="signalsMatched">0</b></div>
             <div class="metric"><label>Elapsed</label><b id="elapsedTime">0s</b></div>
             <div class="metric"><label>Estimated remaining</label><b id="remainingTime">—</b></div>
@@ -93,11 +93,11 @@
         <div class="ready-stats">
           <div class="metric"><label>Rules fully evaluated</label><b id="readyRules">0</b></div>
           <div class="metric"><label>Signals matched</label><b id="readySignals">0</b></div>
-          <div class="metric"><label>Relevant values found</label><b id="readyRelevantValues">0</b></div>
-          <div class="metric"><label>Fully evaluated values</label><b id="readyFullyEvaluated">0</b></div>
-          <div class="metric"><label>Needs validation</label><b id="readyNeedsValidation">0</b></div>
-          <div class="metric"><label>Needs configuration</label><b id="readySystems">0</b></div>
-          <div class="metric"><label>Deviations found</label><b id="readyDeviations">0</b></div>
+          <div class="metric"><label>Systems at risk</label><b id="readyRelevantValues">0</b></div>
+          <div class="metric"><label>Systems evaluated</label><b id="readyFullyEvaluated">0</b></div>
+          <div class="metric"><label>Validation issues</label><b id="readyNeedsValidation">0</b></div>
+          <div class="metric"><label>Configuration issues</label><b id="readySystems">0</b></div>
+          <div class="metric"><label>Operational findings</label><b id="readyDeviations">0</b></div>
           <div class="metric"><label>Analysis time</label><b id="readyTime">0s</b></div>
           <div class="metric"><label>Top blocker</label><b id="readyTopBlocker">None</b></div>
         </div>
@@ -108,11 +108,12 @@
 
   <main id="radarView" class="view hidden">
     <div class="shell wide">
-      <header class="radar-header">
-        <div><p class="brand-eyebrow">Landa / PANDA</p><h1>Service Radar</h1></div>
-        <nav class="nav-pills"><button id="backToAnalysis">Analysis Workspace</button><button id="diagnosticsFromRadar">Diagnostics</button><button id="resetFromRadar" class="ghost">New Analysis</button></nav>
-        <div class="status-area"><span id="radarSubtitle">No analysis loaded</span><strong>Local session</strong></div>
+      <header class="radar-header service-header">
+        <div class="service-brand"><span class="brand-mark">P</span><div><p class="brand-eyebrow">PANDA Tool</p><h1>Service Radar</h1><small>Decision-focused press intelligence</small></div></div>
+        <nav class="nav-pills service-nav"><button aria-pressed="true">Service Radar</button><button>Alerts</button><button id="backToAnalysis">Analysis</button><button>Machines</button><button>Reports</button><button>Knowledge</button></nav>
+        <div class="status-area service-actions"><span id="radarSubtitle">No analysis loaded</span><strong id="radarAnalysisStatus">Not analyzed</strong><div class="action-row"><button id="diagnosticsFromRadar">Diagnostics</button><button id="resetFromRadar" class="ghost">New Analysis</button><span class="user-pill">Local</span></div></div>
       </header>
+      <section id="machineSummary" class="summary-slot"></section>
       <section id="kpiRow" class="kpi-row"></section>
       <section class="radar-grid">
         <article class="panel machine-panel">
@@ -123,7 +124,7 @@
       </section>
       <section class="bottom-grid">
         <article class="panel timeline"><h3>State Machine Timeline</h3><div id="deviationTimeline"></div></article>
-        <article class="panel"><div class="panel-title"><h3>Evidence Log</h3></div><div id="evidenceSummary" class="compact-list"></div></article>
+        <article class="panel"><div class="panel-title"><h3>Latest Findings</h3></div><div id="evidenceSummary" class="compact-list"></div></article>
         <article class="panel"><div class="panel-title"><h3>Recommended Service Actions</h3></div><div id="serviceActions" class="compact-list"></div></article>
       </section>
     </div>
@@ -131,7 +132,7 @@
 
   <main id="drilldownView" class="view hidden">
     <div class="shell wide">
-      <header class="topbar"><div><p class="brand-eyebrow">Service Radar → Drill-Down</p><h1>System Investigation</h1><p id="drillSubtitle" class="subtitle">Focused system context, parameter cards, expected bands, and deviations.</p></div><div class="action-row"><button id="backToRadar">Back to Radar</button><button id="diagnosticsFromDrill">Diagnostics</button></div></header>
+      <header class="topbar drill-top"><div><p class="brand-eyebrow">Service Radar → System Drill-Down</p><h1>System Investigation</h1><p id="drillSubtitle" class="subtitle">Actual versus expected, rule health, operational context, and bounded evidence.</p></div><div class="action-row"><button id="backToRadar">Back to Radar</button><button id="diagnosticsFromDrill">Diagnostics</button></div></header>
       <section id="drilldownRoot" class="drill-layout"></section>
     </div>
   </main>
