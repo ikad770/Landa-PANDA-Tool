@@ -9,7 +9,7 @@ const statusClass = s => String(s || 'no_data').replace(/_/g, '-');
 
 export function chooseInitialSystem(result) {
   const health = result?.systemHealth || [];
-  const order = ['critical', 'warning', 'needs_validation', 'ok', 'no_data'];
+  const order = ['critical', 'warning', 'needs_validation', 'evaluator_pending', 'ok', 'no_data'];
   for (const status of order) {
     const found = health.find(h => h.status === status && (status !== 'no_data' || h.rules > 0));
     if (found) return found.system;
@@ -20,9 +20,13 @@ export function chooseInitialSystem(result) {
 export function validateAnalysisResult(result) {
   const required = ['metadata', 'systemHealth', 'deviationEvents', 'signalSummaries', 'chartSeries', 'stateTimeline', 'diagnosticsSummary'];
   const missing = required.filter(key => !(key in (result || {})));
-  if (missing.length) throw new Error(`Invalid AnalysisResult. Missing: ${missing.join(', ')}`);
-  if (!Array.isArray(result.systemHealth) || !Array.isArray(result.deviationEvents) || !Array.isArray(result.signalSummaries)) throw new Error('Invalid AnalysisResult collection schema.');
-  return true;
+  if (missing.length) return { valid: false, reason: `Invalid AnalysisResult. Missing: ${missing.join(', ')}` };
+  if (!Array.isArray(result.systemHealth) || !Array.isArray(result.deviationEvents) || !Array.isArray(result.signalSummaries)) return { valid: false, reason: 'Invalid AnalysisResult collection schema.' };
+  if (!result.metadata.rulesValid) return { valid: false, reason: 'No valid rules are available for evaluation.' };
+  if (!result.metadata.relevantValuesFound) return { valid: false, reason: result.metadata.blockingReason || 'No relevant source values were found.' };
+  if (!result.metadata.classifiedPoints) return { valid: false, reason: result.metadata.blockingReason || 'Matching source rows were found, but no evaluation classification was produced.' };
+  if ((result.metadata.blockedPoints || 0) > 0) return { valid: true, status: 'completed_with_warnings', reason: 'Matching values were found, but some or all evaluations require validation.' };
+  return { valid: true, status: 'completed', reason: '' };
 }
 
 export function renderServiceRadar(app, handlers) {
@@ -90,9 +94,21 @@ function hotspot(system, health = { status: 'no_rule', label: 'Rules not configu
 }
 
 function selectedEvent(result, id) { return result.deviationEvents.find(e => e.id === id) || result.deviationEvents[0] || null; }
+function selectedBlocker(result) {
+  return (result.signalSummaries || []).find(s => ['needs_validation', 'evaluator_pending'].includes(s.status) && s.matchedRows > 0) || null;
+}
+function blockerLabel(key) { return ({ invalid_timestamp: 'Invalid timestamp', no_numeric_value: 'No numeric value', missing_state: 'Missing Machine State', missing_expected_value: 'Missing expected value for current state', missing_threshold_or_tolerance: 'Rule has no tolerance or thresholds', unsupported_evaluator: 'Unsupported check type' })[key] || key || 'Needs validation'; }
 function renderActiveIssue(result, selectedId) {
   const event = selectedEvent(result, selectedId);
   if (!event) {
+    const blocker = selectedBlocker(result);
+    if (blocker) {
+      $('activeIssue').innerHTML = `<div class="issue-head ${statusClass(blocker.status)}"><span>${STATUS_LABEL[blocker.status]}</span><h2>${blocker.system} · ${blocker.subsystem || 'No subsystem'}</h2><p>${blocker.signal}</p></div>
+        <div class="comparison-grid"><div class="comparison"><span>Actual</span><strong>${fmtNum(blocker.latestActual)}</strong></div><div class="comparison"><span>State</span><strong>${blocker.currentSystemState || blocker.currentMachineState || '—'}</strong></div><div class="comparison"><span>Rule row</span><strong>${blocker.ruleRow || '—'}</strong></div></div>
+        <div class="issue-facts"><div><span>Machine state</span><b>${blocker.currentMachineState || '—'}</b></div><div><span>System state</span><b>${blocker.currentSystemState || '—'}</b></div><div><span>Evaluation blocker</span><b>${blockerLabel(blocker.blocker)}</b></div><div><span>Source file</span><b>${blocker.sourceFile || '—'}</b></div></div>
+        <div class="action-box"><span>Required correction</span><strong>${blocker.latestReason || blockerLabel(blocker.blocker)}</strong></div>`;
+      return;
+    }
     $('activeIssue').innerHTML = `<div class="empty-state"><p class="brand-eyebrow">Active Issue</p><h2>No active deviation detected</h2><p class="muted">No fake alerts are generated. Missing values remain missing.</p></div>`;
     return;
   }
@@ -130,6 +146,8 @@ function renderActions(result) {
   const actions = [];
   for (const event of result.deviationEvents) if (!actions.includes(event.recommendedAction || 'No configured action for this rule')) actions.push(event.recommendedAction || 'No configured action for this rule');
   const invalid = result.diagnosticsSummary?.ruleParsing?.invalidRules?.length;
+  const topBlocker = result.diagnosticsSummary?.evaluationBlockers?.topBlocker;
+  if (topBlocker) actions.push(`Resolve evaluation blocker: ${topBlocker.label}.`);
   if (invalid) actions.push('Validate incomplete or unsupported rules in the Rules Excel.');
   $('serviceActions').innerHTML = (actions.slice(0, 3).length ? actions.slice(0, 3) : ['No configured action for this rule']).map((a, i) => `<div class="compact-item"><strong>${i + 1}. ${a}</strong></div>`).join('');
 }
@@ -149,14 +167,15 @@ export function renderDrilldown(app, handlers) {
     <section class="drill-bottom panel pad"><h3>Deviations and related rules</h3>${result.deviationEvents.filter(e => e.system === system).slice(0, 8).map(e => `<div class="compact-item ${statusClass(e.severity)}"><strong>${e.signal}</strong><small>${fmtTime(e.startTimestampMs)} · ${fmtDuration(e.durationMs)} · Rule row ${e.ruleRow}</small></div>`).join('') || '<div class="compact-item">No active deviation detected</div>'}</section>`;
   $('drilldownRoot').querySelectorAll('[data-rule]').forEach(el => el.addEventListener('click', () => handlers.selectRule(el.dataset.rule)));
 }
-function parameterCard(s, selectedId) { return `<button class="param-card ${statusClass(s.status)}" data-rule="${s.ruleId}" aria-pressed="${s.ruleId === selectedId}"><span><b>${s.signal}</b><small>${s.component || 'No component'} · ${STATUS_LABEL[s.status] || s.status}</small></span><span><b>${fmtNum(s.latestActual)}</b><small>${formatRange(s.expectedLow, s.expectedHigh)}</small><small>${s.eventCount} events · ${fmtDuration(s.totalDeviationDurationMs)}</small></span></button>`; }
+function parameterCard(s, selectedId) { const range = Number.isFinite(s.expectedLow) || Number.isFinite(s.expectedHigh) ? formatRange(s.expectedLow, s.expectedHigh) : `Expected range unavailable · Reason: ${s.latestReason || blockerLabel(s.blocker)}`; return `<button class="param-card ${statusClass(s.status)}" data-rule="${s.ruleId}" aria-pressed="${s.ruleId === selectedId}"><span><b>${s.signal}</b><small>${s.component || 'No component'} · ${STATUS_LABEL[s.status] || s.status}</small><small>State ${s.currentSystemState || s.currentMachineState || '—'} · Rule row ${s.ruleRow}</small></span><span><b>${fmtNum(s.latestActual)}</b><small>${range}</small><small>${s.eventCount} events · ${fmtDuration(s.totalDeviationDurationMs)}</small></span></button>`; }
 function chartSvg(chart, selected) {
   if (!chart.length) return '<div class="chart-empty">No chart samples available</div>';
   const ys = chart.flatMap(p => [p.actual, p.expectedLow, p.expectedHigh].filter(Number.isFinite)); const min = Math.min(...ys); const max = Math.max(...ys); const span = max - min || 1;
-  const path = chart.map((p, i) => `${i ? 'L' : 'M'} ${40 + i / Math.max(1, chart.length - 1) * 520} ${260 - ((p.actual - min) / span * 220)}`).join(' ');
-  return `<svg class="big-chart" viewBox="0 0 600 300"><path d="${path}" class="actual-line"></path><text x="40" y="24">Expected ${formatRange(selected.expectedLow, selected.expectedHigh)}</text></svg>`;
+  const path = chart.filter(p => Number.isFinite(p.actual)).map((p, i, rows) => `${i ? 'L' : 'M'} ${40 + i / Math.max(1, rows.length - 1) * 520} ${260 - ((p.actual - min) / span * 220)}`).join(' ');
+  const hasRange = Number.isFinite(selected?.expectedLow) || Number.isFinite(selected?.expectedHigh);
+  return `<svg class="big-chart" viewBox="0 0 600 300"><path d="${path}" class="actual-line"></path><text x="40" y="24">${hasRange ? `Expected ${formatRange(selected.expectedLow, selected.expectedHigh)}` : `Expected range unavailable`}</text><text x="40" y="44">${hasRange ? '' : `Reason: ${selected?.latestReason || blockerLabel(selected?.blocker)}`}</text></svg>`;
 }
-function eventDetails(result, selected) { const ev = selected && result.deviationEvents.find(e => e.system === selected.system && e.signal === selected.signal); return ev ? `<div class="action-box"><strong>${STATUS_LABEL[ev.severity]} event</strong><span>${fmtTime(ev.startTimestampMs)} · ${fmtDuration(ev.durationMs)}</span><p>${ev.recommendedAction || 'No configured action for this rule'}</p></div>` : '<div class="action-box">No active deviation detected</div>'; }
+function eventDetails(result, selected) { const ev = selected && result.deviationEvents.find(e => e.system === selected.system && e.signal === selected.signal); if (ev) return `<div class="action-box"><strong>${STATUS_LABEL[ev.severity]} event</strong><span>${fmtTime(ev.startTimestampMs)} · ${fmtDuration(ev.durationMs)}</span><p>${ev.recommendedAction || 'No configured action for this rule'}</p></div>`; if (selected && ['needs_validation', 'evaluator_pending'].includes(selected.status)) return `<div class="action-box"><strong>${STATUS_LABEL[selected.status]}</strong><span>Actual ${fmtNum(selected.latestActual)} · Rule row ${selected.ruleRow}</span><p>${selected.latestReason || blockerLabel(selected.blocker)}</p></div>`; return '<div class="action-box">No active deviation detected</div>'; }
 
 export function renderDiagnostics(result) {
   $('diagnosticsPre').textContent = result?.diagnosticsSummary ? JSON.stringify(result.diagnosticsSummary, null, 2) : 'No diagnostics available.';

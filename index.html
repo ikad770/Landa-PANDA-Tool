@@ -87,15 +87,19 @@
       </section>
 
       <section id="readyWorkspace" class="panel ready-card hidden">
-        <p class="brand-eyebrow">Analysis complete</p>
-        <h2>Compact AnalysisResult finalized</h2>
-        <p class="subtitle">Service Radar is ready. Diagnostics remain separate from operational findings.</p>
+        <p id="readyEyebrow" class="brand-eyebrow">Analysis complete</p>
+        <h2 id="readyTitle">Compact AnalysisResult finalized</h2>
+        <p id="readySubtitle" class="subtitle">Service Radar is ready. Diagnostics remain separate from operational findings.</p>
         <div class="ready-stats">
           <div class="metric"><label>Rules evaluated</label><b id="readyRules">0</b></div>
-          <div class="metric"><label>Relevant signals found</label><b id="readySignals">0</b></div>
+          <div class="metric"><label>Signals matched</label><b id="readySignals">0</b></div>
+          <div class="metric"><label>Relevant values found</label><b id="readyRelevantValues">0</b></div>
+          <div class="metric"><label>Fully evaluated values</label><b id="readyFullyEvaluated">0</b></div>
+          <div class="metric"><label>Needs-validation values</label><b id="readyNeedsValidation">0</b></div>
           <div class="metric"><label>Systems evaluated</label><b id="readySystems">0</b></div>
           <div class="metric"><label>Deviations found</label><b id="readyDeviations">0</b></div>
           <div class="metric"><label>Analysis time</label><b id="readyTime">0s</b></div>
+          <div class="metric"><label>Top blocker</label><b id="readyTopBlocker">None</b></div>
         </div>
         <div class="action-row center"><button id="openRadar" class="primary">Open Service Radar</button><button id="viewDiagnosticsReady">Diagnostics</button><button id="resetReady" class="ghost">New Analysis</button></div>
       </section>

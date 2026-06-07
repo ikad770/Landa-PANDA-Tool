@@ -73,15 +73,39 @@ export function selectExpected(rule, stateContext) {
 }
 
 export function computeAllowedRange(rule, expected) {
-  if (rule.criticalLow !== null || rule.criticalHigh !== null) return { low: rule.criticalLow ?? -Infinity, high: rule.criticalHigh ?? Infinity, source: 'critical_threshold' };
-  if (rule.warningLow !== null || rule.warningHigh !== null) return { low: rule.warningLow ?? -Infinity, high: rule.warningHigh ?? Infinity, source: 'warning_threshold' };
   const tol = rule.tolerance;
-  if (!tol) return null;
-  if (tol.mode === 'max') return { low: -Infinity, high: tol.value, source: 'max' };
-  if (tol.mode === 'min') return { low: tol.value, high: Infinity, source: 'min' };
-  if (expected === null || expected === undefined) return null;
-  const delta = tol.mode === 'percent' ? Math.abs(expected) * tol.value / 100 : tol.value;
-  return { low: expected - delta, high: expected + delta, source: tol.mode };
+  let allowedLow = null;
+  let allowedHigh = null;
+  let source = '';
+  if (tol?.mode === 'max') { allowedLow = -Infinity; allowedHigh = tol.value; source = 'max'; }
+  else if (tol?.mode === 'min') { allowedLow = tol.value; allowedHigh = Infinity; source = 'min'; }
+  else if (tol && expected !== null && expected !== undefined) {
+    const delta = tol.mode === 'percent' ? Math.abs(expected) * tol.value / 100 : tol.value;
+    allowedLow = expected - delta;
+    allowedHigh = expected + delta;
+    source = tol.mode;
+  }
+  const warningLow = rule.warningLow ?? null;
+  const warningHigh = rule.warningHigh ?? null;
+  const criticalLow = rule.criticalLow ?? null;
+  const criticalHigh = rule.criticalHigh ?? null;
+  if (allowedLow === null && warningLow !== null) allowedLow = warningLow;
+  if (allowedHigh === null && warningHigh !== null) allowedHigh = warningHigh;
+  if (allowedLow === null && criticalLow !== null) allowedLow = criticalLow;
+  if (allowedHigh === null && criticalHigh !== null) allowedHigh = criticalHigh;
+  if (allowedLow === null && allowedHigh === null && warningLow === null && warningHigh === null && criticalLow === null && criticalHigh === null) return null;
+  return {
+    low: allowedLow ?? -Infinity,
+    high: allowedHigh ?? Infinity,
+    source: source || 'threshold',
+    expectedValue: expected ?? null,
+    allowedLow: allowedLow ?? null,
+    allowedHigh: allowedHigh ?? null,
+    warningLow,
+    warningHigh,
+    criticalLow,
+    criticalHigh
+  };
 }
 
 export function evaluateValue(rule, actual, stateContext) {
@@ -89,21 +113,29 @@ export function evaluateValue(rule, actual, stateContext) {
   if (actual === null || actual === undefined || !Number.isFinite(actual)) return { status: 'needs_validation', blocker: 'no_numeric_value', reason: 'No numeric value' };
   if (PENDING_CHECK_TYPES.has(checkType)) return { status: 'evaluator_pending', blocker: 'unsupported_evaluator', reason: 'Evaluator is pending implementation' };
   if (!SUPPORTED_CHECK_TYPES.has(checkType)) return { status: 'needs_validation', blocker: 'unsupported_evaluator', reason: `Unsupported check type: ${rule.checkType || 'blank'}` };
-  const stateDependent = Object.keys(rule.expectedByState || {}).length > 0;
-  if (stateDependent && stateContext?.status === 'missing') return { status: 'needs_validation', blocker: 'missing_state', reason: 'State context missing' };
+  const hasExplicitThresholds = rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
+  const requiresStateExpected = Object.keys(rule.expectedByState || {}).length > 0 && !hasExplicitThresholds;
+  if (requiresStateExpected && (!stateContext || stateContext.status === 'missing')) return { status: 'needs_validation', blocker: 'missing_state', reason: 'Missing Machine State' };
   const expected = selectExpected(rule, stateContext);
-  if (expected.source === 'missing' && !['above threshold', 'below threshold', 'max', 'min'].includes(checkType)) return { status: 'needs_validation', blocker: 'missing_expected_value', reason: 'Missing expected value for current state' };
+  const hasAnyThreshold = rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
+  if (expected.source === 'missing' && !hasAnyThreshold && !['above threshold', 'below threshold', 'max', 'min'].includes(checkType)) return { status: 'needs_validation', blocker: 'missing_expected_value', reason: 'Missing expected value for current state' };
   const range = computeAllowedRange(rule, expected.value);
-  if (!range && checkType !== 'exact') return { status: 'needs_validation', blocker: 'missing_threshold_or_tolerance', reason: 'Missing threshold or tolerance' };
+  if (!range && checkType !== 'exact') return { status: 'needs_validation', blocker: 'missing_threshold_or_tolerance', reason: 'Rule has no tolerance or thresholds' };
   let low = range?.low ?? expected.value;
   let high = range?.high ?? expected.value;
   if (checkType === 'above threshold' || checkType === 'min') high = Infinity;
   if (checkType === 'below threshold' || checkType === 'max') low = -Infinity;
   if (checkType === 'exact' && expected.value === null) return { status: 'needs_validation', blocker: 'missing_expected_value', reason: 'Missing exact expected value' };
-  const outside = actual < low || actual > high;
-  const critical = outside && (rule.criticalLow !== null || rule.criticalHigh !== null);
+  const criticalLow = range?.criticalLow;
+  const criticalHigh = range?.criticalHigh;
+  const warningLow = range?.warningLow;
+  const warningHigh = range?.warningHigh;
+  const isCritical = (criticalLow !== null && actual < criticalLow) || (criticalHigh !== null && actual > criticalHigh);
+  const isWarning = !isCritical && ((warningLow !== null && actual < warningLow) || (warningHigh !== null && actual > warningHigh));
+  const outsideAllowed = !isCritical && !isWarning && (actual < low || actual > high);
+  const status = isCritical ? 'critical' : isWarning || outsideAllowed ? 'warning' : 'ok';
   const deviation = actual > high ? actual - high : actual < low ? actual - low : 0;
-  return { status: outside ? (critical ? 'critical' : 'warning') : 'ok', expectedValue: expected.value, expectedState: expected.state, expectedLow: low, expectedHigh: high, deviation, reason: outside ? 'Outside allowed range' : 'Within allowed range' };
+  return { status, expectedValue: expected.value, expectedState: expected.state, expectedLow: low, expectedHigh: high, allowedLow: range?.allowedLow ?? low, allowedHigh: range?.allowedHigh ?? high, warningLow, warningHigh, criticalLow, criticalHigh, deviation, reason: status === 'ok' ? 'Within allowed range' : isCritical ? 'Outside critical threshold' : 'Outside warning/allowed range' };
 }
 
 export function validateRule(rule) {

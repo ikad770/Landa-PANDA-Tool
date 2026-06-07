@@ -82,7 +82,7 @@ export const ADAPTERS = {
     getCompositeSignal(row) { return [row.Component, row.SubComponent, row.ParameterType].filter(Boolean).join(' '); },
     getNumericValue(row) { return parseNumber(row.Value); },
     getComponent(row) { return row.Component || ''; },
-    getSubsystem(row, rule) { return row.SubComponent || rule.subsystem; }
+    getSubsystem(row, rule) { return row.Subsystem || rule.subsystem || ''; }
   },
   IPSNotifications: baseAdapter('IPSNotifications', ['logs/LLCINotifications/IPS/'], 'MDY'),
   FECNotifications: baseAdapter('FECNotifications', ['logs/FECNotifications/'], 'ISO'),
