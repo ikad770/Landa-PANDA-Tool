@@ -171,7 +171,7 @@ async function parseMachineStates(files, stateIndex, plan) {
     await parseCsvFile(file, ADAPTERS.MachineStates, (row, rowNo) => {
       analysisAudit.machineStateRows += 1;
       const timestampMs = ADAPTERS.MachineStates.getTimestampMs(row);
-      if (!timestampMs) return recordInvalidTimestamp('MachineStates', file.path, row.Timestamp || row.Time || row.DateTime, rowNo);
+      if (!Number.isFinite(timestampMs)) return recordInvalidTimestamp('MachineStates', file.path, row.Timestamp || row.Time || row.DateTime, rowNo);
       noteMachineStateTimestamp(timestampMs);
       stateIndex.addRow(timestampMs, row);
     });
@@ -243,7 +243,7 @@ function evaluateMatchedRow(rule, adapter, row, sourceFile, rowNo, stateIndex, r
     else if (action === 'set') stats.setRows += 1;
   }
   const timestampMs = adapter.getTimestampMs(row);
-  if (!timestampMs) {
+  if (!Number.isFinite(timestampMs)) {
     runtime.invalidTimestampRows += 1;
     stats.invalidTimestamps += 1;
     const result = { status: 'needs_validation', blocker: 'invalid_timestamp', reason: 'Invalid timestamp', expectedLow: null, expectedHigh: null };
@@ -390,7 +390,7 @@ function finalizeResult(rules, plan, stateIndex, runtimes) {
   const startTimestampMs = timestamps.length ? Math.min(...timestamps) : null;
   const endTimestampMs = timestamps.length ? Math.max(...timestamps) : null;
   const evidence = runtimeList.flatMap(runtime => runtime.evidence).sort((a, b) => b.timestampMs - a.timestampMs).slice(0, 30);
-  const chartSeries = Object.fromEntries(runtimeList.map(runtime => [runtime.ruleId, runtime.chartReservoir.sort((a, b) => a.t - b.t)]));
+  const chartSeries = Object.fromEntries(runtimeList.map(runtime => [runtime.ruleId, runtime.chartReservoir.sort((a, b) => (a.t ?? 0) - (b.t ?? 0))]));
   diagnostics.evaluationBlockers = buildEvaluationBlockers(runtimeList);
   diagnostics.ruleCoverage = buildRuleCoverage(runtimeList);
   diagnostics.overlapByAdapter = buildOverlapDiagnostics();
@@ -423,9 +423,11 @@ function cleanStateSummary(summary) {
 }
 
 function actionForStatus(status, rule) {
-  if (status === 'critical') return rule.criticalAction || rule.recommendedAction || 'No service action configured for this rule.';
-  if (status === 'warning') return rule.warningAction || rule.recommendedAction || 'No service action configured for this rule.';
-  return rule.recommendedAction || '';
+  if (status === 'critical') return rule.criticalAction || rule.recommendedAction || 'Inspect the affected subsystem and correct the measured value before returning to production.';
+  if (status === 'warning') return rule.warningAction || rule.recommendedAction || 'Verify sensor calibration and monitor the parameter against its expected range.';
+  if (status === 'needs_configuration') return 'Review tolerance configuration in the Excel rules.';
+  if (status === 'no_data') return 'Missing signal in source logs; verify log source selection.';
+  return rule.recommendedAction || 'No service action required.';
 }
 
 function highest(counts, fallback) {

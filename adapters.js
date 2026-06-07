@@ -39,23 +39,47 @@ function localEpoch(year, month, day, hour, minute, second, fraction) {
 
 export function parseSlashTimestamp(value, order) {
   if (!['MDY', 'DMY'].includes(order)) return null;
-  const text = cleanTimestampValue(value);
-  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})(?:(?:[:.])(\d{1,6}))?$/);
+  const text = cleanTimestampValue(value).replace(',', '.');
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:(?:[:.])(\d{1,6}))?\s*(AM|PM)?$/i);
   if (!match) return null;
   const first = Number(match[1]);
   const second = Number(match[2]);
+  const year = Number(match[3].length === 2 ? `20${match[3]}` : match[3]);
+  let hour = Number(match[4]);
+  const ampm = String(match[8] || '').toUpperCase();
+  if (ampm === 'PM' && hour < 12) hour += 12;
+  if (ampm === 'AM' && hour === 12) hour = 0;
   const month = order === 'DMY' ? second : first;
   const day = order === 'DMY' ? first : second;
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  return localEpoch(match[3], month, day, match[4], match[5], match[6], match[7]);
+  return localEpoch(year, month, day, hour, match[5], match[6] || '0', match[7]);
 }
 
 export function parseIsoTimestamp(value) {
-  const text = cleanTimestampValue(value);
-  const match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?/);
+  const text = cleanTimestampValue(value).replace(',', '.');
+  const zoned = text.match(/^\d{4}-\d{1,2}-\d{1,2}[ T]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})$/i);
+  if (zoned) {
+    const parsed = Date.parse(text);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  const match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.(\d{1,6}))?/);
   if (!match) return null;
-  const ts = localEpoch(match[1], match[2], match[3], match[4], match[5], match[6], match[7]);
+  const ts = localEpoch(match[1], match[2], match[3], match[4], match[5], match[6] || '0', match[7]);
   return Number.isFinite(ts) ? ts : null;
+}
+
+export function parseFlexibleTimestamp(value, preferredOrder = 'ISO') {
+  const text = cleanTimestampValue(value);
+  if (!text) return null;
+  const iso = parseIsoTimestamp(text);
+  if (iso !== null) return iso;
+  const orders = preferredOrder === 'DMY' ? ['DMY', 'MDY'] : preferredOrder === 'MDY' ? ['MDY', 'DMY'] : ['MDY', 'DMY'];
+  for (const order of orders) {
+    const parsed = parseSlashTimestamp(text, order);
+    if (parsed !== null) return parsed;
+  }
+  const fallback = Date.parse(text);
+  return Number.isFinite(fallback) ? fallback : null;
 }
 
 function normalizeRow(row) {
@@ -77,7 +101,7 @@ function baseAdapter(sourceType, prefixes, order = 'ISO') {
     canHandleContainerPath(path) { return pathStartsWith(path, prefixes) && /\.zip$/i.test(path); },
     cleanText: text => String(text || '').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n'),
     normalizeRow,
-    getTimestampMs(row) { return order === 'DMY' ? parseSlashTimestamp(row.Timestamp || row.Time || row.DateTime, 'DMY') : parseIsoTimestamp(row.Timestamp || row.Time || row.DateTime) ?? parseSlashTimestamp(row.Timestamp || row.Time || row.DateTime, 'MDY'); },
+    getTimestampMs(row) { return parseFlexibleTimestamp(row.Timestamp || row.Time || row.DateTime, order); },
     getPreferredSignal(row) { return row.Signal || row.Parameter || row.Name || row.Message || row.ParameterType || ''; },
     getCompositeSignal(row) { return [row.Component, row.SubComponent, row.ParameterType, row.Signal, row.Parameter].filter(Boolean).join(' '); },
     getNumericValue(row) { return parseNumber(row.Value ?? row.Actual ?? row.NumericValue); },
@@ -91,7 +115,7 @@ export const ADAPTERS = {
     ...baseAdapter('BSSNotifications', ['logs/LLCINotifications/BSS/'], 'MDY'),
     requiredFields: ['Timestamp', 'Action', 'MessageType', 'LLCIKey', 'MachineType', 'Component', 'SubComponent', 'ParameterType', 'Value', 'IsAlert'],
     cleanText: cleanCsvText,
-    getTimestampMs(row) { return parseSlashTimestamp(row.Timestamp, 'MDY'); },
+    getTimestampMs(row) { return parseFlexibleTimestamp(row.Timestamp || row.Time || row.DateTime, 'MDY'); },
     getPreferredSignal(row) { return row.SubComponent || ''; },
     getCompositeSignal(row) { return [row.Component, row.SubComponent, row.ParameterType].filter(Boolean).join(' '); },
     getNumericValue(row) { return parseNumber(row.Value); },

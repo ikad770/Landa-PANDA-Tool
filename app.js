@@ -29,7 +29,7 @@ renderLoginShell($('loginView'));
 renderAnalysisShell($('analysisView'));
 app.session = readStoredSession();
 
-const loginState = { username: '', password: '', touched: { username: false, password: false }, submitted: false, errors: {}, message: '' };
+const loginState = { username: AUTH_CONFIG.username, password: AUTH_CONFIG.password, touched: { username: false, password: false }, submitted: false, errors: {}, message: '' };
 
 function show(view) {
   ['loginView', 'analysisView', 'radarView', 'drilldownView', 'diagnosticsView'].forEach(id => $(id).classList.toggle('hidden', id !== view));

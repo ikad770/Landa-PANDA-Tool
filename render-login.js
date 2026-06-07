@@ -1,3 +1,4 @@
+import { AUTH_CONFIG } from './config.js';
 import { iconSvg, renderModal, renderPandaEyes, renderStatusStrip } from './render.js';
 
 export function renderLoginShell(root) {
@@ -10,12 +11,12 @@ export function renderLoginShell(root) {
         <p class="panel-subtitle">Sign in to open PANDA Service Radar</p>
         <div class="field-group">
           <label for="usernameInput">Username</label>
-          <div class="input-shell">${iconSvg('user')}<input id="usernameInput" name="username" autocomplete="username" spellcheck="false" aria-describedby="usernameError"></div>
+          <div class="input-shell">${iconSvg('user')}<input id="usernameInput" name="username" autocomplete="username" spellcheck="false" aria-describedby="usernameError" value="${AUTH_CONFIG.username}"></div>
           <small id="usernameError" class="validation-message" aria-live="polite"></small>
         </div>
         <div class="field-group">
           <label for="passwordInput">Password</label>
-          <div class="input-shell password-shell">${iconSvg('lock')}<input id="passwordInput" name="password" type="password" autocomplete="current-password" aria-describedby="passwordError"><button id="togglePassword" type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">${iconSvg('eye')}</button></div>
+          <div class="input-shell password-shell">${iconSvg('lock')}<input id="passwordInput" name="password" type="password" autocomplete="current-password" aria-describedby="passwordError" value="${AUTH_CONFIG.password}"><button id="togglePassword" type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">${iconSvg('eye')}</button></div>
           <small id="passwordError" class="validation-message" aria-live="polite"></small>
         </div>
         <div class="login-options"><label class="check-line"><input id="rememberInput" type="checkbox"> Remember me</label><button id="forgotPassword" type="button" class="link-button">Forgot password</button></div>
