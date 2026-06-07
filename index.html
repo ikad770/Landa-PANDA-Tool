@@ -7,136 +7,9 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <main id="loginView" class="view login-view">
-    <section class="login-shell">
-      <article class="login-identity" aria-hidden="true">
-        <div class="panda-field">
-          <div class="panda-eye left"></div>
-          <div class="panda-eye right"></div>
-          <div class="scan-light"></div>
-          <span class="print-dot c"></span><span class="print-dot m"></span><span class="print-dot y"></span><span class="print-dot k"></span><span class="print-dot o"></span><span class="print-dot g"></span><span class="print-dot b"></span>
-        </div>
-        <p class="brand-eyebrow">Landa Service Intelligence</p>
-        <h1>PANDA Tool</h1>
-        <p class="subtitle">State-aware industrial diagnostics for digital press service teams.</p>
-      </article>
-      <form id="loginForm" class="login-card panel" novalidate>
-        <p class="brand-eyebrow">Secure local session</p>
-        <h2>Sign in to Service Radar</h2>
-        <p class="subtitle">Authenticate to open the upload and analysis workspace.</p>
-        <label class="field-label" for="usernameInput">Username</label>
-        <input id="usernameInput" name="username" autocomplete="username" placeholder="service.engineer" required>
-        <small id="usernameError" class="validation-message" aria-live="polite"></small>
-        <label class="field-label" for="passwordInput">Password</label>
-        <input id="passwordInput" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
-        <small id="passwordError" class="validation-message" aria-live="polite"></small>
-        <div class="login-options"><label><input id="rememberInput" type="checkbox"> Remember me</label><button id="forgotPassword" type="button" class="link-button">Forgot Password</button></div>
-        <button id="signInButton" class="primary login-submit" type="submit"><span class="button-label">Sign In</span><span class="button-loading">Authenticating…</span></button>
-        <small id="loginMessage" class="validation-message form-message" aria-live="polite"></small>
-      </form>
-    </section>
-  </main>
+  <main id="loginView" class="view login-view"></main>
 
-  <main id="analysisView" class="view hidden">
-    <div class="shell">
-      <header class="topbar">
-        <div class="brand-block">
-          <p class="brand-eyebrow">Landa / PANDA Tool</p>
-          <h1>Analysis Workspace</h1>
-          <p class="subtitle">Rule-driven autocollect evaluation. ZIP, CSV, and Excel work runs in a dedicated worker and returns a compact AnalysisResult.</p>
-        </div>
-        <button id="diagnosticsFromAnalysis" class="ghost hidden">Diagnostics</button>
-      </header>
-
-      <section id="uploadWorkspace" class="workspace-hero">
-        <article class="panel hero-copy">
-          <p class="brand-eyebrow">Workflow</p>
-          <h2>Upload. Validate. Evaluate state-aware service health.</h2>
-          <p class="subtitle">The analysis workspace validates the archive, indexes opc.zip, discovers required sources, parses MachineStates, evaluates rules against state-dependent expected values, and prepares the Service Radar.</p>
-          <ol class="flow-list">
-            <li>Rules Excel → analysis plan</li>
-            <li>Root ZIP → opc.zip → required folders only</li>
-            <li>MachineStates → state index</li>
-            <li>Relevant sources → immediate evaluation</li>
-            <li>Compact result → Service Radar</li>
-          </ol>
-        </article>
-        <article class="panel pad">
-          <div class="upload-grid">
-            <label class="upload-card">
-              <input id="autocollectInput" type="file" accept=".zip,application/zip">
-              <div class="upload-icon">ZIP</div>
-              <h3>Autocollect ZIP</h3>
-              <strong class="select-copy">Select ZIP</strong>
-              <p class="muted">Root archive containing nested opc.zip.</p>
-              <span id="autocollectName" class="file-name tiny">No file selected</span>
-            </label>
-            <label class="upload-card">
-              <input id="rulesInput" type="file" accept=".xlsx,.xls,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
-              <div class="upload-icon">XLS</div>
-              <h3>PANDA Rules Excel</h3>
-              <strong class="select-copy">Select Rules</strong>
-              <p class="muted">Sheet: PANDA Rules Template.</p>
-              <span id="rulesName" class="file-name tiny">No file selected</span>
-            </label>
-          </div>
-          <div class="action-row">
-            <label class="auto-open-toggle"><input id="autoOpenToggle" type="checkbox" checked> Open Service Radar when complete</label>
-            <button id="startAnalysis" class="primary">Analyze</button><button id="resetUpload" class="ghost" type="button">Start New Analysis</button>
-          </div>
-        </article>
-      </section>
-
-      <section id="processingWorkspace" class="workspace-hero hidden">
-        <article class="panel pad">
-          <div class="progress-ring" id="progressRing" style="--p:0%"><strong id="progressPercent">0%</strong></div>
-          <h2 id="processingHeadline">Preparing analysis</h2>
-          <p id="processingSubhead" class="subtitle">Waiting for worker progress.</p>
-          <div class="processing-stats progress-grid">
-            <div class="metric"><label>Current source</label><b id="currentSource">—</b></div>
-            <div class="metric"><label>Current file</label><b id="currentFile">—</b></div>
-            <div class="metric"><label>Files completed</label><b id="filesCount">0 / 0</b></div>
-            <div class="metric"><label>Matched values</label><b id="relevantValues">0</b></div>
-            <div class="metric"><label>Signals matched</label><b id="signalsMatched">0</b></div>
-            <div class="metric"><label>Elapsed</label><b id="elapsedTime">0s</b></div>
-            <div class="metric"><label>Estimated remaining</label><b id="remainingTime">—</b></div>
-            <div class="metric"><label>Warnings / Errors</label><b id="warningErrorCount">0 / 0</b></div>
-          </div>
-          <div class="action-row margin-top"><span class="tiny">Progress is weighted by pipeline stage and estimated uncompressed bytes.</span><button id="cancelAnalysis" class="danger">Cancel</button></div>
-        </article>
-        <article class="panel pad">
-          <h2>Weighted processing stages</h2>
-          <div id="processingSequence" class="sequence"></div>
-        </article>
-      </section>
-
-
-      <section id="failedWorkspace" class="panel ready-card hidden">
-        <p class="brand-eyebrow">Analysis blocked</p>
-        <h2 id="failedReason">Analysis could not produce a valid result.</h2>
-        <p class="subtitle">The Service Radar remains disabled until the data path produces evaluated points. Open Diagnostics for the internal audit.</p>
-        <div class="action-row center"><button id="viewDiagnosticsFailed">Diagnostics</button><button id="resetFailed" class="ghost">New Analysis</button></div>
-      </section>
-
-      <section id="readyWorkspace" class="panel ready-card hidden">
-        <p id="readyEyebrow" class="brand-eyebrow">Analysis complete</p>
-        <h2 id="readyTitle">Compact AnalysisResult finalized</h2>
-        <p id="readySubtitle" class="subtitle">Service Radar is ready. Diagnostics remain separate from operational findings.</p>
-        <div class="ready-stats">
-          <div class="metric"><label>Rules fully evaluated</label><b id="readyRules">0</b></div>
-          <div class="metric"><label>Signals matched</label><b id="readySignals">0</b></div>
-          <div class="metric"><label>Systems at risk</label><b id="readyRelevantValues">0</b></div>
-          <div class="metric"><label>Systems evaluated</label><b id="readyFullyEvaluated">0</b></div>
-          <div class="metric"><label>Validation issues</label><b id="readyNeedsValidation">0</b></div>
-          <div class="metric"><label>Configuration issues</label><b id="readySystems">0</b></div>
-          <div class="metric"><label>Operational findings</label><b id="readyDeviations">0</b></div>
-          <div class="metric"><label>Analysis time</label><b id="readyTime">0s</b></div>
-          <div class="metric"><label>Top blocker</label><b id="readyTopBlocker">None</b></div>
-        </div>
-        <div class="action-row center"><button id="openRadar" class="primary">Open Service Radar</button><button id="viewDiagnosticsReady">Diagnostics</button><button id="resetReady" class="ghost">New Analysis</button></div>
-      </section>
-    </div>
-  </main>
+  <main id="analysisView" class="view analysis-view hidden"></main>
 
   <main id="radarView" class="view hidden">
     <div class="shell wide">
@@ -175,6 +48,7 @@
       <section class="panel pad"><pre id="diagnosticsPre">No diagnostics available.</pre></section>
     </div>
   </main>
+
 
   <script type="module" src="./app.js"></script>
 </body>

@@ -1,5 +1,7 @@
-import { APP_STAGES } from './config.js';
-import { createLocalSession, validateLoginFields } from './auth.js';
+import { APP_STAGES, AUTH_CONFIG } from './config.js';
+import { authenticateLocalPrototype, clearSession, createLocalSession, readStoredSession, storeSession, validateLoginFields } from './auth.js';
+import { renderLoginShell, renderLoginValidation, setAccessGranted, setLoginAuthenticating } from './render-login.js';
+import { renderAnalysisShell, renderUserStages, updateProgressPresentation, updateUploadValidation } from './render-analysis.js';
 import { getServiceDecision } from './render.js';
 import { chooseInitialSystem, renderDiagnostics, renderServiceRadar, validateAnalysisResult } from './render-radar.js';
 import { renderDrilldown } from './render-drilldown.js';
@@ -23,6 +25,12 @@ const app = {
   authLoading: false
 };
 
+renderLoginShell($('loginView'));
+renderAnalysisShell($('analysisView'));
+app.session = readStoredSession();
+
+const loginState = { username: '', password: '', touched: { username: false, password: false }, submitted: false, errors: {}, message: '' };
+
 function show(view) {
   ['loginView', 'analysisView', 'radarView', 'drilldownView', 'diagnosticsView'].forEach(id => $(id).classList.toggle('hidden', id !== view));
   app.lastView = view === 'diagnosticsView' ? app.lastView : view.replace('View', '');
@@ -31,40 +39,60 @@ function show(view) {
 
 function setLoginLoading(loading) {
   app.authLoading = loading;
-  ['usernameInput', 'passwordInput', 'rememberInput', 'signInButton'].forEach(id => { if ($(id)) $(id).disabled = loading; });
-  $('loginForm').classList.toggle('auth-loading', loading);
+  setLoginAuthenticating(loading);
 }
 
-function renderLoginErrors(errors = {}, message = '') {
-  $('usernameError').textContent = errors.username || '';
-  $('passwordError').textContent = errors.password || '';
-  $('loginMessage').textContent = message || '';
-  $('usernameInput').classList.toggle('invalid', !!errors.username);
-  $('passwordInput').classList.toggle('invalid', !!errors.password);
+function validateLoginState() {
+  const validation = validateLoginFields({ username: loginState.username, password: loginState.password });
+  loginState.errors = validation.errors;
+  return validation;
+}
+
+function syncLoginValidation(message = loginState.message) {
+  validateLoginState();
+  renderLoginValidation({ errors: loginState.errors, message, touched: loginState.touched, submitted: loginState.submitted });
 }
 
 function submitLogin(event) {
   event.preventDefault();
   if (app.authLoading) return;
-  const validation = validateLoginFields({ username: $('usernameInput').value, password: $('passwordInput').value });
-  if (!validation.valid) { renderLoginErrors(validation.errors); return; }
-  renderLoginErrors({}, '');
+  loginState.submitted = true;
+  loginState.message = '';
+  const result = authenticateLocalPrototype({ username: loginState.username, password: loginState.password });
+  loginState.errors = result.errors || {};
+  if (!result.valid) { renderLoginValidation({ errors: loginState.errors, touched: loginState.touched, submitted: true }); return; }
+  if (!result.ok) { renderLoginValidation({ errors: {}, message: 'Invalid username or password.', touched: loginState.touched, submitted: true }); return; }
+  renderLoginValidation({ errors: {}, message: '', touched: loginState.touched, submitted: true });
   setLoginLoading(true);
   window.setTimeout(() => {
-    app.session = createLocalSession(validation.username);
+    app.session = createLocalSession(result.username);
+    storeSession(app.session);
     const userPill = document.querySelector('.user-pill');
     if (userPill) userPill.textContent = app.session.username;
-    setLoginLoading(false);
-    showAnalysisWorkspace();
-  }, 450);
+    setAccessGranted(true);
+    window.setTimeout(() => {
+      setLoginLoading(false);
+      setAccessGranted(false);
+      showAnalysisWorkspace();
+    }, 700);
+  }, 180);
 }
 
 function forgotPassword() {
-  renderLoginErrors({}, 'Contact your PANDA service administrator to reset local access.');
+  document.getElementById('forgotModal')?.classList.remove('hidden');
+}
+
+function logout() {
+  clearSession();
+  app.session = null;
+  resetAnalysis();
+  show('loginView');
 }
 
 function renderAnalysisWorkspace() {
-  $('startAnalysis').disabled = !(app.autocollectFile && app.rulesFile && !app.worker);
+  const ready = !!(app.autocollectFile && app.rulesFile && !app.worker);
+  $('startAnalysis').disabled = !ready;
+  updateUploadValidation(!!(app.autocollectFile && app.rulesFile));
   $('diagnosticsFromAnalysis').classList.toggle('hidden', !app.analysisResult);
 }
 
@@ -133,10 +161,7 @@ function failAnalysis(message) {
 }
 
 function renderProgress(progress) {
-  $('progressRing').style.setProperty('--p', `${progress.percent}%`);
-  $('progressPercent').textContent = `${progress.percent}%`;
-  $('processingHeadline').textContent = APP_STAGES.find(([key]) => key === progress.stage)?.[1] || 'Processing';
-  $('processingSubhead').textContent = progress.message || 'Processing';
+  updateProgressPresentation(progress);
   $('currentSource').textContent = progress.currentSource || '—';
   const currentFilePath = progress.currentFile || '';
   $('currentFile').textContent = currentFilePath ? currentFilePath.split(/[\\/!]+/).filter(Boolean).at(-1) : '—';
@@ -151,13 +176,7 @@ function renderProgress(progress) {
 }
 
 function renderSequence(activeStage) {
-  let activeSeen = false;
-  $('processingSequence').innerHTML = APP_STAGES.map(([key, label, weight]) => {
-    const isActive = key === activeStage;
-    const done = !activeSeen && !isActive;
-    if (isActive) activeSeen = true;
-    return `<div class="sequence-step ${isActive ? 'active' : done ? 'done' : ''}"><span class="step-dot">${done ? '✓' : weight}</span><span>${label}</span><small>${weight}%</small></div>`;
-  }).join('');
+  updateProgressPresentation({ stage: activeStage, percent: app.progress?.percent || 0 });
 }
 
 function renderReady() {
@@ -194,6 +213,13 @@ function resetAnalysis() { cancelAnalysis(); app.autocollectFile = null; app.rul
 
 $('loginForm').addEventListener('submit', submitLogin);
 $('forgotPassword').onclick = forgotPassword;
+$('usernameInput').addEventListener('input', e => { loginState.username = e.target.value; loginState.message = ''; syncLoginValidation(''); });
+$('passwordInput').addEventListener('input', e => { loginState.password = e.target.value; loginState.message = ''; syncLoginValidation(''); });
+$('usernameInput').addEventListener('blur', () => { loginState.touched.username = true; syncLoginValidation(''); });
+$('passwordInput').addEventListener('blur', () => { loginState.touched.password = true; syncLoginValidation(''); });
+$('togglePassword').onclick = () => { const input = $('passwordInput'); const showing = input.type === 'text'; input.type = showing ? 'password' : 'text'; $('togglePassword').setAttribute('aria-pressed', String(!showing)); $('togglePassword').setAttribute('aria-label', showing ? 'Show password' : 'Hide password'); };
+document.querySelectorAll('[data-close-modal]').forEach(button => button.addEventListener('click', () => button.closest('.modal-backdrop')?.classList.add('hidden')));
+$('logoutButton').onclick = logout;
 
 $('autocollectInput').addEventListener('change', e => { app.autocollectFile = e.target.files[0] || null; $('autocollectName').textContent = app.autocollectFile?.name || 'No file selected'; renderAnalysisWorkspace(); });
 $('rulesInput').addEventListener('change', e => { app.rulesFile = e.target.files[0] || null; $('rulesName').textContent = app.rulesFile?.name || 'No file selected'; renderAnalysisWorkspace(); });
@@ -216,5 +242,6 @@ $('showIssues').onclick = () => { app.systemFilter = 'issues'; $('showIssues').s
 $('showAllSystems').onclick = () => { app.systemFilter = 'all'; $('showIssues').setAttribute('aria-pressed', 'false'); $('showAllSystems').setAttribute('aria-pressed', 'true'); renderServiceRadar(app, { selectEvent, openDrilldown }); };
 $('closeDiagnostics').onclick = () => app.lastView === 'radar' ? showServiceRadar() : app.lastView === 'drilldown' ? showDrilldown() : showAnalysisWorkspace();
 
-renderLoginErrors();
+syncLoginValidation('');
 renderAnalysisWorkspace();
+if (app.session) { const userPill = document.querySelector('.user-pill'); if (userPill) userPill.textContent = app.session.username || AUTH_CONFIG.username; showAnalysisWorkspace(); } else { show('loginView'); }

@@ -32,6 +32,10 @@ Then open:
 http://localhost:8080/
 ```
 
+## Prototype authentication note
+
+The local Login screen uses a client-side prototype credential only so the static application can demonstrate session flow without a backend. Production authentication must use a secure backend identity service, and credentials must never be exposed in client-side JavaScript.
+
 ## Required inputs
 
 - **Autocollect ZIP**: root archive containing a nested `opc.zip`.

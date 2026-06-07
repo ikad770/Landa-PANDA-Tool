@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { validateLoginFields } from '../auth.js';
+import { authenticateLocalPrototype, clearSession, createLocalSession, readStoredSession, storeSession, validateLoginFields } from '../auth.js';
+import { AUTH_CONFIG, USER_FACING_STAGES } from '../config.js';
 import { ADAPTERS, matchRuleForRow, parseSlashTimestamp } from '../adapters.js';
 import { evaluateValue, inferCheckType, normalizeState, normalizeToken, parseTolerance, summarizeStateComparisons } from '../evaluation.js';
 import { createStateIndex } from '../machine-states.js';
@@ -47,7 +48,21 @@ assert.equal(new Date(parseSlashTimestamp('12/31/2025 23:59:59:999999', 'MDY')).
 assert.equal(parseSlashTimestamp('31/12/2025 23:59:59.999', 'MDY'), null, 'Invalid MDY timestamp rejected without Date.parse fallback');
 assert.equal(new Date(parseSlashTimestamp('03/12/2026 15:51:40:441145\\n  ', 'MDY')).getMilliseconds(), 441, 'Escaped newline timestamp is cleaned before manual parsing');
 assert.equal(validateLoginFields({ username: '', password: '' }).valid, false, 'Login validation rejects missing credentials');
-assert.equal(validateLoginFields({ username: 'se', password: '1234' }).valid, true, 'Login validation accepts local service credentials');
+assert.equal(validateLoginFields({ username: 'Landa', password: 'Landa123456' }).valid, true, 'Login validation accepts populated local service credentials');
+assert.equal(validateLoginFields({ username: '', password: 'Landa123456' }).errors.username, 'Username is required.', 'empty username reports required error');
+assert.equal(validateLoginFields({ username: 'Landa', password: '' }).errors.password, 'Password is required.', 'empty password reports required error');
+assert.equal(authenticateLocalPrototype({ username: 'Landa', password: 'Landa123456' }).ok, true, 'correct credentials authenticate');
+assert.equal(authenticateLocalPrototype({ username: 'landa', password: 'Landa123456' }).message, 'Invalid username or password.', 'incorrect username fails concisely');
+assert.equal(authenticateLocalPrototype({ username: 'Landa', password: 'landa123456' }).message, 'Invalid username or password.', 'incorrect password case fails concisely');
+assert.equal(authenticateLocalPrototype({ username: 'Landa', password: 'wrongpassword' }).ok, false, 'wrong password fails');
+const memoryStorage = new Map();
+const storage = { getItem: key => memoryStorage.get(key) || null, setItem: (key, value) => memoryStorage.set(key, value), removeItem: key => memoryStorage.delete(key) };
+const session = createLocalSession(AUTH_CONFIG.username);
+storeSession(session, storage);
+assert.equal(readStoredSession(storage).username, 'Landa', 'successful session persistence reads stored user');
+clearSession(storage);
+assert.equal(readStoredSession(storage), null, 'logout clears stored session');
+assert.equal(USER_FACING_STAGES.length, 5, 'stage list has exactly five user-facing stages');
 
 const needsValidation = validateAnalysisResult(baseResult());
 assert.equal(needsValidation.valid, true, 'Needs Validation result should validate');
@@ -223,5 +238,15 @@ assert.match(css, /--accent-cyan:#39c7f3/, 'Cyan accent mapping exists');
 assert.match(css, /--status-ok:#43d17d/, 'OK green mapping exists');
 assert.match(css, /--status-warning:#f4c542/, 'Warning amber mapping exists');
 assert.match(css, /--status-critical:#ff5f68/, 'Critical red mapping exists');
+
+const indexHtml = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+assert.match(indexHtml, /id="loginView"/, 'login DOM root exists');
+assert.match(indexHtml, /id="analysisView"/, 'analysis DOM root exists');
+assert.match(css, /overflow-x:hidden/, 'document width constrained to viewport width');
+assert.match(css, /grid-template-columns:minmax\(0,1\.8fr\) minmax\(360px,\.8fr\)/, 'login panel and visual stage desktop grid is configured');
+assert.match(css, /prefers-reduced-motion:\s*reduce/, 'reduced-motion media query is supported');
+assert.match(css, /\.password-toggle/, 'password toggle styling exists');
+assert.match(css, /\.progress-core strong/, 'progress percentage has centered visual styling');
+assert.match(css, /\.stage-list/, 'progress stage list styling exists');
 
 console.log('module tests passed');

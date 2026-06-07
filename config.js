@@ -1,3 +1,35 @@
+export const AUTH_CONFIG = {
+  username: "Landa",
+  password: "Landa123456",
+  sessionKey: "panda_authenticated"
+};
+
+export const CMYKOGB_TOKENS = [
+  ['C', 'cyan', '#20d7ff'],
+  ['M', 'magenta', '#ff4fb3'],
+  ['Y', 'yellow', '#f4d94d'],
+  ['K', 'black', '#0b1118'],
+  ['O', 'orange', '#ff8a3d'],
+  ['G', 'green', '#43d17d'],
+  ['B', 'blue', '#4a8dff']
+];
+
+export const USER_FACING_STAGES = [
+  { key: 'upload', label: 'Upload', weight: 15, stages: ['rules_loading', 'archive_validation'] },
+  { key: 'parse', label: 'Parse', weight: 30, stages: ['opc_indexing', 'source_discovery', 'machine_states', 'source_parsing'] },
+  { key: 'analyze', label: 'Analyze', weight: 25, stages: ['evaluation'] },
+  { key: 'validate', label: 'Validate', weight: 15, stages: ['timeline_finalization'] },
+  { key: 'report', label: 'Report', weight: 15, stages: ['result_validation'] }
+];
+
+export const PROGRESS_MESSAGES = {
+  upload: 'Receiving archive and rules workbook…',
+  parse: 'Scanning systems, parameters and events…',
+  analyze: 'Evaluating state-aware rule thresholds…',
+  validate: 'Validating findings and diagnostics…',
+  report: 'Preparing Service Radar output…'
+};
+
 export const MACHINE_IMAGE_SRC = './assets/landa-machine.png';
 
 export const APP_STAGES = [
