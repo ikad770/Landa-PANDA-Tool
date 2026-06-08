@@ -5,7 +5,7 @@ import { ADAPTERS, getAdapter, getRuleMatchesForRow } from './adapters.js';
 import { APP_STAGES, MAX_CHART_POINTS_PER_RULE, MAX_DEVIATION_EVENTS_PER_RULE, MAX_EVIDENCE_PREVIEW_PER_RULE, MIN_DEVIATION_GAP_MS, REQUIRED_SOURCE_PATHS, STATUS_PRIORITY, SYSTEMS } from './config.js';
 import { createStateIndex } from './machine-states.js';
 import { buildAnalysisPlan, parseRulesWorkbook, serializePlan } from './rules.js';
-import { computeAllowedRange, evaluateValue, formatRange, normalizeState, normalizeText } from './evaluation.js';
+import { analyzeParameter, evaluateValue, formatRange, normalizeText } from './evaluation.js';
 import { buildServiceDecision } from './service-decision.js';
 
 let cancelled = false;
@@ -93,8 +93,7 @@ async function runAnalysis(autocollectFile, rulesFile) {
   await parseRequiredSources(archiveIndex.sourceFilesByAdapter, plan, stateIndex, runtimes);
 
   setStage('evaluation', 0.8, 'Closing consolidated deviation events');
-  for (const runtime of runtimes.values()) closeDeviation(runtime);
-  analysisAudit.deviationEvents = [...runtimes.values()].reduce((sum, runtime) => sum + runtime.deviationEvents.length, 0);
+  analysisAudit.deviationEvents = [...runtimes.values()].reduce((sum, runtime) => sum + analyzeParameter(runtime.rule, runtime.pointInputs).deviationEventCount, 0);
   setStage('evaluation', 1, 'Evaluation complete');
 
   setStage('timeline_finalization', 0.5, 'Building compact charts and timelines');
@@ -224,7 +223,7 @@ async function parseCsvFile(file, adapter, onRow) {
 }
 
 function createRuntime(rule) {
-  return { rule, ruleId: rule.id, matchedRows: 0, numericRows: 0, validTimestampRows: 0, invalidTimestampRows: 0, sourceFiles: new Set(), rowsScanned: 0, matchReasons: {}, unmatchedExamples: [], duplicateMatches: [], conflictingRules: [], classifiedRows: 0, fullyEvaluatedRows: 0, needsValidationRows: 0, needsConfigurationRows: 0, classifiedPoints: 0, fullyEvaluatedPoints: 0, blockedPoints: 0, evaluatedCounts: {}, blockers: { invalid_timestamp: 0, no_numeric_value: 0, missing_state: 0, unsupported_state: 0, missing_expected_for_state: 0, missing_expected_value: 0, missing_threshold_or_tolerance: 0, unsupported_evaluator: 0, evaluator_failed_despite_complete_inputs: 0, internal_evaluation_error: 0 }, firstRawTimestamp: '', firstTimestampMs: Infinity, lastTimestampMs: -Infinity, latestPoint: null, latestActual: null, minActual: Infinity, maxActual: -Infinity, sumActual: 0, samples: [], chartReservoir: [], evidence: [], evidenceSamples: [], stateCoverage: {}, stateSummaries: new Map(), activeDeviation: null, deviationEvents: [], lastPointByState: new Map(), observedIntervals: [] };
+  return { rule, ruleId: rule.id, matchedRows: 0, numericRows: 0, validTimestampRows: 0, invalidTimestampRows: 0, sourceFiles: new Set(), rowsScanned: 0, matchReasons: {}, unmatchedExamples: [], duplicateMatches: [], conflictingRules: [], classifiedRows: 0, fullyEvaluatedRows: 0, needsValidationRows: 0, needsConfigurationRows: 0, classifiedPoints: 0, fullyEvaluatedPoints: 0, blockedPoints: 0, evaluatedCounts: {}, blockers: { invalid_timestamp: 0, no_numeric_value: 0, missing_state: 0, unsupported_state: 0, missing_expected_for_state: 0, missing_expected_value: 0, missing_threshold_or_tolerance: 0, unsupported_or_missing_check_type: 0, invalid_duration_configuration: 0, internal_evaluation_error: 0 }, firstRawTimestamp: '', firstTimestampMs: Number.POSITIVE_INFINITY, lastTimestampMs: Number.NEGATIVE_INFINITY, latestPoint: null, latestActual: null, minActual: Number.POSITIVE_INFINITY, maxActual: Number.NEGATIVE_INFINITY, sumActual: 0, pointInputs: [], chartReservoir: [], evidence: [], stateCoverage: {} };
 }
 
 function evaluateMatchedRow(rule, adapter, row, sourceFile, rowNo, stateIndex, runtime, matchReason = 'unmatched') {
@@ -257,6 +256,7 @@ function evaluateMatchedRow(rule, adapter, row, sourceFile, rowNo, stateIndex, r
     recordInvalidTimestamp(rule.sourceType, sourceFile.path, timestampInfo.rawTimestamp || rawTimestamp, rowNo, timestampInfo.timestampFailureReason);
     const point = { t: null, timestampMs: null, rawTimestamp: timestampInfo.rawTimestamp || rawTimestamp, timestampFormat: timestampInfo.timestampFormat || '', timestampValid: false, timestampFailureReason: timestampInfo.timestampFailureReason || 'invalid_timestamp', actual, rawValue: row.Value ?? row.Actual ?? row.NumericValue ?? '', expectedLow: null, expectedHigh: null, status: result.status, blocker: result.blocker, reason: result.reason, machineState: null, systemState: null, stateContextStatus: 'missing', component: adapter.getComponent(row) || rule.component, subsystem: adapter.getSubsystem(row, rule), signal: rule.signal, source: sourceFile.sourceType, file: sourceFile.path, ruleRow: rule.row, row: rowNo, timestampStatus: 'invalid' };
     updateActualAggregates(runtime, actual);
+    runtime.pointInputs.push(point);
     runtime.latestPoint = point;
     addSample(runtime.chartReservoir, point, MAX_CHART_POINTS_PER_RULE);
     addEvidence(runtime, point, rule, sourceFile, result);
@@ -273,113 +273,10 @@ function evaluateMatchedRow(rule, adapter, row, sourceFile, rowNo, stateIndex, r
   const point = { t: timestampMs, timestampMs, rawTimestamp: timestampInfo.rawTimestamp || rawTimestamp, timestampFormat: timestampInfo.timestampFormat || '', timestampValid: true, timestampFailureReason: '', actual, rawValue: row.Value ?? row.Actual ?? row.NumericValue ?? '', expected: result.expectedValue, expectedValue: result.expectedValue, expectedState: result.expectedState, expectedLow: result.expectedLow, expectedHigh: result.expectedHigh, allowedLow: result.allowedLow, allowedHigh: result.allowedHigh, warningLow: result.warningLow, warningHigh: result.warningHigh, criticalLow: result.criticalLow, criticalHigh: result.criticalHigh, status: result.status, deviation: result.deviation, deviationDirection: result.deviationDirection, distanceFromNearestLimit: result.distanceFromNearestLimit, blocker: result.blocker || null, reason: result.reason || '', machineState: stateContext.machineState, systemState: stateContext.systemState, stateContextStatus: stateContext.stateMatchStatus || stateContext.status, matchedStateTimestamp: stateContext.matchedStateTimestamp ?? null, stateAgeMs: stateContext.stateAgeMs ?? null, component: adapter.getComponent(row) || rule.component, subsystem: adapter.getSubsystem(row, rule), signal: rule.signal, source: sourceFile.sourceType, sourceFile: sourceFile.path, file: sourceFile.path, ruleRow: rule.row, row: rowNo, timestampStatus: 'valid' };
   runtime.latestPoint = point;
   count(runtime.stateCoverage, stateContext.systemState || stateContext.machineState || 'unknown');
-  updateStateSummary(runtime, point, result);
+  runtime.pointInputs.push(point);
   assertRealClassification(runtime, rule, result, point);
   addSample(runtime.chartReservoir, point, MAX_CHART_POINTS_PER_RULE);
   addEvidence(runtime, point, rule, sourceFile, result);
-  updateDeviation(runtime, point, rule, result);
-}
-
-function updateStateSummary(runtime, point, result) {
-  if (!Number.isFinite(point.actual)) return;
-  const state = result.expectedState || normalizeState(point.systemState || point.machineState) || (result.blocker === 'unsupported_state' ? 'Other / Unsupported' : 'Unsupported');
-  const previous = runtime.lastPointByState.get(state);
-  const intervalMs = previous && Number.isFinite(point.t) && Number.isFinite(previous.t) ? cappedSampleInterval(runtime, point.t - previous.t) : 0;
-  const key = state || 'Unsupported';
-  const summary = runtime.stateSummaries.get(key) || {
-    parameterId: runtime.ruleId,
-    parameterName: runtime.rule.parameterName || runtime.rule.signal,
-    system: runtime.rule.system,
-    subsystem: runtime.rule.subsystem,
-    component: point.component || runtime.rule.component,
-    unit: runtime.rule.unit || '',
-    state: key,
-    timeInStateMs: 0,
-    sampleCount: 0,
-    expected: result.expectedValue ?? null,
-    allowedLow: result.allowedLow ?? result.expectedLow ?? null,
-    allowedHigh: result.allowedHigh ?? result.expectedHigh ?? null,
-    averageActual: null,
-    minimumActual: Infinity,
-    maximumActual: -Infinity,
-    latestActual: null,
-    okPointCount: 0,
-    warningPointCount: 0,
-    criticalPointCount: 0,
-    validationPointCount: 0,
-    configurationPointCount: 0,
-    outOfRangePointCount: 0,
-    outOfRangePercent: 0,
-    outOfRangeDurationMs: 0,
-    longestDeviationMs: 0,
-    firstDeviation: null,
-    lastDeviation: null,
-    status: 'no_data',
-    blocker: null,
-    ruleRow: runtime.rule.row,
-    sumActual: 0,
-    operationalDurationMs: 0,
-    activeDeviationStartMs: null,
-    activeDeviationDurationMs: 0,
-    firstTimestampMs: point.t,
-    lastTimestampMs: point.t
-  };
-  summary.expected = result.expectedValue ?? summary.expected;
-  summary.allowedLow = result.allowedLow ?? result.expectedLow ?? summary.allowedLow;
-  summary.allowedHigh = result.allowedHigh ?? result.expectedHigh ?? summary.allowedHigh;
-  summary.latestActual = point.actual;
-  summary.sampleCount += 1;
-  summary.sumActual += point.actual;
-  summary.averageActual = summary.sumActual / summary.sampleCount;
-  summary.minimumActual = Math.min(summary.minimumActual, point.actual);
-  summary.maximumActual = Math.max(summary.maximumActual, point.actual);
-  summary.firstTimestampMs = Math.min(summary.firstTimestampMs, point.t);
-  summary.lastTimestampMs = Math.max(summary.lastTimestampMs, point.t);
-  summary.timeInStateMs += intervalMs;
-  if (['ok', 'warning', 'critical'].includes(result.status)) summary.operationalDurationMs += intervalMs;
-  if (result.status === 'ok') summary.okPointCount += 1;
-  else if (result.status === 'warning') { summary.warningPointCount += 1; summary.outOfRangePointCount += 1; summary.outOfRangeDurationMs += intervalMs; }
-  else if (result.status === 'critical') { summary.criticalPointCount += 1; summary.outOfRangePointCount += 1; summary.outOfRangeDurationMs += intervalMs; }
-  else if (result.status === 'needs_validation') summary.validationPointCount += 1;
-  else if (result.status === 'needs_configuration') summary.configurationPointCount += 1;
-  if (['warning', 'critical'].includes(result.status)) {
-    summary.firstDeviation = summary.firstDeviation ?? point.t;
-    summary.lastDeviation = point.t;
-    summary.activeDeviationStartMs = summary.activeDeviationStartMs ?? point.t;
-    summary.activeDeviationDurationMs += intervalMs;
-    summary.longestDeviationMs = Math.max(summary.longestDeviationMs, summary.activeDeviationDurationMs);
-  } else {
-    summary.activeDeviationStartMs = null;
-    summary.activeDeviationDurationMs = 0;
-  }
-  if (result.blocker) summary.blocker = result.blocker;
-  summary.outOfRangePercent = summary.operationalDurationMs ? (summary.outOfRangeDurationMs / summary.operationalDurationMs) * 100 : 0;
-  summary.status = stateSummaryStatus(summary);
-  runtime.stateSummaries.set(key, summary);
-  runtime.lastPointByState.set(state, { t: point.t, status: result.status });
-}
-
-function cappedSampleInterval(runtime, intervalMs) {
-  if (!Number.isFinite(intervalMs) || intervalMs <= 0) return 0;
-  runtime.observedIntervals.push(intervalMs);
-  if (runtime.observedIntervals.length > 200) runtime.observedIntervals.shift();
-  const normal = median(runtime.observedIntervals) || MIN_DEVIATION_GAP_MS;
-  return Math.min(intervalMs, Math.max(MIN_DEVIATION_GAP_MS, normal * 3));
-}
-
-function median(values) {
-  const nums = values.filter(value => Number.isFinite(value) && value > 0).slice().sort((a, b) => a - b);
-  if (!nums.length) return 0;
-  return nums[Math.floor(nums.length / 2)];
-}
-
-function stateSummaryStatus(summary) {
-  if (summary.criticalPointCount) return 'critical';
-  if (summary.warningPointCount) return 'warning';
-  if (summary.okPointCount) return 'ok';
-  if (summary.validationPointCount) return 'needs_validation';
-  if (summary.configurationPointCount) return 'needs_configuration';
-  return 'no_data';
 }
 
 function assertRealClassification(runtime, rule, result, point) {
@@ -420,39 +317,6 @@ function recordClassification(runtime, result) {
   if (result.blocker) count(runtime.blockers, result.blocker);
 }
 
-function updateDeviation(runtime, point, rule, result) {
-  if (!['warning', 'critical'].includes(result.status)) { closeDeviation(runtime); return; }
-  const expectedKey = `${result.expectedLow}|${result.expectedHigh}|${point.systemState || point.machineState || ''}`;
-  const active = runtime.activeDeviation;
-  const gapOk = active && point.t - active.endTimestampMs <= Math.max(MIN_DEVIATION_GAP_MS, active.sampleGapMs || MIN_DEVIATION_GAP_MS);
-  if (!active || active.severity !== result.status || active.expectedKey !== expectedKey || !gapOk) {
-    closeDeviation(runtime);
-    runtime.activeDeviation = { id: `D-${rule.id}-${runtime.deviationEvents.length + 1}`, system: rule.system, subsystem: rule.subsystem, component: point.component || rule.component, parameter: rule.parameterName, signal: rule.signal, severity: result.status, startTimestampMs: point.t, endTimestampMs: point.t, durationMs: 0, firstActual: point.actual, latestActual: point.actual, minActual: point.actual, maxActual: point.actual, sumActual: point.actual, expectedValue: result.expectedValue, expectedLow: result.expectedLow, expectedHigh: result.expectedHigh, allowedLow: result.allowedLow ?? result.expectedLow, allowedHigh: result.allowedHigh ?? result.expectedHigh, maximumDeviation: Math.abs(result.deviation || 0), machineStatesSeen: new Set([point.machineState].filter(Boolean)), systemStatesSeen: new Set([point.systemState].filter(Boolean)), pointCount: 1, recommendedAction: result.status === 'critical' ? (rule.criticalAction || rule.recommendedAction || '') : (rule.warningAction || rule.recommendedAction || ''), ruleRow: rule.row, expectedKey, sampleGapMs: MIN_DEVIATION_GAP_MS };
-    return;
-  }
-  active.sampleGapMs = Math.max(MIN_DEVIATION_GAP_MS, point.t - active.endTimestampMs);
-  active.endTimestampMs = point.t;
-  active.durationMs = active.endTimestampMs - active.startTimestampMs;
-  active.latestActual = point.actual;
-  active.minActual = Math.min(active.minActual, point.actual);
-  active.maxActual = Math.max(active.maxActual, point.actual);
-  active.maximumDeviation = Math.max(active.maximumDeviation, Math.abs(result.deviation || 0));
-  active.pointCount += 1;
-  active.sumActual += point.actual;
-  if (point.machineState) active.machineStatesSeen.add(point.machineState);
-  if (point.systemState) active.systemStatesSeen.add(point.systemState);
-}
-
-function closeDeviation(runtime) {
-  if (!runtime.activeDeviation) return;
-  if (runtime.deviationEvents.length < MAX_DEVIATION_EVENTS_PER_RULE) {
-    const event = { ...runtime.activeDeviation, start: runtime.activeDeviation.startTimestampMs, startTime: runtime.activeDeviation.startTimestampMs, end: runtime.activeDeviation.endTimestampMs, endTime: runtime.activeDeviation.endTimestampMs, state: [...runtime.activeDeviation.systemStatesSeen][0] || [...runtime.activeDeviation.machineStatesSeen][0] || null, expected: runtime.activeDeviation.expectedValue ?? null, allowedLow: runtime.activeDeviation.allowedLow ?? runtime.activeDeviation.expectedLow, allowedHigh: runtime.activeDeviation.allowedHigh ?? runtime.activeDeviation.expectedHigh, averageActual: runtime.activeDeviation.pointCount ? runtime.activeDeviation.sumActual / runtime.activeDeviation.pointCount : null, minimumActual: runtime.activeDeviation.minActual, maximumActual: runtime.activeDeviation.maxActual, machineStatesSeen: [...runtime.activeDeviation.machineStatesSeen], systemStatesSeen: [...runtime.activeDeviation.systemStatesSeen] };
-    delete event.expectedKey; delete event.sampleGapMs;
-    runtime.deviationEvents.push(event);
-  }
-  runtime.activeDeviation = null;
-}
-
 function addSample(points, point, max) {
   if (points.length < max) points.push(point);
   else points[Math.floor(Math.random() * max)] = point;
@@ -465,8 +329,9 @@ function addEvidence(runtime, point, rule, file, result) {
 
 function finalizeResult(rules, plan, stateIndex, runtimes) {
   const runtimeList = [...runtimes.values()];
-  const deviationEvents = runtimeList.flatMap(runtime => runtime.deviationEvents).sort((a, b) => STATUS_PRIORITY[b.severity] - STATUS_PRIORITY[a.severity] || b.startTimestampMs - a.startTimestampMs);
-  const signalSummaries = runtimeList.map(runtimeToSummary).sort((a, b) => STATUS_PRIORITY[b.status] - STATUS_PRIORITY[a.status] || a.system.localeCompare(b.system));
+  const canonicalByRule = new Map(runtimeList.map(runtime => [runtime.ruleId, runtimeToSummary(runtime)]));
+  const deviationEvents = [...canonicalByRule.values()].flatMap(summary => summary.deviationEvents || []).slice(0, runtimeList.length * MAX_DEVIATION_EVENTS_PER_RULE).sort((a, b) => STATUS_PRIORITY[b.severity] - STATUS_PRIORITY[a.severity] || b.startTimestampMs - a.startTimestampMs);
+  const signalSummaries = [...canonicalByRule.values()].sort((a, b) => STATUS_PRIORITY[b.status] - STATUS_PRIORITY[a.status] || a.system.localeCompare(b.system));
   const systems = [...new Set([...SYSTEMS, ...plan.systems])];
   const systemHealth = systems.map(system => systemHealthFor(system, plan, signalSummaries));
   analysisAudit.systemsEvaluated = systemHealth.filter(system => !['no_rule', 'no_data'].includes(system.status)).length;
@@ -474,7 +339,7 @@ function finalizeResult(rules, plan, stateIndex, runtimes) {
   const startTimestampMs = timestamps.length ? Math.min(...timestamps) : null;
   const endTimestampMs = timestamps.length ? Math.max(...timestamps) : null;
   const evidence = runtimeList.flatMap(runtime => runtime.evidence).sort((a, b) => b.timestampMs - a.timestampMs).slice(0, 30);
-  const chartSeries = Object.fromEntries(runtimeList.map(runtime => [runtime.ruleId, runtime.chartReservoir.sort((a, b) => (a.t ?? 0) - (b.t ?? 0))]));
+  const chartSeries = Object.fromEntries(signalSummaries.map(summary => [summary.ruleId, (summary.chartPoints || []).slice(0, MAX_CHART_POINTS_PER_RULE).sort((a, b) => (a.t ?? 0) - (b.t ?? 0))]));
   diagnostics.evaluationBlockers = buildEvaluationBlockers(runtimeList);
   diagnostics.ruleCoverage = buildRuleCoverage(runtimeList);
   diagnostics.sourceAudit = buildSourceAudit(runtimeList);
@@ -497,39 +362,7 @@ function finalizeResult(rules, plan, stateIndex, runtimes) {
 }
 
 function runtimeToSummary(runtime) {
-  const status = parameterStatus(runtime);
-  const latest = runtime.latestPoint;
-  const fallbackRange = computeAllowedRange(runtime.rule, runtime.rule.genericExpected) || {};
-  return { ruleId: runtime.ruleId, ruleRow: runtime.rule.row, system: runtime.rule.system, subsystem: latest?.subsystem || runtime.rule.subsystem, component: latest?.component || runtime.rule.component, parameterName: runtime.rule.parameterName, signal: runtime.rule.signal, unit: runtime.rule.unit || '', status, blocker: topCount(runtime.blockers)?.key || null, blockerCounts: runtime.blockers, blockers: runtime.blockers, matchedRows: runtime.matchedRows, numericRows: runtime.numericRows, classifiedPoints: runtime.classifiedPoints, fullyEvaluatedPoints: runtime.fullyEvaluatedPoints, needsValidationRows: runtime.needsValidationRows, needsConfigurationRows: runtime.needsConfigurationRows, invalidTimestampRows: runtime.invalidTimestampRows, blockedPoints: runtime.blockedPoints, evaluatedCounts: runtime.evaluatedCounts, latestActual: latest?.actual ?? runtime.latestActual ?? null, expected: latest?.expectedValue ?? fallbackRange.expectedValue ?? null, expectedValue: latest?.expectedValue ?? fallbackRange.expectedValue ?? null, firstRawTimestamp: runtime.firstRawTimestamp || '', rawTimestamp: latest?.rawTimestamp || '', timestampStatus: latest?.timestampStatus || null, expectedLow: latest?.expectedLow ?? fallbackRange.low ?? null, expectedHigh: latest?.expectedHigh ?? fallbackRange.high ?? null, allowedLow: latest?.allowedLow ?? fallbackRange.allowedLow ?? null, allowedHigh: latest?.allowedHigh ?? fallbackRange.allowedHigh ?? null, warningLow: latest?.warningLow ?? runtime.rule.warningLow, warningHigh: latest?.warningHigh ?? runtime.rule.warningHigh, criticalLow: latest?.criticalLow ?? runtime.rule.criticalLow, criticalHigh: latest?.criticalHigh ?? runtime.rule.criticalHigh, deviation: latest?.deviation ?? null, deviationDirection: latest?.deviationDirection ?? null, distanceFromNearestLimit: latest?.distanceFromNearestLimit ?? null, currentMachineState: latest?.machineState || null, currentSystemState: latest?.systemState || null, stateContextStatus: latest?.stateContextStatus || null, latestReason: latest?.reason || null, sourceFile: latest?.file || null, eventCount: runtime.deviationEvents.length, totalDeviationDurationMs: runtime.deviationEvents.reduce((sum, event) => sum + event.durationMs, 0), stateSummaries: [...runtime.stateSummaries.values()].map(cleanStateSummary), minActual: Number.isFinite(runtime.minActual) ? runtime.minActual : null, maxActual: Number.isFinite(runtime.maxActual) ? runtime.maxActual : null, averageActual: runtime.numericRows ? runtime.sumActual / runtime.numericRows : null, checkType: runtime.rule.checkType || runtime.rule.evaluator || '', evaluator: runtime.rule.evaluator || '', tolerance: runtime.rule.tolerance, recommendedAction: actionForStatus(status, runtime.rule) };
-}
-
-function cleanStateSummary(summary) {
-  const cleaned = { ...summary };
-  cleaned.minimumActual = Number.isFinite(summary.minimumActual) ? summary.minimumActual : null;
-  cleaned.maximumActual = Number.isFinite(summary.maximumActual) ? summary.maximumActual : null;
-  cleaned.minActual = cleaned.minimumActual;
-  cleaned.maxActual = cleaned.maximumActual;
-  cleaned.okCount = summary.okPointCount || 0;
-  cleaned.warningCount = summary.warningPointCount || 0;
-  cleaned.criticalCount = summary.criticalPointCount || 0;
-  cleaned.needsValidationCount = summary.validationPointCount || 0;
-  cleaned.needsConfigurationCount = summary.configurationPointCount || 0;
-  cleaned.outOfRangeCount = summary.outOfRangePointCount || 0;
-  delete cleaned.sumActual; delete cleaned.operationalDurationMs; delete cleaned.activeDeviationStartMs; delete cleaned.activeDeviationDurationMs;
-  return cleaned;
-}
-
-function actionForStatus(status, rule) {
-  if (status === 'critical') return rule.criticalAction || 'No service action configured for this rule.';
-  if (status === 'warning') return rule.warningAction || 'No service action configured for this rule.';
-  if (status === 'needs_configuration') return `Complete missing Expected / Tolerance configuration in Excel row ${rule.row}.`;
-  if (status === 'needs_validation') return `Fix timestamp/state/source mapping for rule row ${rule.row}.`;
-  if (status === 'no_data') return `Fix timestamp/state/source mapping for rule row ${rule.row}.`;
-  return 'No service action configured for this rule.';
-}
-
-function highest(counts, fallback) {
-  return Object.keys(counts || {}).sort((a, b) => STATUS_PRIORITY[b] - STATUS_PRIORITY[a])[0] || fallback;
+  return analyzeParameter(runtime.rule, runtime.pointInputs, { sourceAvailable: runtime.sourceFiles.size > 0 });
 }
 
 function parameterStatus(runtime) {

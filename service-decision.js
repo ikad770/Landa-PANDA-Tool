@@ -5,7 +5,7 @@ export const OPERATIONAL_STATUSES = new Set(['critical', 'warning']);
 export const EVALUATED_STATUSES = new Set(['ok', 'warning', 'critical']);
 export const ATTENTION_STATUSES = new Set(['critical', 'warning', 'needs_validation', 'needs_configuration']);
 
-const STATUS_ORDER = ['critical', 'warning', 'ok', 'needs_configuration', 'needs_validation', 'no_data', 'no_rule', 'not_analyzed'];
+const STATUS_ORDER = ['critical', 'warning', 'ok', 'needs_validation', 'needs_configuration', 'no_data', 'no_rule', 'not_analyzed'];
 const STATUS_SCORE = Object.fromEntries(STATUS_ORDER.map((status, index) => [status, STATUS_ORDER.length - index]));
 
 export function normalizeDecisionStatus(status) {
@@ -29,7 +29,7 @@ export function buildServiceDecision(result = {}) {
   const healthyParameters = parameterSummaries.filter(row => normalizeDecisionStatus(row.status) === 'ok');
   const validationProblems = parameterSummaries.filter(row => normalizeDecisionStatus(row.status) === 'needs_validation');
   const configurationProblems = parameterSummaries.filter(row => normalizeDecisionStatus(row.status) === 'needs_configuration');
-  const fullyEvaluatedRules = parameterSummaries.filter(row => isOperationalStatus(row.status) && (row.fullyEvaluatedPoints || row.okPointCount || row.warningPointCount || row.criticalPointCount || 0) > 0);
+  const fullyEvaluatedRules = parameterSummaries.filter(row => isOperationalStatus(row.status) && ((row.evaluatedSampleCount ?? row.fullyEvaluatedPoints ?? 0) > 0));
   const matchedSignals = parameterSummaries.filter(row => (row.matchedRows || 0) > 0);
   const criticalFindings = deviationEvents.filter(event => normalizeDecisionStatus(event.severity) === 'critical');
   const warningFindings = deviationEvents.filter(event => normalizeDecisionStatus(event.severity) === 'warning');
@@ -40,7 +40,7 @@ export function buildServiceDecision(result = {}) {
   const primarySystem = systemsAtRisk[0]?.system || primaryFinding?.system || systemsRequiringAttention[0]?.system || systemSummaries.find(system => normalizeDecisionStatus(system.status) === 'ok')?.system || systemSummaries[0]?.system || null;
   const machineStatus = chooseMachineStatus(systemSummaries, parameterSummaries);
   const nextRecommendedAction = buildRecommendedAction(machineStatus, primaryFinding, { configurationProblems, validationProblems });
-  const affectedParameters = new Set(operationalFindings.map(event => `${event.system}::${event.signal}`));
+  const affectedParameters = new Set(parameterSummaries.filter(row => ['warning', 'critical'].includes(normalizeDecisionStatus(row.status))).map(parameterKey));
   return {
     machineStatus,
     machineStatusLabel: STATUS_TAXONOMY[machineStatus]?.label || machineStatus,
@@ -81,10 +81,15 @@ export function buildServiceDecision(result = {}) {
       criticalParameters: criticalParameters.length,
       warningParameters: warningParameters.length,
       healthyParameters: healthyParameters.length,
-      fullyEvaluatedRules: fullyEvaluatedRules.length,
+      fullyEvaluatedRules: uniqueCount(fullyEvaluatedRules.map(parameterKey)),
+      totalRules: metadata.rulesValid || parameterSummaries.length,
       evaluationReadiness: { evaluated: fullyEvaluatedRules.length, total: metadata.rulesValid || parameterSummaries.length },
-      validationIssues: validationProblems.length,
-      configurationIssues: configurationProblems.length,
+      configurationIssues: uniqueCount(configurationProblems.map(parameterKey)),
+      validationIssues: uniqueCount(validationProblems.map(parameterKey)),
+      noDataParameters: uniqueCount(parameterSummaries.filter(row => normalizeDecisionStatus(row.status) === 'no_data').map(parameterKey)),
+      noRuleParameters: uniqueCount(parameterSummaries.filter(row => normalizeDecisionStatus(row.status) === 'no_rule').map(parameterKey)),
+      matchedSignals: uniqueCount(matchedSignals.map(row => `${row.logSource || ''}::${row.signal || ''}`)),
+      totalSignals: metadata.relevantSignalsRequired || uniqueCount(parameterSummaries.map(row => `${row.logSource || ''}::${row.signal || ''}`)),
       signalCoverage: { found: metadata.relevantSignalsFound || matchedSignals.length, required: metadata.relevantSignalsRequired || parameterSummaries.length }
     }
   };
@@ -156,12 +161,14 @@ function buildSystemSummaries(existing, parameters, events) {
 }
 
 function systemStatus(rows = [], fallback = 'no_data') {
-  if (rows.some(row => normalizeDecisionStatus(row.status) === 'critical' && (row.fullyEvaluatedPoints || 0) > 0)) return 'critical';
-  if (rows.some(row => normalizeDecisionStatus(row.status) === 'warning' && (row.fullyEvaluatedPoints || 0) > 0)) return 'warning';
-  if (rows.some(row => normalizeDecisionStatus(row.status) === 'ok' && (row.fullyEvaluatedPoints || 0) > 0)) return 'ok';
-  if (rows.some(row => normalizeDecisionStatus(row.status) === 'needs_configuration')) return 'needs_configuration';
+  const evaluated = row => (row.evaluatedSampleCount ?? row.fullyEvaluatedPoints ?? 0) > 0;
+  if (rows.some(row => normalizeDecisionStatus(row.status) === 'critical' && evaluated(row))) return 'critical';
+  if (rows.some(row => normalizeDecisionStatus(row.status) === 'warning' && evaluated(row))) return 'warning';
+  if (rows.some(row => normalizeDecisionStatus(row.status) === 'ok' && evaluated(row))) return 'ok';
   if (rows.some(row => normalizeDecisionStatus(row.status) === 'needs_validation')) return 'needs_validation';
+  if (rows.some(row => normalizeDecisionStatus(row.status) === 'needs_configuration')) return 'needs_configuration';
   if (rows.some(row => normalizeDecisionStatus(row.status) === 'no_data')) return 'no_data';
+  if (rows.some(row => normalizeDecisionStatus(row.status) === 'no_rule')) return 'no_rule';
   if (rows.length) return normalizeDecisionStatus(fallback);
   return normalizeDecisionStatus(fallback || 'no_rule');
 }
@@ -170,10 +177,10 @@ function chooseMachineStatus(systems, rules) {
   if (systems.some(system => normalizeDecisionStatus(system.status) === 'critical')) return 'critical';
   if (systems.some(system => normalizeDecisionStatus(system.status) === 'warning')) return 'warning';
   if (systems.some(system => normalizeDecisionStatus(system.status) === 'ok')) return 'ok';
-  if (rules.some(rule => normalizeDecisionStatus(rule.status) === 'needs_configuration')) return 'needs_configuration';
   if (rules.some(rule => normalizeDecisionStatus(rule.status) === 'needs_validation')) return 'needs_validation';
+  if (rules.some(rule => normalizeDecisionStatus(rule.status) === 'needs_configuration')) return 'needs_configuration';
   if (rules.some(rule => normalizeDecisionStatus(rule.status) === 'no_data')) return 'no_data';
-  return systems.some(system => normalizeDecisionStatus(system.status) === 'no_rule') ? 'no_rule' : 'not_analyzed';
+  return rules.some(rule => normalizeDecisionStatus(rule.status) === 'no_rule') || systems.some(system => normalizeDecisionStatus(system.status) === 'no_rule') ? 'no_rule' : 'not_analyzed';
 }
 
 function topOperationalFindings(parameters = [], events = []) {
@@ -248,4 +255,12 @@ function ratio(numerator, denominator) {
   if (!total) return { numerator: Number(numerator) || 0, denominator: total, percent: 0, label: '0%' };
   const value = Math.max(0, Math.min(1, (Number(numerator) || 0) / total));
   return { numerator: Number(numerator) || 0, denominator: total, percent: Math.round(value * 100), label: `${Math.round(value * 100)}%` };
+}
+
+function parameterKey(row = {}) {
+  return row.ruleId || `${row.system || ''}::${row.signal || ''}`;
+}
+
+function uniqueCount(values = []) {
+  return new Set(values.filter(Boolean)).size;
 }

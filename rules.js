@@ -25,8 +25,14 @@ const HEADER_ALIASES = {
   'Warning High': ['Warning High', 'Warning Max', 'WarningHigh'],
   'Critical Low': ['Critical Low', 'Critical Min', 'CriticalLow'],
   'Critical High': ['Critical High', 'Critical Max', 'CriticalHigh'],
+  'Warning Duration Sec': ['Warning Duration Sec', 'Warning Duration', 'WarningDurationSec'],
+  'Critical Duration Sec': ['Critical Duration Sec', 'Critical Duration', 'CriticalDurationSec'],
+  'Transition Grace Sec': ['Transition Grace Sec', 'Transition Grace', 'TransitionGraceSec'],
+  'Warning Severity': ['Warning Severity'],
+  'Critical Severity': ['Critical Severity'],
   'Warning Action': ['Warning Action'],
-  'Critical Action': ['Critical Action']
+  'Critical Action': ['Critical Action'],
+  'Out of Spec Action': ['Out of Spec Action', 'Out-of-Spec Action', 'OutOfSpecAction']
 };
 const REQUIRED_HEADER_GROUPS = ['System', 'Subsystem', 'Component', 'Log Signal Name', 'Log Source'];
 
@@ -106,6 +112,12 @@ export function parseRulesWorkbook(XLSX, buffer, audit) {
       warningHigh: parseThreshold(getCell(row, ['Warning High', 'Warning Max', 'WarningHigh'])),
       criticalLow: parseThreshold(getCell(row, ['Critical Low', 'Critical Min', 'CriticalLow'])),
       criticalHigh: parseThreshold(getCell(row, ['Critical High', 'Critical Max', 'CriticalHigh'])),
+      warningDurationSec: parseThreshold(getCell(row, ['Warning Duration Sec', 'Warning Duration', 'WarningDurationSec'])),
+      criticalDurationSec: parseThreshold(getCell(row, ['Critical Duration Sec', 'Critical Duration', 'CriticalDurationSec'])),
+      transitionGraceSec: parseThreshold(getCell(row, ['Transition Grace Sec', 'Transition Grace', 'TransitionGraceSec'])),
+      warningSeverity: normalizeText(getCell(row, ['Warning Severity'])),
+      criticalSeverity: normalizeText(getCell(row, ['Critical Severity'])),
+      outOfSpecAction: normalizeText(getCell(row, ['Out of Spec Action', 'Out-of-Spec Action', 'OutOfSpecAction'])),
       warningAction: normalizeText(getCell(row, ['Warning Action', 'Recommended Action', 'Action'])),
       criticalAction: normalizeText(getCell(row, ['Critical Action', 'Service Action'])),
       recommendedAction: normalizeText(getCell(row, ['Recommended Action', 'Action', 'Service Action']))
