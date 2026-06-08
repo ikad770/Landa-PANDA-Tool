@@ -13,6 +13,7 @@ export function normalizeCheckType(value) {
   if (!type) return '';
   if (['within range', 'expected range', 'value range', 'absolute range'].includes(type)) return 'range';
   if (['percent range', 'percentage range', 'range percent'].includes(type)) return 'range_percent';
+  if (['thresholds', 'threshold range', 'explicit threshold'].includes(type)) return 'threshold';
   if (['maximum', 'max threshold', 'below threshold'].includes(type)) return 'max';
   if (['minimum', 'min threshold', 'above threshold'].includes(type)) return 'min';
   return type;
@@ -21,13 +22,15 @@ export function normalizeCheckType(value) {
 export function inferCheckType(rule) {
   const explicit = normalizeCheckType(rule?.checkType);
   if (explicit) return explicit;
-  if (rule?.criticalLow !== null || rule?.criticalHigh !== null || rule?.warningLow !== null || rule?.warningHigh !== null) return 'range';
+  if (rule?.criticalLow !== null || rule?.criticalHigh !== null || rule?.warningLow !== null || rule?.warningHigh !== null) return 'threshold';
   if (rule?.tolerance?.mode === 'max') return 'max';
   if (rule?.tolerance?.mode === 'min') return 'min';
   if (rule?.tolerance?.mode === 'percent') return 'range_percent';
   if (rule?.tolerance?.mode === 'absolute') return 'range';
   return '';
 }
+
+const CANONICAL_STATES = new Set(['ON', 'Standby', 'Ready', 'Prepare2Print', 'Printing', 'PrintEnd', 'Recovery', 'Error']);
 
 export function normalizeState(value) {
   const key = normalizeToken(value);
@@ -48,7 +51,9 @@ export function normalizeState(value) {
 }
 
 export function parseNumber(value) {
-  const text = String(value ?? '').replace(/,/g, '').trim();
+  let text = String(value ?? '').trim();
+  if (/^[-+]?\d+,\d+(?:\D|$)/.test(text) && !/^[-+]?\d{1,3}(?:,\d{3})+(?:\D|$)/.test(text)) text = text.replace(',', '.');
+  else text = text.replace(/,/g, '');
   if (!text || /^---$/.test(text)) return null;
   const match = text.match(/[-+]?\d*\.?\d+(?:e[-+]?\d+)?/i);
   if (!match) return null;
@@ -121,12 +126,14 @@ export function expectedValuesFromRow(row) {
 
 export function selectExpected(rule, stateContext) {
   const candidates = [stateContext?.systemState, stateContext?.machineState].map(normalizeState).filter(Boolean);
+  const hasStateExpectations = Object.keys(rule.expectedByState || {}).length > 0;
   for (const state of candidates) {
     if (Object.prototype.hasOwnProperty.call(rule.expectedByState || {}, state)) return { value: rule.expectedByState[state], range: rule.expectedRangeByState?.[state] || null, state, source: 'state' };
     const matchingKey = Object.keys(rule.expectedByState || {}).find(key => normalizeState(key) === state);
     if (matchingKey) return { value: rule.expectedByState[matchingKey], range: rule.expectedRangeByState?.[matchingKey] || null, state, source: 'state' };
+    if (hasStateExpectations) return { value: null, state, source: 'missing_state_expected' };
   }
-  if (rule.genericExpected !== null && rule.genericExpected !== undefined) return { value: rule.genericExpected, range: rule.genericExpectedRange || null, state: null, source: 'generic' };
+  if (!hasStateExpectations && rule.genericExpected !== null && rule.genericExpected !== undefined) return { value: rule.genericExpected, range: rule.genericExpectedRange || null, state: null, source: 'generic' };
   return { value: null, state: candidates[0] || null, source: 'missing' };
 }
 
@@ -168,15 +175,17 @@ export function computeAllowedRange(rule, expected, expectedSelection = null) {
 
 export function evaluateValue(rule, actual, stateContext) {
   const checkType = inferCheckType(rule);
-  if (actual === null || actual === undefined || !Number.isFinite(actual)) return { status: 'no_data', blocker: 'no_numeric_value', reason: 'No numeric value in matched source row' };
+  if (actual === null || actual === undefined || !Number.isFinite(actual)) return { status: 'needs_validation', blocker: 'no_numeric_value', reason: 'No numeric value in matched source row' };
   if (PENDING_CHECK_TYPES.has(checkType)) return { status: 'needs_configuration', blocker: 'unsupported_evaluator', reason: 'Evaluator is pending implementation' };
   if (!checkType) return { status: 'needs_configuration', blocker: 'missing_threshold_or_tolerance', reason: 'Rule has no usable expected/tolerance/threshold configuration' };
   if (!SUPPORTED_CHECK_TYPES.has(checkType)) return { status: 'needs_configuration', blocker: 'unsupported_evaluator', reason: `Unsupported check type: ${rule.checkType || 'blank'}` };
   const hasExplicitThresholds = rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
   const requiresStateExpected = Object.keys(rule.expectedByState || {}).length > 0 && rule.genericExpected === null && !hasExplicitThresholds;
-  if (requiresStateExpected && (!stateContext || stateContext.status === 'missing')) return { status: 'needs_validation', blocker: 'missing_state', reason: 'Missing Machine State' };
+  if (requiresStateExpected && (!stateContext || ['missing', 'too_old'].includes(stateContext.stateMatchStatus || stateContext.status))) return { status: 'needs_validation', blocker: 'missing_state', reason: stateContext?.stateMatchStatus === 'too_old' ? 'Machine State is too old for timestamp' : 'Missing Machine State' };
+  if (requiresStateExpected && (stateContext?.stateMatchStatus === 'unsupported_state' || (stateContext?.systemState && !CANONICAL_STATES.has(normalizeState(stateContext.systemState))))) return { status: 'needs_validation', blocker: 'unsupported_state', reason: 'Unsupported Machine State' };
   const expected = selectExpected(rule, stateContext);
   const hasAnyThreshold = rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
+  if (expected.source === 'missing_state_expected' && !hasAnyThreshold) return { status: 'needs_configuration', blocker: 'missing_expected_for_state', reason: `Missing Expected value for state ${expected.state}` };
   if (expected.source === 'missing' && !hasAnyThreshold && !['above threshold', 'below threshold', 'max', 'min'].includes(checkType)) return { status: 'needs_configuration', blocker: 'missing_expected_value', reason: 'Missing expected value for current state' };
   const range = computeAllowedRange(rule, expected.value, expected);
   if (!range && checkType !== 'exact') return { status: 'needs_configuration', blocker: 'missing_threshold_or_tolerance', reason: 'Rule has no tolerance or thresholds' };
@@ -226,8 +235,6 @@ export function validateRule(rule) {
   const inferred = inferCheckType(rule);
   if (PENDING_CHECK_TYPES.has(inferred)) return 'valid';
   if (inferred && !SUPPORTED_CHECK_TYPES.has(inferred)) return 'unsupported_check_type';
-  const hasExpected = Object.keys(rule.expectedByState || {}).length > 0 || rule.genericExpected !== null;
-  const hasLimit = rule.tolerance || rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
   return 'valid';
 }
 

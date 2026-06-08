@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { execSync } from 'node:child_process';
 import { authenticateLocalPrototype, clearSession, createLocalSession, readStoredSession, storeSession, validateLoginFields } from '../auth.js';
-import { AUTH_CONFIG, USER_FACING_STAGES } from '../config.js';
-import { ADAPTERS, matchRuleForRow, parseSlashTimestamp } from '../adapters.js';
+import { AUTH_CONFIG, USER_FACING_STAGES, normalizeSourceIdentity } from '../config.js';
+import { ADAPTERS, getRuleMatchesForRow, matchRuleForRow, parseSlashTimestamp, parseSourceTimestamp } from '../adapters.js';
 import { evaluateValue, inferCheckType, normalizeState, normalizeToken, parseTolerance, summarizeStateComparisons } from '../evaluation.js';
 import { createStateIndex } from '../machine-states.js';
+import { parseRulesWorkbook } from '../rules.js';
 import { chooseInitialParameter, chooseInitialSystem, getServiceDecision, groupParameters, normalizeStatus, renderActualExpectedChart, renderComparisonGauge, validateAnalysisResult } from '../render.js';
 import { buildServiceDecision } from '../service-decision.js';
 import { renderHotspot } from '../render-radar.js';
@@ -38,6 +40,38 @@ function baseResult(overrides = {}) {
     metadata
   };
 }
+
+
+assert.equal(normalizeSourceIdentity('BSSNotifications'), 'BSSNotifications', 'Canonical source identity is preserved');
+assert.equal(normalizeSourceIdentity('BSS Notifications'), 'BSSNotifications', 'Spaced BSS source alias normalizes');
+assert.equal(normalizeSourceIdentity('bssnotifications'), 'BSSNotifications', 'Lowercase BSS source alias normalizes');
+assert.equal(normalizeSourceIdentity('BSS'), 'BSSNotifications', 'Short BSS source alias normalizes');
+assert.equal(normalizeSourceIdentity('LLCINotifications/BSS'), 'BSSNotifications', 'BSS component path normalizes');
+assert.equal(normalizeSourceIdentity('logs/LLCINotifications/BSS'), 'BSSNotifications', 'BSS log path normalizes');
+const exactMatch = getRuleMatchesForRow(ADAPTERS.BSSNotifications, { SubComponent: 'FillActualTemperatureC', Component: 'Fill', ParameterType: 'Actual' }, [{ sourceType: 'BSSNotifications', normSignal: normalizeToken('FillActualTemperatureC') }]);
+assert.equal(exactMatch[0].matchReason, 'exact_signal', 'Exact signal matching reports exact_signal');
+const aliasMatch = getRuleMatchesForRow(ADAPTERS.BSSNotifications, { SubComponent: 'FillFlowMeterActualValue', Component: 'Fill', ParameterType: 'Actual' }, [{ sourceType: 'BSSNotifications', normSignal: normalizeToken('FillFlowMeterActualValve') }]);
+assert.equal(aliasMatch[0].matchReason, 'alias', 'Alias signal matching reports alias');
+const duplicateMatches = getRuleMatchesForRow(ADAPTERS.BSSNotifications, { SubComponent: 'FillActualTemperatureC', Component: 'Fill', ParameterType: 'Actual' }, [
+  { sourceType: 'BSSNotifications', normSignal: normalizeToken('FillActualTemperatureC') },
+  { sourceType: 'BSSNotifications', normSignal: normalizeToken('FillActualTemperatureC') }
+]);
+assert.equal(duplicateMatches.length, 2, 'Duplicate rule match detection sees multiple matching rules for one source row');
+const fakeXlsxRows = [
+  ['Generated report', '', '', '', ''],
+  ['System', 'Subsystem', 'Component', 'Parameter Name', 'Log Signal Name', 'Log Source', 'Expected ON', 'Spec Tolerance'],
+  ['BSS', 'BCU', 'Tub', 'Tub Level', 'TubActualLevelMM', 'BSS Notifications', 0, '±2']
+];
+const fakeXlsx = { read: () => ({ SheetNames: ['PANDA Rules Template'], Sheets: { 'PANDA Rules Template': {} } }), utils: { sheet_to_json: () => fakeXlsxRows } };
+const ruleAudit = {};
+const parsedRules = parseRulesWorkbook(fakeXlsx, new ArrayBuffer(0), ruleAudit);
+assert.equal(ruleAudit.rulesHeaderRow, 2, 'Rules parser detects real header row instead of assuming row 1');
+assert.equal(parsedRules[0].row, 3, 'Rules parser preserves actual Excel row number');
+assert.equal(parsedRules[0].validity, 'valid', 'Blank Check Type does not make an otherwise evaluable rule incomplete');
+assert.equal(parsedRules[0].sourceType, 'BSSNotifications', 'Rules parser normalizes configured log source');
+assert.equal(parseSourceTimestamp('03/12/2026 15:51:40.441145', 'MDY').timestampFormat, 'MDY slash dot_fraction', 'Source parser records MDY dot microsecond format');
+assert.equal(parseSourceTimestamp('03/12/2026 15:51:40:441145', 'MDY').timestampFormat, 'MDY slash colon_fraction', 'Source parser records MDY colon microsecond format');
+assert.equal(parseSourceTimestamp('12/03/2026 07:02:21.093', 'DMY').timestampFormat, 'DMY slash dot_fraction', 'Source parser records DMY dot millisecond format');
 
 assert.equal(new Date(parseSlashTimestamp('03/12/2026 15:51:40:441145', 'MDY')).getMilliseconds(), 441, 'BSS colon microseconds parse');
 assert.equal(new Date(parseSlashTimestamp('03/12/2026 15:51:40.441145', 'MDY')).getMilliseconds(), 441, 'BSS dot microseconds parse');
@@ -217,6 +251,13 @@ assert.equal(fillResult.expectedHigh, 27, 'FillActualTemperatureC allowed high i
 assert.equal(Number(fillResult.distanceFromNearestLimit.toFixed(2)), 2.2, 'FillActualTemperatureC deviation distance is 2.2');
 assert.equal(evaluateValue(fillRule, 25.5, { status: 'matched', machineState: 'ON', systemState: 'ON' }).status, 'ok', 'Actual 25.5 against 25 ±2 returns OK');
 assert.equal(evaluateValue(fillRule, 29.2, { status: 'matched', machineState: 'ON', systemState: 'ON' }).status, 'warning', 'Outside expected range does not become Critical without a critical rule');
+
+const criticalRule = { checkType: '', expectedByState: { ON: 25 }, genericExpected: null, tolerance: parseTolerance('±2'), warningLow: null, warningHigh: null, criticalLow: 20, criticalHigh: 30 };
+assert.equal(inferCheckType(criticalRule), 'threshold', 'Explicit Warning/Critical threshold columns infer threshold evaluator');
+assert.equal(evaluateValue(criticalRule, 31, { status: 'matched', machineState: 'ON', systemState: 'ON' }).status, 'critical', 'Critical classification requires explicit critical threshold crossing');
+assert.equal(evaluateValue({ ...fillRule, expectedByState: { Printing: 25 } }, 25, { status: 'matched', machineState: 'ON', systemState: 'ON' }).blocker, 'missing_expected_for_state', 'Expected lookup is state-dependent and blocks missing encountered state');
+assert.equal(evaluateValue(fillRule, 25, { status: 'too_old', stateMatchStatus: 'too_old', machineState: 'ON', systemState: 'ON' }).status, 'needs_validation', 'Stale state context produces Needs Validation');
+
 const percentResult = evaluateValue({ ...fillRule, tolerance: parseTolerance('10%') }, 28, { status: 'matched', machineState: 'ON', systemState: 'ON' });
 assert.equal(percentResult.expectedLow, 22.5, 'Percent tolerance computes low band');
 assert.equal(percentResult.expectedHigh, 27.5, 'Percent tolerance computes high band');
@@ -234,6 +275,18 @@ assert.equal(stateSummary.minActual, 24, 'State summary minimum is correct');
 assert.equal(stateSummary.maxActual, 29, 'State summary maximum is correct');
 assert.equal(sortComparisonRows([{ status: 'ok', signal: 'C' }, { status: 'needs_configuration', signal: 'D' }, { status: 'warning', signal: 'B' }, { status: 'critical', signal: 'A' }, { status: 'needs_validation', signal: 'E' }, { status: 'no_data', signal: 'F' }]).map(row => row.status).join(','), 'critical,warning,ok,needs_validation,needs_configuration,no_data', 'Comparison Matrix sort order is correct');
 assert.equal(evaluateValue({ checkType: '', expectedByState: {}, genericExpected: null, tolerance: null, warningLow: null, warningHigh: null, criticalLow: null, criticalHigh: null }, 10, { status: 'matched', machineState: 'ON', systemState: 'ON' }).status, 'needs_configuration', 'Needs Configuration is used only when configuration is genuinely missing');
+
+const statusDecision = buildServiceDecision({ metadata: { rulesValid: 3, relevantValuesFound: 3 }, systemHealth: [{ system: 'BSS', status: 'warning', evaluated: 1 }], signalSummaries: [
+  { ruleId: 'OK', ruleRow: 1, system: 'BSS', signal: 'A', status: 'ok', matchedRows: 1, fullyEvaluatedPoints: 1 },
+  { ruleId: 'WARN', ruleRow: 2, system: 'BSS', signal: 'B', status: 'warning', matchedRows: 1, fullyEvaluatedPoints: 1 },
+  { ruleId: 'CFG', ruleRow: 3, system: 'BSS', signal: 'C', status: 'needs_configuration', matchedRows: 1, fullyEvaluatedPoints: 0 }
+], deviationEvents: [{ system: 'BSS', signal: 'B', severity: 'warning', recommendedAction: '' }] });
+assert.equal(statusDecision.evaluationCoverage.fullyEvaluatedRules, 2, 'Count definition: fully evaluated rules require OK/Warning/Critical points');
+assert.equal(statusDecision.evaluationCoverage.matchedSignals, 3, 'Count definition: matched signals require at least one matched row');
+assert.equal(statusDecision.nextRecommendedAction, 'No service action configured for this rule.', 'Recommended actions are not invented when no configured action exists');
+const changedFiles = execSync('git diff --name-only', { encoding: 'utf8' }).trim().split(/\n/).filter(Boolean);
+assert.equal(changedFiles.some(file => /\.(png|jpe?g|webp|gif|bmp|ico|zip|xlsx?|pdf|docx|pptx|ttf|otf|woff2?)$/i.test(file)), false, 'Git diff contains no changed binary file paths');
+
 assert.match(css, /--accent-cyan:#39c7f3/, 'Cyan accent mapping exists');
 assert.match(css, /--status-ok:#43d17d/, 'OK green mapping exists');
 assert.match(css, /--status-warning:#f4c542/, 'Warning amber mapping exists');
