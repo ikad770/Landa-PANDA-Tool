@@ -280,9 +280,19 @@ function median(values) {
 function durationModel(points = [], gapCapMs = DEFAULT_GAP_CAP_MS) {
   const unique = [];
   const byTs = new Map();
-  for (const point of points.filter(point => Number.isFinite(point.timestampMs ?? point.t)).sort((a, b) => (a.timestampMs ?? a.t) - (b.timestampMs ?? b.t))) byTs.set(point.timestampMs ?? point.t, point);
-  unique.push(...byTs.values());
-  const intervals = unique.slice(0, -1).map((point, index) => (unique[index + 1].timestampMs ?? unique[index + 1].t) - (point.timestampMs ?? point.t)).filter(value => Number.isFinite(value) && value > 0);
+  const sorted = [];
+  for (const point of points) {
+    const timestampMs = point?.timestampMs ?? point?.t;
+    if (Number.isFinite(timestampMs)) sorted.push(point);
+  }
+  sorted.sort((a, b) => (a.timestampMs ?? a.t) - (b.timestampMs ?? b.t));
+  for (const point of sorted) byTs.set(point.timestampMs ?? point.t, point);
+  for (const point of byTs.values()) unique.push(point);
+  const intervals = [];
+  for (let index = 0; index < unique.length - 1; index += 1) {
+    const value = (unique[index + 1].timestampMs ?? unique[index + 1].t) - (unique[index].timestampMs ?? unique[index].t);
+    if (Number.isFinite(value) && value > 0) intervals.push(value);
+  }
   const nominal = median(intervals);
   const cap = nominal ? Math.min(gapCapMs, nominal * 3) : gapCapMs;
   const rows = unique.map((point, index) => {
@@ -396,9 +406,18 @@ function chooseParameterStatus(points, forced) {
 }
 
 function aggregateActual(points) {
-  const nums = points.map(point => point.actual).filter(Number.isFinite);
-  const sum = nums.reduce((a, b) => a + b, 0);
-  return { sampleCount: points.length, numericCount: nums.length, averageActual: nums.length ? cleanNumeric(sum / nums.length) : null, minimumActual: nums.length ? Math.min(...nums) : null, maximumActual: nums.length ? Math.max(...nums) : null };
+  let sum = 0;
+  let numericCount = 0;
+  let minimumActual = null;
+  let maximumActual = null;
+  for (const point of points) {
+    if (!Number.isFinite(point.actual)) continue;
+    sum += point.actual;
+    numericCount += 1;
+    minimumActual = minimumActual === null ? point.actual : Math.min(minimumActual, point.actual);
+    maximumActual = maximumActual === null ? point.actual : Math.max(maximumActual, point.actual);
+  }
+  return { sampleCount: points.length, numericCount, averageActual: numericCount ? cleanNumeric(sum / numericCount) : null, minimumActual, maximumActual };
 }
 
 function canonicalSummary(rule, chartPoints, context = {}) {
@@ -412,7 +431,7 @@ function canonicalSummary(rule, chartPoints, context = {}) {
   const deviationEvents = ['no_data', 'no_rule'].includes(status) ? [] : consolidateDeviationEventsFromRows(rule, durationRows);
   const outOfRangePercent = totalObservedDurationMs ? Math.min(100, Math.max(0, totalOutOfRangeDurationMs / totalObservedDurationMs * 100)) : 0;
   const stateSummaries = buildStateSummaries(rule, chartPoints, durationRows, totalObservedDurationMs, deviationEvents);
-  const maxDev = chartPoints.map(point => point.deviation).filter(Number.isFinite);
+  const deviationStats = numericStats(chartPoints, 'deviation');
   const firstDeviationTimestampMs = deviationEvents[0]?.startTimestampMs ?? null;
   const lastDeviationTimestampMs = deviationEvents.at(-1)?.endTimestampMs ?? null;
   const coverage = { ...(context.coverage || {}), fullyEvaluated: operationalPoints.length > 0, blocker: context.coverage?.blocker || (OPERATIONAL.has(status) ? null : chartPoints.find(point => !point.evaluated)?.reasonCode || status), blockerReason: context.coverage?.blockerReason || (OPERATIONAL.has(status) ? null : chartPoints.find(point => !point.evaluated)?.reason || status) };
@@ -423,7 +442,7 @@ function canonicalSummary(rule, chartPoints, context = {}) {
     latestTimestampMs: latest?.timestampMs ?? null, latestActual: latest?.actual ?? null, averageActual: actuals.averageActual, minimumActual: actuals.minimumActual, maximumActual: actuals.maximumActual,
     currentMachineState: latest?.machineState || null, currentSystemState: latest?.systemState || null, currentExpected: latest?.expected ?? null, currentAllowedLow: latest?.allowedLow ?? null, currentAllowedHigh: latest?.allowedHigh ?? null, currentDifference: latest?.difference ?? null, currentDeviation: latest?.deviation ?? null, currentDeviationDirection: latest?.deviationDirection ?? null,
     sampleCount: chartPoints.length, evaluatedSampleCount: operationalPoints.length, fullyEvaluatedPoints: operationalPoints.length, matchedRows: chartPoints.length, numericRows: actuals.numericCount, classifiedPoints: chartPoints.length, blockedPoints: chartPoints.filter(point => !point.evaluated).length,
-    totalObservedDurationMs: cleanNumeric(totalObservedDurationMs), totalOutOfRangeDurationMs: cleanNumeric(Math.min(totalOutOfRangeDurationMs, totalObservedDurationMs)), outOfRangePercent: cleanNumeric(outOfRangePercent), longestDeviationDurationMs: cleanNumeric(Math.max(0, ...deviationEvents.map(event => event.durationMs || 0))), deviationEventCount: deviationEvents.length, eventCount: deviationEvents.length, firstDeviationTimestampMs, lastDeviationTimestampMs, maximumDeviation: maxDev.length ? Math.max(...maxDev) : null, minimumDeviation: maxDev.length ? Math.min(...maxDev) : null,
+    totalObservedDurationMs: cleanNumeric(totalObservedDurationMs), totalOutOfRangeDurationMs: cleanNumeric(Math.min(totalOutOfRangeDurationMs, totalObservedDurationMs)), outOfRangePercent: cleanNumeric(outOfRangePercent), longestDeviationDurationMs: cleanNumeric(maxNumericField(deviationEvents, 'durationMs')), deviationEventCount: deviationEvents.length, eventCount: deviationEvents.length, firstDeviationTimestampMs, lastDeviationTimestampMs, maximumDeviation: deviationStats.maximum, minimumDeviation: deviationStats.minimum,
     stateSummaries, deviationEvents, chartPoints: chartPoints.map(cleanPoint), recommendedAction: actionForStatus(status, rule), expected: latest?.expected ?? null, expectedValue: latest?.expected ?? null, allowedLow: latest?.allowedLow ?? null, allowedHigh: latest?.allowedHigh ?? null, expectedLow: latest?.expectedLow ?? null, expectedHigh: latest?.expectedHigh ?? null, minActual: actuals.minimumActual, maxActual: actuals.maximumActual, blocker: coverage.blocker, blockerCounts: countBy(chartPoints.map(point => point.reasonCode).filter(Boolean)), evaluatedCounts: countBy(chartPoints.map(point => point.status))
   };
   return sanitizeSummary(validateCanonicalSummary(summary));
@@ -542,7 +561,7 @@ function buildStateSummaries(rule, chartPoints, durationRows, totalObservedDurat
     const stateEvents = events.filter(event => matrixState(event.systemState || event.machineState) === row.state);
     const status = row.statusCounts.critical ? 'critical' : row.statusCounts.warning ? 'warning' : row.statusCounts.ok ? 'ok' : row.statusCounts.needs_validation ? 'needs_validation' : row.statusCounts.needs_configuration ? 'needs_configuration' : 'no_data';
     const outOfRangePercent = row.totalObservedDurationMs ? Math.min(100, row.outOfRangeDurationMs / row.totalObservedDurationMs * 100) : 0;
-    const clean = { state: row.state, timeInStateMs: cleanNumeric(row.timeInStateMs), timeInStatePercent: totalObservedDurationMs ? cleanNumeric(row.timeInStateMs / totalObservedDurationMs * 100) : 0, expected: row.expected, allowedLow: row.allowedLow, allowedHigh: row.allowedHigh, sampleCount: row.sampleCount, evaluatedSampleCount: row.evaluatedSampleCount, averageActual: row.averageActual, minimumActual: row.minimumActual, maximumActual: row.maximumActual, minActual: row.minimumActual, maxActual: row.maximumActual, totalObservedDurationMs: cleanNumeric(row.totalObservedDurationMs), outOfRangeDurationMs: cleanNumeric(row.outOfRangeDurationMs), outOfRangePercent: cleanNumeric(outOfRangePercent), longestDeviationDurationMs: cleanNumeric(Math.max(0, ...stateEvents.map(event => event.durationMs || 0))), longestDeviationMs: cleanNumeric(Math.max(0, ...stateEvents.map(event => event.durationMs || 0))), deviationEventCount: stateEvents.length, firstDeviationTimestampMs: row.firstDeviationTimestampMs, lastDeviationTimestampMs: row.lastDeviationTimestampMs, averageDifference: row.diffCount ? cleanNumeric(row.sumDifference / row.diffCount) : null, maximumPositiveDifference: row.maximumPositiveDifference, maximumNegativeDifference: row.maximumNegativeDifference, maximumDeviation: row.maximumDeviation, status, reasonCode: row.reasonCode, recommendedAction: actionForStatus(status, rule) };
+    const clean = { state: row.state, timeInStateMs: cleanNumeric(row.timeInStateMs), timeInStatePercent: totalObservedDurationMs ? cleanNumeric(row.timeInStateMs / totalObservedDurationMs * 100) : 0, expected: row.expected, allowedLow: row.allowedLow, allowedHigh: row.allowedHigh, sampleCount: row.sampleCount, evaluatedSampleCount: row.evaluatedSampleCount, averageActual: row.averageActual, minimumActual: row.minimumActual, maximumActual: row.maximumActual, minActual: row.minimumActual, maxActual: row.maximumActual, totalObservedDurationMs: cleanNumeric(row.totalObservedDurationMs), outOfRangeDurationMs: cleanNumeric(row.outOfRangeDurationMs), outOfRangePercent: cleanNumeric(outOfRangePercent), longestDeviationDurationMs: cleanNumeric(maxNumericField(stateEvents, 'durationMs')), longestDeviationMs: cleanNumeric(maxNumericField(stateEvents, 'durationMs')), deviationEventCount: stateEvents.length, firstDeviationTimestampMs: row.firstDeviationTimestampMs, lastDeviationTimestampMs: row.lastDeviationTimestampMs, averageDifference: row.diffCount ? cleanNumeric(row.sumDifference / row.diffCount) : null, maximumPositiveDifference: row.maximumPositiveDifference, maximumNegativeDifference: row.maximumNegativeDifference, maximumDeviation: row.maximumDeviation, status, reasonCode: row.reasonCode, recommendedAction: actionForStatus(status, rule) };
     return sanitizeSummary(clean);
   }).sort((a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state));
 }
@@ -566,11 +585,97 @@ export function validateCanonicalSummary(summary) {
   return summary;
 }
 
+function numericStats(rows, key) {
+  let minimum = null;
+  let maximum = null;
+  for (const row of rows || []) {
+    const value = row?.[key];
+    if (!Number.isFinite(value)) continue;
+    minimum = minimum === null ? value : Math.min(minimum, value);
+    maximum = maximum === null ? value : Math.max(maximum, value);
+  }
+  return { minimum, maximum };
+}
+
+function maxNumericField(rows, key) {
+  let maximum = 0;
+  for (const row of rows || []) {
+    const value = row?.[key];
+    if (Number.isFinite(value) && value > maximum) maximum = value;
+  }
+  return maximum;
+}
+
+function isPlainCanonicalObject(value) {
+  if (!value || typeof value !== 'object') return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 function sanitizeSummary(value) {
-  if (Array.isArray(value)) return value.map(sanitizeSummary);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, val]) => [key, sanitizeSummary(val === undefined ? null : val)]));
+  return sanitizeCanonicalValue(value, { rejectCycles: true });
+}
+
+export function sanitizeCanonicalValue(value, options = {}) {
+  const rejectCycles = options.rejectCycles !== false;
+  const root = sanitizeScalar(value);
+  if (root !== value || !value || typeof value !== 'object') return root;
+  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Set) return sanitizeCanonicalValue([...value], options);
+  if (value instanceof Map) return sanitizeCanonicalValue(Object.fromEntries(value), options);
+  if (!Array.isArray(value) && !isPlainCanonicalObject(value)) throw new TypeError(`Canonical output contains unsupported object ${value.constructor?.name || 'Object'}`);
+
+  const seen = new WeakMap();
+  const active = new WeakSet();
+  const rootOut = Array.isArray(value) ? [] : {};
+  seen.set(value, rootOut);
+  const stack = [{ input: value, output: rootOut, exit: false }];
+  while (stack.length) {
+    const frame = stack.pop();
+    if (frame.exit) { active.delete(frame.input); continue; }
+    active.add(frame.input);
+    stack.push({ input: frame.input, exit: true });
+    if (Array.isArray(frame.input)) {
+      for (let key = frame.input.length - 1; key >= 0; key -= 1) enqueueSanitizedChild(frame, key, frame.input[key], stack, seen, active, rejectCycles);
+    } else {
+      const entries = Object.entries(frame.input);
+      for (let index = entries.length - 1; index >= 0; index -= 1) enqueueSanitizedChild(frame, entries[index][0], entries[index][1], stack, seen, active, rejectCycles);
+    }
+  }
+  return rootOut;
+}
+
+
+function enqueueSanitizedChild(frame, key, raw, stack, seen, active, rejectCycles) {
+  const scalar = sanitizeScalar(raw);
+  if (scalar !== raw || !raw || typeof raw !== 'object') {
+    frame.output[key] = scalar;
+    return;
+  }
+  if (raw instanceof Date) { frame.output[key] = raw.toISOString(); return; }
+  const childInput = raw instanceof Set ? [...raw] : raw instanceof Map ? Object.fromEntries(raw) : raw;
+  if (!Array.isArray(childInput) && !isPlainCanonicalObject(childInput)) throw new TypeError(`Canonical output contains unsupported object ${childInput.constructor?.name || 'Object'}`);
+  if (seen.has(childInput)) {
+    if (rejectCycles && active.has(childInput)) throw new TypeError(`Canonical output contains a circular reference at ${String(key)}`);
+    frame.output[key] = seen.get(childInput);
+    return;
+  }
+  const childOutput = Array.isArray(childInput) ? [] : {};
+  seen.set(childInput, childOutput);
+  frame.output[key] = childOutput;
+  stack.push({ input: childInput, output: childOutput, exit: false });
+}
+
+function sanitizeScalar(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? cleanNumeric(value) : null;
-  return value === undefined ? null : value;
+  if (value === undefined) return null;
+  return value;
+}
+
+export function assertCanonicalSerializable(value, label = 'canonical output') {
+  const sanitized = sanitizeCanonicalValue(value, { rejectCycles: true });
+  JSON.stringify(sanitized);
+  return sanitized;
 }
 
 export function validateRule(rule) {
