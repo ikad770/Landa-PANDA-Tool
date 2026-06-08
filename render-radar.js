@@ -33,11 +33,11 @@ function renderRadarEmpty(message) {
 function renderKpis(result, decision) {
   const kpis = decision.kpis || {};
   $('kpiRow').innerHTML = [
-    renderKpiCard({ label: 'Systems at Risk', value: kpis.systemsAtRisk || 0, subtitle: 'Critical / Warning only', status: (kpis.systemsAtRisk || 0) ? 'warning' : 'ok', icon: '◎' }),
-    renderKpiCard({ label: 'Critical Findings', value: kpis.criticalFindings || 0, subtitle: 'Active deviation events', status: (kpis.criticalFindings || 0) ? 'critical' : 'ok' }),
-    renderKpiCard({ label: 'Warning Findings', value: kpis.warningFindings || 0, subtitle: 'Outside permitted range', status: (kpis.warningFindings || 0) ? 'warning' : 'ok' }),
-    renderKpiCard({ label: 'Fully Evaluated Rules', value: `${kpis.evaluationReadiness?.evaluated || 0}/${kpis.evaluationReadiness?.total || 0}`, subtitle: 'At least one successful comparison', status: decision.analysisCompleteness?.percent === 100 ? 'ok' : 'needs_configuration', icon: '↔' }),
-    renderKpiCard({ label: 'Rules Requiring Configuration', value: kpis.configurationIssues || 0, subtitle: `${kpis.validationIssues || 0} validation blockers`, status: kpis.configurationIssues ? 'needs_configuration' : kpis.validationIssues ? 'needs_validation' : 'ok', icon: '⚙' }),
+    renderKpiCard({ label: 'Systems at Risk', value: kpis.systemsAtRisk || 0, subtitle: 'Critical / Warning systems', status: (kpis.systemsAtRisk || 0) ? 'warning' : 'ok', icon: '◎' }),
+    renderKpiCard({ label: 'Affected Parameters', value: kpis.affectedParameters || 0, subtitle: 'Operational findings only', status: (kpis.criticalParameters || 0) ? 'critical' : (kpis.warningParameters || 0) ? 'warning' : 'ok' }),
+    renderKpiCard({ label: 'Deviation Events', value: kpis.deviationEvents || 0, subtitle: 'Consolidated events', status: (kpis.deviationEvents || 0) ? 'warning' : 'ok' }),
+    renderKpiCard({ label: 'Fully Evaluated Rules', value: `${kpis.evaluationReadiness?.evaluated || 0}/${kpis.evaluationReadiness?.total || 0}`, subtitle: 'Successful OK/Warning/Critical comparison', status: (kpis.evaluationReadiness?.evaluated || 0) ? 'ok' : 'needs_configuration', icon: '↔' }),
+    renderKpiCard({ label: 'Configuration Issues', value: kpis.configurationIssues || 0, subtitle: `${kpis.validationIssues || 0} validation blockers`, status: kpis.configurationIssues ? 'needs_configuration' : kpis.validationIssues ? 'needs_validation' : 'ok', icon: '⚙' }),
     renderKpiCard({ label: 'Signal Coverage', value: `${kpis.signalCoverage?.found || 0}/${kpis.signalCoverage?.required || 0}`, subtitle: 'Matched / required signals', status: (kpis.signalCoverage?.found || 0) >= (kpis.signalCoverage?.required || 1) ? 'ok' : 'no_data', icon: '⌁' })
   ].join('');
 }
@@ -135,7 +135,7 @@ function buildSystemIssueRows(events, summaries) {
 function renderMiniFinding(item) {
   const status = normalizeStatus(item.severity || item.status);
   const actual = item.latestActual ?? item.actual ?? item.firstActual;
-  return `<div class="mini-finding ${statusClass(status)}">${renderStatusBadge(status)}<h3 title="${escapeAttr(item.parameterName || item.signal || 'Parameter')}">${escapeHtml(item.parameterName || item.signal || 'Parameter')}</h3><div class="comparison-grid compact"><div><label>Actual</label><strong>${fmtNum(actual)}</strong></div><div><label>Expected</label><strong>${escapeHtml(expectedText(item))}</strong></div><div><label>Difference</label><strong>${escapeHtml(deviationText(actual, item))}</strong></div></div><small>State: ${escapeHtml([...(item.machineStatesSeen || [])][0] || item.currentMachineState || '—')} · Action: ${escapeHtml(item.recommendedAction || blockerLabel(item.blocker) || 'Review in Drill-Down')}</small></div>`;
+  return `<div class="mini-finding ${statusClass(status)}">${renderStatusBadge(status)}<h3 title="${escapeAttr(item.parameterName || item.signal || 'Parameter')}">${escapeHtml(item.parameterName || item.signal || 'Parameter')}</h3><div class="comparison-grid compact"><div><label>Actual</label><strong>${fmtNum(actual)}</strong></div><div><label>Expected</label><strong>${escapeHtml(expectedText(item))}</strong></div><div><label>Difference</label><strong>${escapeHtml(deviationText(actual, item))}</strong></div></div><small>State: ${escapeHtml(item.state || [...(item.machineStatesSeen || [])][0] || item.currentMachineState || '—')} · Out of range: ${fmtNum(item.outOfRangePercent)}% · Action: ${escapeHtml(item.recommendedAction || blockerLabel(item.blocker) || 'Review in Drill-Down')}</small></div>`;
 }
 
 function actionFor(item, summary, status, decision) {
