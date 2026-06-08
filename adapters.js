@@ -1,187 +1,109 @@
-import { SIGNAL_ALIASES, normalizeSourceIdentity } from './config.js';
-import { normalizeToken, parseNumber } from './evaluation.js';
+import { normalizeSourceIdentity } from './config.js';
+import { normalizeState, normalizeText, normalizeToken, parseNumber } from './evaluation.js';
 
 export function cleanCsvText(text) {
-  return String(text || '')
-    .replace(/\uFEFF/g, '')
-    .replace(/"IsAlert"\\n\r?\n/g, '"IsAlert"\n')
-    .replace(/"IsAlert"\\n/g, '"IsAlert"')
-    .replace(/\r\n/g, '\n');
+  return String(text || '').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
 export function normalizeHeader(value) {
-  return String(value || '')
-    .replace(/\uFEFF/g, '')
-    .replace(/\\n/g, '')
-    .replace(/\\/g, '')
-    .replace(/^"+|"+$/g, '')
-    .trim();
+  return normalizeText(value).replace(/^"+|"+$/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
-export function cleanTimestampValue(value) {
-  return String(value ?? '')
-    .replace(/\uFEFF/g, '')
-    .replace(/\u00A0/g, ' ')
-    .replace(/\uFFFD/g, '')
-    .replace(/\\n/g, '')
-    .replace(/\r?\n/g, '')
-    .replace(/^"+|"+$/g, '')
-    .replace(/[;,]+$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function localEpoch(year, month, day, hour, minute, second, fraction) {
-  const milliseconds = Number(String(fraction || '').padEnd(3, '0').slice(0, 3)) || 0;
-  const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second), milliseconds);
-  if (date.getFullYear() !== Number(year) || date.getMonth() !== Number(month) - 1 || date.getDate() !== Number(day) || date.getHours() !== Number(hour) || date.getMinutes() !== Number(minute) || date.getSeconds() !== Number(second) || date.getMilliseconds() !== milliseconds) return null;
+export function parseFlexibleTimestamp(value) {
+  if (value instanceof Date) return value.getTime();
+  const text = normalizeText(value).replace(',', '.');
+  if (!text) return null;
+  const parsed = Date.parse(text);
+  if (Number.isFinite(parsed)) return parsed;
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.(\d{1,6}))?\s*(AM|PM)?$/i);
+  if (!match) return null;
+  let first = Number(match[1]);
+  let second = Number(match[2]);
+  const year = Number(match[3].length === 2 ? `20${match[3]}` : match[3]);
+  let hour = Number(match[4]);
+  const ampm = String(match[8] || '').toUpperCase();
+  if (ampm === 'PM' && hour < 12) hour += 12;
+  if (ampm === 'AM' && hour === 12) hour = 0;
+  let month = first;
+  let day = second;
+  if (first > 12 && second <= 12) { day = first; month = second; }
+  const ms = Number(String(match[7] || '').padEnd(3, '0').slice(0, 3)) || 0;
+  const date = new Date(year, month - 1, day, hour, Number(match[5]), Number(match[6] || 0), ms);
   const ts = date.getTime();
   return Number.isFinite(ts) ? ts : null;
 }
 
-export function parseSlashTimestampDetailed(value, order) {
-  if (!['MDY', 'DMY'].includes(order)) return { timestampMs: null, timestampFormat: '', timestampValid: false, timestampFailureReason: 'unsupported_order' };
-  const text = cleanTimestampValue(value).replace(',', '.');
-  if (!text) return { rawTimestamp: text, timestampMs: null, timestampFormat: '', timestampValid: false, timestampFailureReason: 'blank_timestamp' };
-  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:([:.])(\d{1,6}))?\s*(AM|PM)?$/i);
-  if (!match) return { rawTimestamp: text, timestampMs: null, timestampFormat: '', timestampValid: false, timestampFailureReason: `not_${order}_slash_timestamp` };
-  const first = Number(match[1]);
-  const second = Number(match[2]);
-  const year = Number(match[3].length === 2 ? `20${match[3]}` : match[3]);
-  let hour = Number(match[4]);
-  const ampm = String(match[9] || '').toUpperCase();
-  if (ampm === 'PM' && hour < 12) hour += 12;
-  if (ampm === 'AM' && hour === 12) hour = 0;
-  const month = order === 'DMY' ? second : first;
-  const day = order === 'DMY' ? first : second;
-  if (month < 1 || month > 12 || day < 1 || day > 31) return { rawTimestamp: text, timestampMs: null, timestampFormat: '', timestampValid: false, timestampFailureReason: `invalid_${order}_calendar_date` };
-  const timestampMs = localEpoch(year, month, day, hour, match[5], match[6] || '0', match[8]);
-  return { rawTimestamp: text, timestampMs, timestampFormat: `${order} slash${match[7] === ':' ? ' colon_fraction' : match[7] === '.' ? ' dot_fraction' : ''}`, timestampValid: Number.isFinite(timestampMs), timestampFailureReason: Number.isFinite(timestampMs) ? '' : `invalid_${order}_calendar_date` };
-}
-
-export function parseSlashTimestamp(value, order) {
-  const parsed = parseSlashTimestampDetailed(value, order);
-  return parsed.timestampValid ? parsed.timestampMs : null;
-}
-
-export function parseIsoTimestamp(value) {
-  const text = cleanTimestampValue(value).replace(',', '.');
-  const zoned = text.match(/^\d{4}-\d{1,2}-\d{1,2}[ T]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})$/i);
-  if (zoned) {
-    const parsed = Date.parse(text);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  const match = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.(\d{1,6}))?/);
-  if (!match) return null;
-  const ts = localEpoch(match[1], match[2], match[3], match[4], match[5], match[6] || '0', match[7]);
-  return Number.isFinite(ts) ? ts : null;
-}
-
-export function parseSourceTimestamp(value, preferredOrder = 'ISO') {
-  const rawTimestamp = cleanTimestampValue(value);
-  if (!rawTimestamp) return { rawTimestamp, timestampMs: null, timestampFormat: '', timestampValid: false, timestampFailureReason: 'blank_timestamp' };
-  if (preferredOrder !== 'DMY' && preferredOrder !== 'MDY') {
-    const iso = parseIsoTimestamp(rawTimestamp);
-    if (iso !== null) return { rawTimestamp, timestampMs: iso, timestampFormat: 'ISO', timestampValid: true, timestampFailureReason: '' };
-  }
-  const orders = preferredOrder === 'DMY' ? ['DMY'] : preferredOrder === 'MDY' ? ['MDY'] : ['MDY', 'DMY'];
-  for (const order of orders) {
-    const parsed = parseSlashTimestampDetailed(rawTimestamp, order);
-    if (parsed.timestampValid) return parsed;
-  }
-  if (!rawTimestamp.includes('/')) {
-    const fallback = Date.parse(rawTimestamp);
-    if (Number.isFinite(fallback)) return { rawTimestamp, timestampMs: fallback, timestampFormat: 'Date.parse_non_slash', timestampValid: true, timestampFailureReason: '' };
-  }
-  return { rawTimestamp, timestampMs: null, timestampFormat: '', timestampValid: false, timestampFailureReason: `unrecognized_${preferredOrder}_timestamp` };
-}
-
-export function parseFlexibleTimestamp(value, preferredOrder = 'ISO') {
-  const parsed = parseSourceTimestamp(value, preferredOrder);
-  return parsed.timestampValid ? parsed.timestampMs : null;
-}
-
-function normalizeRow(row) {
-  const out = {};
-  for (const [key, value] of Object.entries(row || {})) out[normalizeHeader(key)] = value;
-  return out;
-}
-
-function pathStartsWith(path, prefixes) {
-  const canonical = normalizeSourceIdentity(path);
-  const clean = String(path || '').replace(/\\/g, '/').toLowerCase();
-  return prefixes.some(prefix => clean.includes(prefix.toLowerCase())) || canonical === normalizeSourceIdentity(prefixes[0]);
-}
-
-function baseAdapter(sourceType, prefixes, order = 'ISO') {
+export function normalizeSourceRow(row, sourceName = 'uploaded-log') {
+  const normalized = {};
+  for (const [key, value] of Object.entries(row || {})) normalized[normalizeHeader(key)] = value;
+  const timestampRaw = firstValue(normalized, ['timestamp', 'time', 'date_time', 'datetime', 'date', 'logged_at']);
+  const timestampMs = parseFlexibleTimestamp(timestampRaw);
+  const signalName = normalizeText(firstValue(normalized, ['signal', 'signal_name', 'log_signal_name', 'name', 'parameter', 'tag', 'description']));
+  const valueRaw = firstValue(normalized, ['value', 'numeric_value', 'actual', 'reading', 'metric']);
+  const numericValue = parseNumber(valueRaw);
+  const unit = normalizeText(firstValue(normalized, ['unit', 'units', 'uom']));
+  const rawState = firstValue(normalized, ['machine_state', 'state', 'machine', 'system_state']);
+  const machineState = normalizeState(rawState);
+  const systemState = normalizeState(firstValue(normalized, ['system_state', 'subsystem_state']));
+  const source = normalizeText(firstValue(normalized, ['source', 'log_source'])) || sourceName;
+  if (!Number.isFinite(timestampMs) || !signalName) return null;
   return {
-    sourceType,
-    prefixes,
-    canHandlePath(path) { return pathStartsWith(path, prefixes) && (/\.csv$/i.test(path) || /\.txt$/i.test(path)); },
-    canHandleContainerPath(path) { return pathStartsWith(path, prefixes) && /\.zip$/i.test(path); },
-    cleanText: text => String(text || '').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n'),
-    normalizeHeader,
-    normalizeRow,
-    getTimestampInfo(row) { return parseSourceTimestamp(row.Timestamp || row.Time || row.DateTime, order); },
-    getTimestampMs(row) { return this.getTimestampInfo(row).timestampMs; },
-    getPreferredSignal(row) { return row.Signal || row.Parameter || row.Name || row.Message || row.ParameterType || ''; },
-    getCompositeSignal(row) { return [row.Component, row.SubComponent, row.ParameterType, row.Signal, row.Parameter].filter(Boolean).join(' '); },
-    getNumericValue(row) { return parseNumber(row.Value ?? row.Actual ?? row.NumericValue); },
-    getComponent(row) { return row.Component || ''; },
-    getSubsystem(row, rule) { return row.Subsystem || rule.subsystem; }
+    sourceId: normalizeSourceIdentity(source),
+    sourceName: source,
+    signalName,
+    normalizedSignal: normalizeToken(signalName),
+    timestampMs,
+    numericValue,
+    unit: unit || null,
+    rawState: normalizeText(rawState) || null,
+    machineState,
+    systemState
   };
 }
 
-export const ADAPTERS = {
-  BSSNotifications: {
-    ...baseAdapter('BSSNotifications', ['logs/LLCINotifications/BSS/'], 'MDY'),
-    requiredFields: ['Timestamp', 'Action', 'MessageType', 'LLCIKey', 'MachineType', 'Component', 'SubComponent', 'ParameterType', 'Value', 'IsAlert'],
-    cleanText: cleanCsvText,
-    getTimestampInfo(row) { return parseSourceTimestamp(row.Timestamp || row.Time || row.DateTime, 'MDY'); },
-    getPreferredSignal(row) { return row.SubComponent || ''; },
-    getCompositeSignal(row) { return [row.Component, row.SubComponent, row.ParameterType].filter(Boolean).join(' '); },
-    getNumericValue(row) { return parseNumber(row.Value); },
-    getComponent(row) { return row.Component || ''; },
-    getSubsystem(row, rule) { return row.Subsystem || rule.subsystem || ''; }
-  },
-  IPSNotifications: baseAdapter('IPSNotifications', ['logs/LLCINotifications/IPS/'], 'MDY'),
-  FECNotifications: baseAdapter('FECNotifications', ['logs/FECNotifications/'], 'ISO'),
-  AlertsMonitoring: baseAdapter('AlertsMonitoring', ['logs/AlertsMonitoring.txt', 'logs/AletrsMonitoring.txt'], 'ISO'),
-  MachineStates: baseAdapter('MachineStates', ['logs/MachineStates/'], 'DMY')
-};
-
-export function getAdapter(sourceType) {
-  return ADAPTERS[normalizeSourceIdentity(sourceType)] || ADAPTERS[sourceType] || null;
+function firstValue(row, names) {
+  for (const name of names) if (row[name] !== undefined && row[name] !== null && row[name] !== '') return row[name];
+  return null;
 }
 
-function aliasesFor(token) {
-  return new Set([token, ...(SIGNAL_ALIASES[token] || []), ...Object.entries(SIGNAL_ALIASES).filter(([, aliases]) => aliases.includes(token)).map(([key]) => key)]);
-}
-
-function matchReasonForRow(adapter, row, rule) {
-  const ruleSource = normalizeSourceIdentity(rule.sourceType || rule.logSource || adapter.sourceType);
-  if (ruleSource !== adapter.sourceType) return 'unmatched';
-  const preferred = normalizeToken(adapter.getPreferredSignal(row));
-  const composite = normalizeToken(adapter.getCompositeSignal(row));
-  const componentPath = normalizeToken([row.Component, row.SubComponent, row.ParameterType].filter(Boolean).join(''));
-  const ruleToken = rule.normSignal || normalizeToken(rule.signal);
-  if (preferred === ruleToken || composite === ruleToken) return 'exact_signal';
-  const aliases = aliasesFor(ruleToken);
-  if ([...aliases].some(token => token !== ruleToken && (preferred === token || composite === token))) return 'alias';
-  if (componentPath && [...aliases].some(token => token.length >= 5 && componentPath.includes(token))) return 'component_path';
-  if (adapter.sourceType === 'BSSNotifications') {
-    const sub = normalizeToken(row.SubComponent);
-    const parameter = normalizeToken(row.ParameterType);
-    if ([...aliases].some(token => token === sub || token === parameter)) return 'structured_fallback';
+export function parseDelimitedText(text, sourceName = 'uploaded-log') {
+  const clean = cleanCsvText(text);
+  const lines = clean.split('\n').filter(line => line.trim());
+  if (lines.length < 2) return [];
+  const delimiter = chooseDelimiter(lines[0]);
+  const headers = splitLine(lines[0], delimiter).map(normalizeHeader);
+  const rows = [];
+  for (let i = 1; i < lines.length; i += 1) {
+    const cells = splitLine(lines[i], delimiter);
+    const row = {};
+    for (let c = 0; c < headers.length; c += 1) row[headers[c]] = cells[c] ?? '';
+    const normalized = normalizeSourceRow(row, sourceName);
+    if (normalized) rows.push(normalized);
   }
-  return 'unmatched';
+  return rows;
 }
 
-export function getRuleMatchesForRow(adapter, row, rules) {
-  if (!rules?.length) return [];
-  return rules.map(rule => ({ rule, matchReason: matchReasonForRow(adapter, row, rule) })).filter(match => match.matchReason !== 'unmatched');
+function chooseDelimiter(header) {
+  const candidates = [',', '\t', ';', '|'];
+  let best = ',';
+  let bestCount = 0;
+  for (const delimiter of candidates) {
+    const count = header.split(delimiter).length;
+    if (count > bestCount) { best = delimiter; bestCount = count; }
+  }
+  return best;
 }
 
-export function matchRuleForRow(adapter, row, rules) {
-  return getRuleMatchesForRow(adapter, row, rules).map(match => match.rule);
+function splitLine(line, delimiter) {
+  const out = [];
+  let current = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') { quoted = !quoted; continue; }
+    if (ch === delimiter && !quoted) { out.push(current.trim()); current = ''; continue; }
+    current += ch;
+  }
+  out.push(current.trim());
+  return out;
 }

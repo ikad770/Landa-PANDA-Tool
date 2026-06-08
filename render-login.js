@@ -16,7 +16,7 @@ export function renderLoginShell(root) {
         </div>
         <div class="field-group">
           <label for="passwordInput">Password</label>
-          <div class="input-shell password-shell">${iconSvg('lock')}<input id="passwordInput" name="password" type="password" autocomplete="current-password" aria-describedby="passwordError" value="${AUTH_CONFIG.password}"><button id="togglePassword" type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">${iconSvg('eye')}</button></div>
+          <div class="input-shell password-shell">${iconSvg('lock')}<input id="passwordInput" name="password" type="password" autocomplete="current-password" aria-describedby="passwordError" ><button id="togglePassword" type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">${iconSvg('eye')}</button></div>
           <small id="passwordError" class="validation-message" aria-live="polite"></small>
         </div>
         <div class="login-options"><label class="check-line"><input id="rememberInput" type="checkbox"> Remember me</label><button id="forgotPassword" type="button" class="link-button">Forgot password</button></div>
