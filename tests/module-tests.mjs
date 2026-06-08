@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import { authenticateLocalPrototype, clearSession, createLocalSession, readStoredSession, storeSession, validateLoginFields } from '../auth.js';
 import { AUTH_CONFIG, USER_FACING_STAGES, normalizeSourceIdentity } from '../config.js';
 import { ADAPTERS, getRuleMatchesForRow, matchRuleForRow, parseSlashTimestamp, parseSourceTimestamp } from '../adapters.js';
-import { evaluateValue, inferCheckType, normalizeState, normalizeToken, parseTolerance, summarizeStateComparisons } from '../evaluation.js';
+import { consolidateDeviationEvents, evaluateValue, inferCheckType, normalizeState, normalizeToken, parseTolerance, summarizeStateComparisons, timeWeightedOutOfRange } from '../evaluation.js';
 import { createStateIndex } from '../machine-states.js';
 import { parseRulesWorkbook } from '../rules.js';
 import { chooseInitialParameter, chooseInitialSystem, getServiceDecision, groupParameters, normalizeStatus, renderActualExpectedChart, renderComparisonGauge, validateAnalysisResult } from '../render.js';
@@ -258,6 +258,29 @@ assert.equal(evaluateValue(criticalRule, 31, { status: 'matched', machineState: 
 assert.equal(evaluateValue({ ...fillRule, expectedByState: { Printing: 25 } }, 25, { status: 'matched', machineState: 'ON', systemState: 'ON' }).blocker, 'missing_expected_for_state', 'Expected lookup is state-dependent and blocks missing encountered state');
 assert.equal(evaluateValue(fillRule, 25, { status: 'too_old', stateMatchStatus: 'too_old', machineState: 'ON', systemState: 'ON' }).status, 'needs_validation', 'Stale state context produces Needs Validation');
 
+
+const noComparisonStatuses = [
+  evaluateValue({ ...fillRule, expectedByState: { Printing: 25 } }, 25, { status: 'matched', machineState: 'ON', systemState: 'ON' }).status,
+  evaluateValue({ ...fillRule, tolerance: null }, 25, { status: 'matched', machineState: 'ON', systemState: 'ON' }).status,
+  evaluateValue(fillRule, Number.NaN, { status: 'matched', machineState: 'ON', systemState: 'ON' }).status
+];
+assert.equal(noComparisonStatuses.some(status => ['warning', 'critical'].includes(status)), false, 'No comparison never produces Warning/Critical');
+const weighted = timeWeightedOutOfRange([
+  { t: 0, status: 'ok' },
+  { t: 1000, status: 'warning' },
+  { t: 4000, status: 'warning' },
+  { t: 5000, status: 'ok' }
+]);
+assert.equal(weighted.outOfRangeDurationMs, 4000, 'Out-of-range duration is time weighted');
+assert.equal(weighted.outOfRangePercent, 80, 'Out-of-range percentage is time weighted');
+const consolidated = consolidateDeviationEvents([
+  { t: 0, status: 'warning', actual: 28, expectedValue: 25, allowedLow: 23, allowedHigh: 27, machineState: 'ON', deviation: 1 },
+  { t: 10000, status: 'warning', actual: 29, expectedValue: 25, allowedLow: 23, allowedHigh: 27, machineState: 'ON', deviation: 2 },
+  { t: 120000, status: 'warning', actual: 30, expectedValue: 25, allowedLow: 23, allowedHigh: 27, machineState: 'ON', deviation: 3 }
+], 30000);
+assert.equal(consolidated.length, 2, 'Consecutive abnormal samples are consolidated by state/severity/range/tolerance');
+assert.equal(consolidated[0].pointCount, 2, 'Consolidated event keeps point count');
+
 const percentResult = evaluateValue({ ...fillRule, tolerance: parseTolerance('10%') }, 28, { status: 'matched', machineState: 'ON', systemState: 'ON' });
 assert.equal(percentResult.expectedLow, 22.5, 'Percent tolerance computes low band');
 assert.equal(percentResult.expectedHigh, 27.5, 'Percent tolerance computes high band');
@@ -273,8 +296,21 @@ assert.equal(stateSummary.sampleCount, 3, 'State summary sample count is correct
 assert.equal(stateSummary.averageActual, 26, 'State summary average is correct');
 assert.equal(stateSummary.minActual, 24, 'State summary minimum is correct');
 assert.equal(stateSummary.maxActual, 29, 'State summary maximum is correct');
-assert.equal(sortComparisonRows([{ status: 'ok', signal: 'C' }, { status: 'needs_configuration', signal: 'D' }, { status: 'warning', signal: 'B' }, { status: 'critical', signal: 'A' }, { status: 'needs_validation', signal: 'E' }, { status: 'no_data', signal: 'F' }]).map(row => row.status).join(','), 'critical,warning,ok,needs_validation,needs_configuration,no_data', 'Comparison Matrix sort order is correct');
+assert.equal(sortComparisonRows([{ status: 'ok', signal: 'C' }, { status: 'needs_configuration', signal: 'D' }, { status: 'warning', signal: 'B' }, { status: 'critical', signal: 'A' }, { status: 'needs_validation', signal: 'E' }, { status: 'no_data', signal: 'F' }]).map(row => row.status).join(','), 'critical,warning,ok,needs_configuration,needs_validation,no_data', 'Parameter Navigator sort order follows the decision model');
 assert.equal(evaluateValue({ checkType: '', expectedByState: {}, genericExpected: null, tolerance: null, warningLow: null, warningHigh: null, criticalLow: null, criticalHigh: null }, 10, { status: 'matched', machineState: 'ON', systemState: 'ON' }).status, 'needs_configuration', 'Needs Configuration is used only when configuration is genuinely missing');
+
+
+const separatedDecision = buildServiceDecision({ metadata: { rulesValid: 2, relevantValuesFound: 2 }, systemHealth: [{ system: 'BSS', status: 'needs_configuration', evaluated: 0 }], signalSummaries: [
+  { ruleId: 'CFGONLY', ruleRow: 1, system: 'BSS', signal: 'C', status: 'needs_configuration', matchedRows: 1, fullyEvaluatedPoints: 0 }
+], deviationEvents: [] });
+assert.equal(separatedDecision.machineStatus, 'needs_configuration', 'Configuration gaps stay non-operational when no parameter is evaluated');
+const worstOperationalDecision = buildServiceDecision({ metadata: { rulesValid: 3, relevantValuesFound: 3 }, systemHealth: [{ system: 'BSS', status: 'warning', evaluated: 1 }, { system: 'IPS', status: 'needs_configuration', evaluated: 0 }], signalSummaries: [
+  { ruleId: 'WARN2', ruleRow: 2, system: 'BSS', signal: 'B', status: 'warning', matchedRows: 1, fullyEvaluatedPoints: 1 },
+  { ruleId: 'CFG2', ruleRow: 3, system: 'IPS', signal: 'C', status: 'needs_configuration', matchedRows: 1, fullyEvaluatedPoints: 0 }
+], deviationEvents: [{ system: 'BSS', signal: 'B', severity: 'warning', durationMs: 1000, maximumDeviation: 2 }] });
+assert.equal(worstOperationalDecision.machineStatus, 'warning', 'Machine status uses worst operational system status before configuration gaps');
+assert.equal(worstOperationalDecision.kpis.affectedParameters, 1, 'Radar KPI counts affected parameters, not raw samples');
+assert.equal(worstOperationalDecision.kpis.deviationEvents, 1, 'Radar KPI counts consolidated deviation events');
 
 const statusDecision = buildServiceDecision({ metadata: { rulesValid: 3, relevantValuesFound: 3 }, systemHealth: [{ system: 'BSS', status: 'warning', evaluated: 1 }], signalSummaries: [
   { ruleId: 'OK', ruleRow: 1, system: 'BSS', signal: 'A', status: 'ok', matchedRows: 1, fullyEvaluatedPoints: 1 },
@@ -284,6 +320,7 @@ const statusDecision = buildServiceDecision({ metadata: { rulesValid: 3, relevan
 assert.equal(statusDecision.evaluationCoverage.fullyEvaluatedRules, 2, 'Count definition: fully evaluated rules require OK/Warning/Critical points');
 assert.equal(statusDecision.evaluationCoverage.matchedSignals, 3, 'Count definition: matched signals require at least one matched row');
 assert.equal(statusDecision.nextRecommendedAction, 'No service action configured for this rule.', 'Recommended actions are not invented when no configured action exists');
+assert.equal(statusDecision.kpis.fullyEvaluatedRules, 2, 'Radar KPI fully evaluated rules uses parameter-level definitions');
 const changedFiles = execSync('git diff --name-only', { encoding: 'utf8' }).trim().split(/\n/).filter(Boolean);
 assert.equal(changedFiles.some(file => /\.(png|jpe?g|webp|gif|bmp|ico|zip|xlsx?|pdf|docx|pptx|ttf|otf|woff2?)$/i.test(file)), false, 'Git diff contains no changed binary file paths');
 

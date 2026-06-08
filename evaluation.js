@@ -245,3 +245,50 @@ export function formatNumber(value) {
 export function formatRange(low, high) {
   return `${Number.isFinite(low) ? formatNumber(low) : '−∞'}–${Number.isFinite(high) ? formatNumber(high) : '+∞'}`;
 }
+
+export function timeWeightedOutOfRange(points = [], gapCapMs = 30 * 60 * 1000) {
+  const rows = points.filter(point => Number.isFinite(point.t)).sort((a, b) => a.t - b.t);
+  if (rows.length < 2) return { totalDurationMs: 0, outOfRangeDurationMs: 0, outOfRangePercent: 0 };
+  const intervals = rows.slice(0, -1).map((point, index) => Math.max(0, rows[index + 1].t - point.t)).filter(value => value > 0).sort((a, b) => a - b);
+  const normal = intervals[Math.floor(intervals.length / 2)] || gapCapMs;
+  const cap = Math.min(gapCapMs, normal * 3);
+  let totalDurationMs = 0;
+  let outOfRangeDurationMs = 0;
+  rows.slice(0, -1).forEach((point, index) => {
+    const duration = Math.min(Math.max(0, rows[index + 1].t - point.t), cap);
+    totalDurationMs += duration;
+    if (['warning', 'critical'].includes(point.status)) outOfRangeDurationMs += duration;
+  });
+  return { totalDurationMs, outOfRangeDurationMs, outOfRangePercent: totalDurationMs ? (outOfRangeDurationMs / totalDurationMs) * 100 : 0 };
+}
+
+export function consolidateDeviationEvents(points = [], gapToleranceMs = 30000) {
+  const events = [];
+  let active = null;
+  for (const point of points.filter(row => ['warning', 'critical'].includes(row.status) && Number.isFinite(row.t)).sort((a, b) => a.t - b.t)) {
+    const expectedKey = `${point.expectedValue ?? point.expected}|${point.allowedLow ?? point.expectedLow}|${point.allowedHigh ?? point.expectedHigh}`;
+    const state = point.expectedState || point.systemState || point.machineState || '—';
+    const compatible = active && active.severity === point.status && active.state === state && active.expectedKey === expectedKey && point.t - active.endTime <= gapToleranceMs;
+    if (!compatible) {
+      if (active) events.push(finalizeEvent(active));
+      active = { startTime: point.t, endTime: point.t, durationMs: 0, state, severity: point.status, expected: point.expectedValue ?? point.expected ?? null, allowedLow: point.allowedLow ?? point.expectedLow ?? null, allowedHigh: point.allowedHigh ?? point.expectedHigh ?? null, sumActual: point.actual, averageActual: point.actual, minimumActual: point.actual, maximumActual: point.actual, maximumDeviation: Math.abs(point.deviation || 0), pointCount: 1, expectedKey };
+    } else {
+      active.endTime = point.t;
+      active.durationMs = active.endTime - active.startTime;
+      active.sumActual += point.actual;
+      active.minimumActual = Math.min(active.minimumActual, point.actual);
+      active.maximumActual = Math.max(active.maximumActual, point.actual);
+      active.maximumDeviation = Math.max(active.maximumDeviation, Math.abs(point.deviation || 0));
+      active.pointCount += 1;
+    }
+  }
+  if (active) events.push(finalizeEvent(active));
+  return events;
+}
+
+function finalizeEvent(event) {
+  const clean = { ...event, averageActual: event.pointCount ? event.sumActual / event.pointCount : null };
+  delete clean.sumActual;
+  delete clean.expectedKey;
+  return clean;
+}
