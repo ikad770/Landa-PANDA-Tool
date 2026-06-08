@@ -158,20 +158,20 @@ function renderBottomRow(result, app, handlers, decision) {
 function latestFindings(result, decision) {
   const findings = [...(decision.operationalFindings || [])].sort((a, b) => (b.startTimestampMs || 0) - (a.startTimestampMs || 0)).slice(0, 5);
   if (!findings.length) {
-    if (decision.configurationProblems.length) return renderEmptyState('Configuration required', `Actual values were found for ${decision.configurationProblems.length} rule${decision.configurationProblems.length === 1 ? '' : 's'}, but their rules are incomplete.`, 'needs_configuration');
-    if (decision.validationProblems.length) return renderEmptyState('Validation required', `Matching source values were found, but ${decision.validationProblems.length} rule${decision.validationProblems.length === 1 ? '' : 's'} need corrected context.`, 'needs_validation');
+    const configurationCount = decision.configurationProblemIds?.length || 0;
+    const validationCount = decision.validationProblemIds?.length || 0;
+    if (configurationCount) return renderEmptyState('Configuration required', `Actual values were found for ${configurationCount} rule${configurationCount === 1 ? '' : 's'}, but their rules are incomplete.`, 'needs_configuration');
+    if (validationCount) return renderEmptyState('Validation required', `Matching source values were found, but ${validationCount} rule${validationCount === 1 ? '' : 's'} need corrected context.`, 'needs_validation');
     return renderEmptyState('No active operational issue', 'All fully evaluated parameters are currently inside their configured ranges.', 'ok');
   }
   return findings.map(event => `<button class="finding-item ${statusClass(event.severity)}" data-event-ref="${escapeAttr(event.id)}"><span>${statusIcon(event.severity)}</span><b>${fmtTime(event.startTimestampMs)}</b><strong>${escapeHtml(event.system)} · ${escapeHtml(event.signal)}</strong><small>Actual ${fmtNum(event.latestActual)} vs ${escapeHtml(expectedText(event))}</small></button>`).join('');
 }
 
 function recommendedActions(decision) {
-  const rows = [];
-  if (decision.nextRecommendedAction) rows.push({ system: decision.primarySystem || 'Machine', status: decision.machineStatus, action: decision.nextRecommendedAction, impact: decision.machineStatusLabel });
-  for (const event of (decision.operationalFindings || []).filter(event => event.recommendedAction)) rows.push({ system: event.system, status: event.severity, action: event.recommendedAction, impact: statusLabel(event.severity) });
-  for (const row of (decision.configurationProblems || [])) rows.push({ system: row.system, status: row.status, action: `Update Excel row ${row.ruleRow || '—'} with Expected value and Spec Tolerance.`, impact: 'Configuration required' });
+  const rows = [...(decision.recommendedActions || [])];
+  if (decision.nextRecommendedAction) rows.unshift({ system: decision.primarySystem || 'Machine', status: decision.machineStatus, action: decision.nextRecommendedAction, priority: decision.machineStatusLabel });
   if (!rows.length) return renderEmptyState('No service action required', 'No active deviation or incomplete rule requires action right now.', 'ok');
-  return rows.slice(0, 3).map((row, idx) => `<div class="action-row-card ${statusClass(row.status)}"><span class="priority-number">${idx + 1}</span><div><strong>${escapeHtml(row.action)}</strong><small>${escapeHtml(row.impact)} · ${escapeHtml(row.system)}</small></div></div>`).join('');
+  return rows.slice(0, 3).map((row, idx) => `<div class="action-row-card ${statusClass(row.status)}"><span class="priority-number">${idx + 1}</span><div><strong>${escapeHtml(row.action)}</strong><small>${escapeHtml(row.priority || statusLabel(row.status))} · ${escapeHtml(row.system)}</small></div></div>`).join('');
 }
 
 function machineFallbackSvg() {

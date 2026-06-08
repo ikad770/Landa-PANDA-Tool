@@ -5,7 +5,7 @@ import { ADAPTERS, getAdapter, getRuleMatchesForRow } from './adapters.js';
 import { APP_STAGES, MAX_CHART_POINTS_PER_RULE, MAX_DEVIATION_EVENTS_PER_RULE, MAX_EVIDENCE_PREVIEW_PER_RULE, MIN_DEVIATION_GAP_MS, REQUIRED_SOURCE_PATHS, STATUS_PRIORITY, SYSTEMS } from './config.js';
 import { createStateIndex } from './machine-states.js';
 import { buildAnalysisPlan, parseRulesWorkbook, serializePlan } from './rules.js';
-import { analyzeParameter, assertCanonicalSerializable, evaluateValue, formatRange, normalizeText } from './evaluation.js';
+import { createParameterAccumulator, evaluatePoint, finalizeParameterAccumulator, updateParameterAccumulator, evaluateValue, formatRange, normalizeText } from './evaluation.js';
 import { buildServiceDecision } from './service-decision.js';
 
 let cancelled = false;
@@ -34,9 +34,17 @@ self.onmessage = async event => {
 
 
 function assertWorkerPayloadSerializable(payload) {
-  assertCanonicalSerializable(payload, 'worker payload');
-  if (typeof structuredClone === 'function') structuredClone(payload);
+  validatePlainWorkerPayload(payload);
+  if (payload?.analysisResult?.metadata) payload.analysisResult.metadata.payloadValidated = true;
   return payload;
+}
+
+function validatePlainWorkerPayload(payload) {
+  if (!payload || typeof payload !== 'object') throw new TypeError('Worker payload must be an object.');
+  const result = payload.analysisResult;
+  if (!result) return;
+  if (!Array.isArray(result.signalSummaries) || !Array.isArray(result.systemHealth)) throw new TypeError('AnalysisResult has invalid top-level collections.');
+  if ('chartSeries' in result) throw new TypeError('AnalysisResult must not include duplicated chartSeries payload.');
 }
 
 function serializeWorkerError(error, context = {}) {
@@ -120,7 +128,6 @@ async function runAnalysis(autocollectFile, rulesFile) {
   await parseRequiredSources(archiveIndex.sourceFilesByAdapter, plan, stateIndex, runtimes);
 
   setStage('evaluation', 0.8, 'Closing consolidated deviation events');
-  analysisAudit.deviationEvents = [...runtimes.values()].reduce((sum, runtime) => sum + analyzeParameter(runtime.rule, runtime.pointInputs).deviationEventCount, 0);
   setStage('evaluation', 1, 'Evaluation complete');
 
   setStage('timeline_finalization', 0.5, 'Building compact charts and timelines');
@@ -244,13 +251,13 @@ async function parseRequiredSources(filesByAdapter, plan, stateIndex, runtimes) 
 async function parseCsvFile(file, adapter, onRow) {
   const text = adapter.cleanText(await file.entry.async('text'));
   const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, dynamicTyping: false, transformHeader: adapter.normalizeHeader || (x => x) });
-  if (parsed.errors?.length) diagnostics.parserWarnings.push(...parsed.errors.slice(0, 5).map(error => ({ file: file.path, message: error.message, row: error.row })));
+  if (parsed.errors?.length) addDiagnostics(diagnostics.parserWarnings, parsed.errors.slice(0, 5).map(error => ({ file: file.path, message: error.message, row: error.row })));
   let rowNo = 1;
   for (const rawRow of parsed.data || []) onRow(adapter.normalizeRow ? adapter.normalizeRow(rawRow) : rawRow, rowNo++);
 }
 
 function createRuntime(rule) {
-  return { rule, ruleId: rule.id, matchedRows: 0, numericRows: 0, validTimestampRows: 0, invalidTimestampRows: 0, sourceFiles: new Set(), rowsScanned: 0, matchReasons: {}, unmatchedExamples: [], duplicateMatches: [], conflictingRules: [], classifiedRows: 0, fullyEvaluatedRows: 0, needsValidationRows: 0, needsConfigurationRows: 0, classifiedPoints: 0, fullyEvaluatedPoints: 0, blockedPoints: 0, evaluatedCounts: {}, blockers: { invalid_timestamp: 0, no_numeric_value: 0, missing_state: 0, unsupported_state: 0, missing_expected_for_state: 0, missing_expected_value: 0, missing_threshold_or_tolerance: 0, unsupported_or_missing_check_type: 0, invalid_duration_configuration: 0, internal_evaluation_error: 0 }, firstRawTimestamp: '', firstTimestampMs: Number.POSITIVE_INFINITY, lastTimestampMs: Number.NEGATIVE_INFINITY, latestPoint: null, latestActual: null, minActual: Number.POSITIVE_INFINITY, maxActual: Number.NEGATIVE_INFINITY, sumActual: 0, pointInputs: [], chartReservoir: [], evidence: [], stateCoverage: {} };
+  return { rule, ruleId: rule.id, matchedRows: 0, numericRows: 0, validTimestampRows: 0, invalidTimestampRows: 0, sourceFiles: new Set(), rowsScanned: 0, matchReasons: {}, unmatchedExamples: [], duplicateMatches: [], conflictingRules: [], classifiedRows: 0, fullyEvaluatedRows: 0, needsValidationRows: 0, needsConfigurationRows: 0, classifiedPoints: 0, fullyEvaluatedPoints: 0, blockedPoints: 0, evaluatedCounts: {}, blockers: { invalid_timestamp: 0, no_numeric_value: 0, missing_state: 0, unsupported_state: 0, missing_expected_for_state: 0, missing_expected_value: 0, missing_threshold_or_tolerance: 0, unsupported_or_missing_check_type: 0, invalid_duration_configuration: 0, internal_evaluation_error: 0 }, firstRawTimestamp: '', firstTimestampMs: Number.POSITIVE_INFINITY, lastTimestampMs: Number.NEGATIVE_INFINITY, latestPoint: null, latestActual: null, minActual: Number.POSITIVE_INFINITY, maxActual: Number.NEGATIVE_INFINITY, sumActual: 0, accumulator: createParameterAccumulator(rule, { maxChartPoints: MAX_CHART_POINTS_PER_RULE, maxDeviationEvents: MAX_DEVIATION_EVENTS_PER_RULE }), evidence: [], stateCoverage: {} };
 }
 
 function evaluateMatchedRow(rule, adapter, row, sourceFile, rowNo, stateIndex, runtime, matchReason = 'unmatched') {
@@ -283,9 +290,9 @@ function evaluateMatchedRow(rule, adapter, row, sourceFile, rowNo, stateIndex, r
     recordInvalidTimestamp(rule.sourceType, sourceFile.path, timestampInfo.rawTimestamp || rawTimestamp, rowNo, timestampInfo.timestampFailureReason);
     const point = { t: null, timestampMs: null, rawTimestamp: timestampInfo.rawTimestamp || rawTimestamp, timestampFormat: timestampInfo.timestampFormat || '', timestampValid: false, timestampFailureReason: timestampInfo.timestampFailureReason || 'invalid_timestamp', actual, rawValue: row.Value ?? row.Actual ?? row.NumericValue ?? '', expectedLow: null, expectedHigh: null, status: result.status, blocker: result.blocker, reason: result.reason, machineState: null, systemState: null, stateContextStatus: 'missing', component: adapter.getComponent(row) || rule.component, subsystem: adapter.getSubsystem(row, rule), signal: rule.signal, source: sourceFile.sourceType, file: sourceFile.path, ruleRow: rule.row, row: rowNo, timestampStatus: 'invalid' };
     updateActualAggregates(runtime, actual);
-    runtime.pointInputs.push(point);
-    runtime.latestPoint = point;
-    addSample(runtime.chartReservoir, point, MAX_CHART_POINTS_PER_RULE);
+    const evaluatedPoint = evaluatePoint(rule, point, { previous: runtime.accumulator.previous });
+    runtime.latestPoint = evaluatedPoint;
+    updateParameterAccumulator(runtime.accumulator, evaluatedPoint);
     addEvidence(runtime, point, rule, sourceFile, result);
     return;
   }
@@ -298,11 +305,11 @@ function evaluateMatchedRow(rule, adapter, row, sourceFile, rowNo, stateIndex, r
   runtime.lastTimestampMs = Math.max(runtime.lastTimestampMs, timestampMs);
   updateActualAggregates(runtime, actual);
   const point = { t: timestampMs, timestampMs, rawTimestamp: timestampInfo.rawTimestamp || rawTimestamp, timestampFormat: timestampInfo.timestampFormat || '', timestampValid: true, timestampFailureReason: '', actual, rawValue: row.Value ?? row.Actual ?? row.NumericValue ?? '', expected: result.expectedValue, expectedValue: result.expectedValue, expectedState: result.expectedState, expectedLow: result.expectedLow, expectedHigh: result.expectedHigh, allowedLow: result.allowedLow, allowedHigh: result.allowedHigh, warningLow: result.warningLow, warningHigh: result.warningHigh, criticalLow: result.criticalLow, criticalHigh: result.criticalHigh, status: result.status, deviation: result.deviation, deviationDirection: result.deviationDirection, distanceFromNearestLimit: result.distanceFromNearestLimit, blocker: result.blocker || null, reason: result.reason || '', machineState: stateContext.machineState, systemState: stateContext.systemState, stateContextStatus: stateContext.stateMatchStatus || stateContext.status, matchedStateTimestamp: stateContext.matchedStateTimestamp ?? null, stateAgeMs: stateContext.stateAgeMs ?? null, component: adapter.getComponent(row) || rule.component, subsystem: adapter.getSubsystem(row, rule), signal: rule.signal, source: sourceFile.sourceType, sourceFile: sourceFile.path, file: sourceFile.path, ruleRow: rule.row, row: rowNo, timestampStatus: 'valid' };
-  runtime.latestPoint = point;
+  const evaluatedPoint = evaluatePoint(rule, point, { previous: runtime.accumulator.previous });
+  runtime.latestPoint = evaluatedPoint;
   count(runtime.stateCoverage, stateContext.systemState || stateContext.machineState || 'unknown');
-  runtime.pointInputs.push(point);
-  assertRealClassification(runtime, rule, result, point);
-  addSample(runtime.chartReservoir, point, MAX_CHART_POINTS_PER_RULE);
+  updateParameterAccumulator(runtime.accumulator, evaluatedPoint);
+  assertRealClassification(runtime, rule, result, evaluatedPoint);
   addEvidence(runtime, point, rule, sourceFile, result);
 }
 
@@ -311,7 +318,7 @@ function assertRealClassification(runtime, rule, result, point) {
   const hasEvaluatorConfig = rule.tolerance || rule.warningLow !== null || rule.warningHigh !== null || rule.criticalLow !== null || rule.criticalHigh !== null;
   if (Number.isFinite(point.actual) && hasSupportedState && hasEvaluatorConfig && !['ok', 'warning', 'critical'].includes(result.status)) {
     count(runtime.blockers, 'evaluator_failed_despite_complete_inputs');
-    diagnostics.parserWarnings.push({ file: point.file, row: point.row, message: `Evaluator failed despite complete inputs: row ${rule.row} ${rule.signal} had enough configuration but produced ${result.status}` });
+    addDiagnostics(diagnostics.parserWarnings, { file: point.file, row: point.row, message: `Evaluator failed despite complete inputs: row ${rule.row} ${rule.signal} had enough configuration but produced ${result.status}` });
   }
 }
 
@@ -344,11 +351,6 @@ function recordClassification(runtime, result) {
   if (result.blocker) count(runtime.blockers, result.blocker);
 }
 
-function addSample(points, point, max) {
-  if (points.length < max) points.push(point);
-  else points[Math.floor(Math.random() * max)] = point;
-}
-
 function addEvidence(runtime, point, rule, file, result) {
   if (runtime.evidence.length >= MAX_EVIDENCE_PREVIEW_PER_RULE) return;
   runtime.evidence.push({ timestampMs: point.t, rawTimestamp: point.rawTimestamp || '', timestampStatus: point.timestampStatus || (Number.isFinite(point.t) ? 'valid' : 'invalid'), source: file.sourceType, file: file.path, row: point.row, ruleRow: rule.row, system: rule.system, subsystem: point.subsystem || rule.subsystem, component: point.component || rule.component, signal: rule.signal, actual: point.actual, rawValue: point.rawValue ?? '', expected: Number.isFinite(result.expectedValue) ? result.expectedValue : (Number.isFinite(result.expectedLow) || Number.isFinite(result.expectedHigh) ? formatRange(result.expectedLow, result.expectedHigh) : 'Expected range unavailable'), expectedValue: result.expectedValue, expectedValue: result.expectedValue, expectedLow: result.expectedLow, expectedHigh: result.expectedHigh, allowedLow: result.allowedLow, allowedHigh: result.allowedHigh, deviation: result.deviation, deviationDirection: result.deviationDirection, distanceFromNearestLimit: result.distanceFromNearestLimit, result: result.status, blocker: result.blocker || null, reason: result.reason, machineState: point.machineState, systemState: point.systemState });
@@ -357,16 +359,22 @@ function addEvidence(runtime, point, rule, file, result) {
 function finalizeResult(rules, plan, stateIndex, runtimes) {
   const runtimeList = [...runtimes.values()];
   const canonicalByRule = new Map(runtimeList.map(runtime => [runtime.ruleId, runtimeToSummary(runtime)]));
+  analysisAudit.deviationEvents = [...canonicalByRule.values()].reduce((sum, summary) => sum + (summary.deviationEventCount || 0), 0);
   const deviationEvents = [...canonicalByRule.values()].flatMap(summary => summary.deviationEvents || []).slice(0, runtimeList.length * MAX_DEVIATION_EVENTS_PER_RULE).sort((a, b) => STATUS_PRIORITY[b.severity] - STATUS_PRIORITY[a.severity] || b.startTimestampMs - a.startTimestampMs);
   const signalSummaries = [...canonicalByRule.values()].sort((a, b) => STATUS_PRIORITY[b.status] - STATUS_PRIORITY[a.status] || a.system.localeCompare(b.system));
   const systems = [...new Set([...SYSTEMS, ...plan.systems])];
   const systemHealth = systems.map(system => systemHealthFor(system, plan, signalSummaries));
   analysisAudit.systemsEvaluated = systemHealth.filter(system => !['no_rule', 'no_data'].includes(system.status)).length;
-  const timestamps = runtimeList.flatMap(runtime => [runtime.firstTimestampMs, runtime.lastTimestampMs]).filter(Number.isFinite);
-  const startTimestampMs = timestamps.length ? Math.min(...timestamps) : null;
-  const endTimestampMs = timestamps.length ? Math.max(...timestamps) : null;
+  let startTimestampMs = null;
+  let endTimestampMs = null;
+  for (const runtime of runtimeList) {
+    for (const value of [runtime.firstTimestampMs, runtime.lastTimestampMs]) {
+      if (!Number.isFinite(value)) continue;
+      startTimestampMs = startTimestampMs === null ? value : Math.min(startTimestampMs, value);
+      endTimestampMs = endTimestampMs === null ? value : Math.max(endTimestampMs, value);
+    }
+  }
   const evidence = runtimeList.flatMap(runtime => runtime.evidence).sort((a, b) => b.timestampMs - a.timestampMs).slice(0, 30);
-  const chartSeries = Object.fromEntries(signalSummaries.map(summary => [summary.ruleId, (summary.chartPoints || []).slice(0, MAX_CHART_POINTS_PER_RULE).sort((a, b) => (a.t ?? 0) - (b.t ?? 0))]));
   diagnostics.evaluationBlockers = buildEvaluationBlockers(runtimeList);
   diagnostics.ruleCoverage = buildRuleCoverage(runtimeList);
   diagnostics.sourceAudit = buildSourceAudit(runtimeList);
@@ -380,7 +388,6 @@ function finalizeResult(rules, plan, stateIndex, runtimes) {
     timelineRows: buildTimelineRows(systemHealth, deviationEvents),
     stateTimeline: buildStateTimeline(stateIndex.series.Machine || [], startTimestampMs, endTimestampMs),
     signalSummaries,
-    chartSeries,
     evidence,
     diagnosticsSummary: { ...diagnostics, analysisAudit, analysisPlan: serializePlan(plan) }
   };
@@ -389,7 +396,8 @@ function finalizeResult(rules, plan, stateIndex, runtimes) {
 }
 
 function runtimeToSummary(runtime) {
-  return analyzeParameter(runtime.rule, runtime.pointInputs, { sourceAvailable: runtime.sourceFiles.size > 0 });
+  if (!runtime.finalSummary) runtime.finalSummary = finalizeParameterAccumulator(runtime.accumulator);
+  return runtime.finalSummary;
 }
 
 function parameterStatus(runtime) {
@@ -441,7 +449,7 @@ function blockingReason() {
 }
 
 export function validateAnalysisResult(result) {
-  for (const key of ['metadata', 'systemHealth', 'signalSummaries', 'chartSeries', 'diagnosticsSummary']) {
+  for (const key of ['metadata', 'systemHealth', 'signalSummaries', 'diagnosticsSummary']) {
     if (!result?.[key]) return { valid: false, reason: `AnalysisResult is missing ${key}.` };
   }
   if (!result.metadata.rulesValid) return { valid: false, reason: 'No valid rules are available for evaluation.' };
@@ -511,6 +519,28 @@ function blockerLabel(key) {
 
 function STATUS_LABEL_SAFE(status) { return status === 'needs_validation' ? 'Needs validation' : status === 'needs_configuration' ? 'Needs configuration' : status === 'evaluator_pending' ? 'Evaluator pending' : status; }
 
+
+function addDiagnostics(collection, entries) {
+  const list = Array.isArray(entries) ? entries : [entries];
+  collection.totalCount = (collection.totalCount || 0) + list.length;
+  for (const entry of list) {
+    const clean = {
+      timestamp: new Date().toISOString(),
+      phase: progressState?.currentStage || 'analysis',
+      level: entry.level || 'warning',
+      code: entry.code || entry.reason || null,
+      message: String(entry.message || '').slice(0, 500),
+      source: entry.source || entry.file || null,
+      signal: entry.signal || null,
+      ruleId: entry.ruleId || null,
+      ruleRow: entry.ruleRow || entry.row || null,
+      row: entry.row ?? null
+    };
+    collection.push(clean);
+    if (collection.length > 300) collection.shift();
+  }
+}
+
 function recordInvalidTimestamp(source, file, raw, row, reason = 'invalid_timestamp') {
   const key = `${source}:${file}`;
   diagnostics.invalidTimestamps[key] = (diagnostics.invalidTimestamps[key] || 0) + 1;
@@ -545,7 +575,7 @@ function recordUnmatchedExample(source, row) {
 
 function recordDuplicateMatches(matches, row, sourceFile, rowNo, runtimes) {
   const warning = { file: sourceFile.path, row: rowNo, signal: normalizeText(row.SubComponent || row.Signal || row.ParameterType), rules: matches.map(item => item.rule.row) };
-  diagnostics.parserWarnings.push({ ...warning, message: `Duplicate rule matches for one source row: ${warning.rules.join(', ')}` });
+  addDiagnostics(diagnostics.parserWarnings, { ...warning, message: `Duplicate rule matches for one source row: ${warning.rules.join(', ')}` });
   for (const match of matches) {
     const runtime = runtimes.get(match.rule.id);
     if (runtime && runtime.duplicateMatches.length < 10) runtime.duplicateMatches.push(warning);

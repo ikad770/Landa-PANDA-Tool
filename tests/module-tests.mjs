@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import { authenticateLocalPrototype, clearSession, createLocalSession, readStoredSession, storeSession, validateLoginFields } from '../auth.js';
 import { AUTH_CONFIG, USER_FACING_STAGES, normalizeSourceIdentity } from '../config.js';
 import { ADAPTERS, getRuleMatchesForRow, matchRuleForRow, parseSlashTimestamp, parseSourceTimestamp } from '../adapters.js';
-import { analyzeParameter, assertCanonicalSerializable, computeAllowedRange, consolidateDeviationEvents, evaluateValue, inferCheckType, normalizeState, normalizeToken, parseNumber, parseTolerance, sanitizeCanonicalValue, selectExpected, summarizeStateComparisons, timeWeightedOutOfRange } from '../evaluation.js';
+import { analyzeParameter, assertCanonicalSerializable, computeAllowedRange, consolidateDeviationEvents, createParameterAccumulator, evaluatePoint, evaluateValue, finalizeParameterAccumulator, inferCheckType, normalizeState, normalizeToken, parseNumber, parseTolerance, sanitizeCanonicalValue, selectExpected, summarizeStateComparisons, timeWeightedOutOfRange, updateParameterAccumulator } from '../evaluation.js';
 import { createStateIndex } from '../machine-states.js';
 import { parseRulesWorkbook } from '../rules.js';
 import { chooseInitialParameter, chooseInitialSystem, getServiceDecision, groupParameters, normalizeStatus, renderActualExpectedChart, renderComparisonGauge, validateAnalysisResult } from '../render.js';
@@ -97,7 +97,6 @@ function baseResult(overrides = {}) {
     systemHealth: [{ system: 'BSS', status: 'needs_validation', matchedRows: 1, blockedPoints: 1 }],
     deviationEvents: [],
     signalSummaries: [{ ruleId: 'R1', system: 'BSS', signal: 'Temperature', status: 'needs_validation', matchedRows: 1, classifiedPoints: 1, fullyEvaluatedPoints: 0, latestActual: 42, blocker: 'invalid_timestamp', rawTimestamp: '03/12/2026 15:51:40:441145', timestampStatus: 'invalid' }],
-    chartSeries: { R1: [{ t: null, rawTimestamp: '03/12/2026 15:51:40:441145', actual: 42, status: 'needs_validation', blocker: 'invalid_timestamp' }] },
     stateTimeline: [],
     diagnosticsSummary: { evaluationBlockers: { topBlocker: { reason: 'invalid_timestamp', count: 1, label: 'Invalid timestamp' } } },
     ...overrides,
@@ -227,7 +226,7 @@ const needsValidation = validateAnalysisResult(baseResult());
 assert.equal(needsValidation.valid, true, 'Needs Validation result should validate');
 assert.equal(needsValidation.status, 'completed_with_warnings');
 assert.equal(baseResult().signalSummaries[0].latestActual, 42, 'Invalid timestamp preserves numeric actual value');
-assert.equal(baseResult().chartSeries.R1[0].actual, 42, 'Needs Validation chart samples should preserve actual values');
+assert.equal(baseResult({ signalSummaries: [{ ruleId: 'R1', system: 'BSS', signal: 'Temperature', status: 'needs_validation', matchedRows: 1, classifiedPoints: 1, fullyEvaluatedPoints: 0, latestActual: 42, chartPoints: [{ t: null, actual: 42, status: 'needs_validation' }] }] }).signalSummaries[0].chartPoints[0].actual, 42, 'Needs Validation chart samples should preserve actual values');
 assert.notEqual(baseResult().metadata.relevantSignalsFound / baseResult().metadata.relevantSignalsRequired, baseResult().metadata.rulesEvaluated / baseResult().metadata.rulesValid, 'Signal Match Coverage differs from Fully Evaluated Coverage');
 
 const uiResult = baseResult({
@@ -245,7 +244,6 @@ const uiResult = baseResult({
     { ruleId: 'OK', system: 'QCS', signal: 'Quality', status: 'ok', latestActual: 1, expectedLow: 0, expectedHigh: 2, eventCount: 0 },
     { ruleId: 'NODATA', system: 'BSS', signal: 'Missing', status: 'no_data', latestActual: null, eventCount: 0 }
   ],
-  chartSeries: { CONFIG: [{ t: 1, actual: 674.54, status: 'needs_configuration' }], WARN: [{ t: 1, actual: 31, expectedLow: 20, expectedHigh: 25, status: 'warning' }] },
   deviationEvents: [{ id: 'DW', system: 'IPS', signal: 'Pressure', severity: 'warning', latestActual: 31, expectedLow: 20, expectedHigh: 25, startTimestampMs: 1, endTimestampMs: 2, maximumDeviation: 6, machineStatesSeen: ['Printing'] }]
 });
 
@@ -255,9 +253,9 @@ assert.equal(decision.systemsAtRiskCount, 1, 'Systems at Risk counts only critic
 assert.equal(decision.systemsRequiringAttentionCount, 2, 'Systems Requiring Attention includes operational and configuration/validation systems');
 assert.equal(decision.operationalFindings.length, 1, 'Operational findings come from real deviation events');
 assert.equal(decision.topFindings.length, 1, 'serviceDecision exposes top findings once centrally');
-assert.equal(Array.isArray(decision.matchedSignals), true, 'serviceDecision exposes matched signals without recalculating in renderers');
-assert.equal(decision.configurationProblems.length, 1, 'Configuration issues are separated at rule level');
-assert.equal(decision.validationProblems.length, 1, 'Validation issues are separated at rule level');
+assert.equal(Array.isArray(decision.matchedSignalIds), true, 'serviceDecision exposes matched signal IDs without recalculating in renderers');
+assert.equal(decision.configurationProblemIds.length, 1, 'Configuration issues are separated at rule level');
+assert.equal(decision.validationProblemIds.length, 1, 'Validation issues are separated at rule level');
 assert.equal(decision.nextRecommendedAction, 'No service action configured for this rule.', 'Operational warning does not invent a service action when the rule has none');
 assert.equal(decision.primarySystem, 'IPS', 'Primary system selection prefers systems at operational risk');
 assert.equal(getServiceDecision(uiResult).machineStatus, 'warning', 'Renderer helper uses the same serviceDecision model');
@@ -267,7 +265,6 @@ const operationalResult = baseResult({
   systemHealth: [{ system: 'BSS', status: 'critical', rules: 1, deviations: 1 }],
   deviationEvents: [{ id: 'D1', system: 'BSS', signal: 'FillActualTemperatureC', severity: 'critical', latestActual: 91.2, expectedHigh: 90, startTimestampMs: 1, endTimestampMs: 2, machineStatesSeen: ['Printing'] }],
   signalSummaries: [{ ruleId: 'R1', system: 'BSS', signal: 'FillActualTemperatureC', status: 'critical', latestActual: 91.2, expectedLow: 80, expectedHigh: 90, eventCount: 1, fullyEvaluatedPoints: 1 }],
-  chartSeries: { R1: [{ t: 1, actual: 91.2, expectedLow: 80, expectedHigh: 90, status: 'critical' }] }
 });
 assert.equal(buildServiceDecision(operationalResult).machineStatus, 'critical', 'Operational issue status is critical when a critical event exists');
 assert.match(buildServiceDecision(operationalResult).machineSummary, /FillActualTemperatureC/, 'Machine summary names the responsible parameter');
@@ -276,7 +273,6 @@ const configOnlyResult = baseResult({
   metadata: { rulesEvaluated: 0, blockedPoints: 1, needsValidationPoints: 0, needsConfigurationPoints: 1 },
   systemHealth: [{ system: 'BSS', status: 'needs_configuration', rules: 1, deviations: 0 }],
   signalSummaries: [{ ruleId: 'C1', ruleRow: 6, system: 'BSS', signal: 'TankActualLevelMM', status: 'needs_configuration', latestActual: 674.54, blocker: 'missing_threshold_or_tolerance', matchedRows: 3 }],
-  chartSeries: { C1: [{ t: 1, actual: 674.54, status: 'needs_configuration' }] }
 });
 const configDecision = buildServiceDecision(configOnlyResult);
 assert.equal(configDecision.machineStatus, 'needs_configuration', 'Configuration-only problem is not counted as operational risk');
@@ -295,7 +291,7 @@ assert.equal(groups.find(group => group.key === 'configuration').rows[0].ruleId,
 assert.equal(groups.find(group => group.key === 'validation').rows[0].ruleId, 'VALID', 'Needs Validation has its own parameter group');
 assert.match(renderComparisonGauge({ actual: 31, expectedLow: 20, expectedHigh: 25, warningLow: 18, warningHigh: 27, criticalLow: 15, criticalHigh: 30, status: 'warning' }), /gauge-marker/, 'Comparison gauge with full range renders actual marker');
 assert.match(renderComparisonGauge({ actual: 674.54, status: 'needs_configuration' }), /Expected range not configured/, 'Comparison gauge without Expected range renders configuration placeholder');
-assert.match(renderActualExpectedChart(uiResult.chartSeries.CONFIG, uiResult.signalSummaries[1], []), /Expected range is not configured/, 'Actual chart without Expected band keeps actual and shows configuration banner');
+assert.match(renderActualExpectedChart([{ t: 1, actual: 674.54, status: 'needs_configuration' }], uiResult.signalSummaries[1], []), /Expected range is not configured/, 'Actual chart without Expected band keeps actual and shows configuration banner');
 assert.equal(renderHotspot('DPS', uiResult.systemHealth[3], '', 'issues').includes('hotspot'), true, 'Hotspot renderer returns a hotspot component');
 assert.match(renderHotspot('DPS', uiResult.systemHealth[3], '', 'all'), /quiet/, 'No-rule opacity behavior uses quiet class in All systems mode');
 
@@ -491,7 +487,6 @@ const hotfixPayload = {
   systemHealth: [{ system: hotfixSummary.system, status: hotfixSummary.status, evaluated: hotfixSummary.fullyEvaluatedPoints, deviations: hotfixSummary.deviationEventCount }],
   deviationEvents: hotfixSummary.deviationEvents,
   signalSummaries: [hotfixSummary],
-  chartSeries: { [hotfixSummary.ruleId]: hotfixSummary.chartPoints },
   stateTimeline: [],
   diagnosticsSummary: { analysisAudit: { resultSchemaValid: true } }
 };
@@ -505,8 +500,68 @@ circular.self = circular;
 assert.throws(() => sanitizeCanonicalValue(circular), /circular reference/, 'Recursive sanitizer terminates and rejects circular canonical input');
 const largeInputs = Array.from({ length: 150000 }, (_, index) => ({ timestampMs: index * 1000, actual: index % 10 === 0 ? 12.5 : 10, machineState: index % 50 < 5 ? 'Ready' : 'Printing', systemState: index % 50 < 5 ? 'Ready' : 'Printing', sourceFile: 'large.csv', row: index + 1 }));
 const largeSummary = analyzeParameter(hotfixRule, largeInputs);
-assert.equal(largeSummary.chartPoints.length, largeInputs.length, 'Large parameter analysis completes without spread/recursion stack overflow');
-assert.doesNotThrow(() => JSON.stringify({ status: largeSummary.status, chartPoints: largeSummary.chartPoints.slice(0, 5), stateSummaries: largeSummary.stateSummaries, deviationEvents: largeSummary.deviationEvents.slice(0, 5) }), 'Large summary sample remains JSON serializable');
+assert.ok(largeSummary.chartPoints.length <= 2000, 'Large parameter chart points are bounded');
+assert.equal(largeSummary.rawPointCount, largeInputs.length, 'Large parameter metrics include every raw point');
+assert.doesNotThrow(() => JSON.stringify(largeSummary), 'Large full summary remains JSON serializable');
+
+
+function makeStressRule(index, overrides = {}) {
+  return { id: `S${index}`, row: index + 2, system: ['BSS', 'IPS', 'QCS', 'DPS'][index % 4], subsystem: 'Runtime', component: `Component${index}`, signal: `Signal${index}`, parameterName: `Signal${index}`, logSource: 'BSSNotifications', sourceType: 'BSSNotifications', tolerance: { mode: 'absolute', value: 1 }, genericExpected: 10, warningHigh: 11, criticalHigh: 13, warningDurationSec: 0, criticalDurationSec: 0, transitionGraceSec: 0, ...overrides };
+}
+const stressStart = performance.now();
+const stressRules = Array.from({ length: 10 }, (_, index) => makeStressRule(index));
+stressRules.push(makeStressRule(10, { id: 'CONFIG_STRESS', signal: 'NeedsConfig', tolerance: null, genericExpected: null, warningHigh: null, criticalHigh: null }));
+stressRules.push(makeStressRule(11, { id: 'NO_DATA_STRESS', signal: 'NoData' }));
+let stressFinalizeCount = 0;
+let totalInputPoints = 0;
+const stressSummaries = [];
+const states = ['ON', 'Standby', 'Ready', 'Prepare2Print', 'Printing', 'PrintEnd', 'Recovery', 'Error'];
+for (const rule of stressRules) {
+  const acc = createParameterAccumulator(rule, { maxChartPoints: 2000, maxDeviationEvents: 200, sourceAvailable: true });
+  if (rule.id !== 'NO_DATA_STRESS') {
+    for (let index = 0; index < 5000; index += 1) {
+      const actual = rule.id === 'CONFIG_STRESS' ? 42 : (index % 2 === 0 ? 14 : 12);
+      const input = { timestampMs: index * 1000, actual, machineState: states[index % states.length], systemState: states[(index + 1) % states.length], sourceFile: 'stress.csv', row: index + 1 };
+      updateParameterAccumulator(acc, evaluatePoint(rule, input, { previous: acc.previous }));
+      totalInputPoints += 1;
+    }
+  }
+  stressFinalizeCount += 1;
+  stressSummaries.push(finalizeParameterAccumulator(acc));
+}
+const noRuleInputs = Array.from({ length: 5000 }, (_, index) => ({ timestampMs: index * 1000, actual: index % 100, machineState: states[index % states.length], systemState: states[index % states.length], status: 'no_rule', sourceFile: 'unruled.csv', row: index + 1 }));
+totalInputPoints += noRuleInputs.length;
+stressSummaries.push(analyzeParameter(null, noRuleInputs, { maxChartPoints: 2000 }));
+const stressEvents = stressSummaries.flatMap(summary => summary.deviationEvents || []);
+const stressResult = {
+  metadata: { rulesValid: stressRules.length, relevantValuesFound: totalInputPoints, classifiedPoints: totalInputPoints, fullyEvaluatedPoints: stressSummaries.reduce((sum, row) => sum + (row.fullyEvaluatedPoints || 0), 0), blockedPoints: stressSummaries.reduce((sum, row) => sum + (row.blockedPoints || 0), 0), relevantSignalsFound: stressSummaries.length, relevantSignalsRequired: stressRules.length + 1 },
+  systemHealth: ['BSS', 'IPS', 'QCS', 'DPS', 'Unmapped'].map(system => ({ system, status: stressSummaries.find(row => row.system === system)?.status || 'no_rule', rules: stressSummaries.filter(row => row.system === system).length })),
+  deviationEvents: stressEvents,
+  signalSummaries: stressSummaries,
+  stateTimeline: [],
+  diagnosticsSummary: { parserWarnings: Array.from({ length: 300 }, (_, index) => ({ message: `warning ${index}` })), parserErrors: [], reasons: [], analysisAudit: { deviationEvents: stressSummaries.reduce((sum, row) => sum + (row.deviationEventCount || 0), 0) } }
+};
+stressResult.serviceDecision = buildServiceDecision(stressResult);
+const stressJson = JSON.stringify(stressResult);
+assert.equal(stressFinalizeCount, stressRules.length, 'Every stress rule is finalized exactly once');
+assert.doesNotThrow(() => JSON.stringify(stressResult), 'Full stress AnalysisResult serializes without slicing');
+assertStructuredCloneable(stressResult, 'Full stress AnalysisResult');
+assertNoCircularReferences(stressResult, 'stressResult');
+assert.equal('chartSeries' in stressResult, false, 'Stress final payload omits duplicated chartSeries');
+assert.equal('parameterSummaries' in stressResult.serviceDecision, false, 'serviceDecision omits full parameter summaries');
+assert.equal('diagnosticsSummary' in stressResult.serviceDecision, false, 'serviceDecision omits duplicated diagnostics');
+for (const summary of stressResult.signalSummaries) {
+  assert.equal('pointInputs' in summary, false, 'Final summaries omit pointInputs');
+  assert.equal('accumulator' in summary, false, 'Final summaries omit runtime accumulator');
+  assert.ok((summary.chartPoints || []).length <= 2000, 'Stress chart points obey configured limit');
+  assert.equal(summary.rawRow, undefined, 'Final summaries omit raw input rows');
+}
+assert.ok(stressResult.signalSummaries.some(summary => summary.rawPointCount > (summary.chartPoints || []).length && summary.averageActual !== null), 'Metrics are calculated from all points rather than sampled chart points');
+assert.ok(stressResult.signalSummaries.some(summary => (summary.deviationEventCount || 0) > (summary.returnedDeviationEventCount || 0)), 'Deviation event totals can exceed returned event samples');
+assert.ok((stressResult.diagnosticsSummary.parserWarnings || []).length <= 300, 'Diagnostics details remain bounded');
+assert.ok(stressJson.length < totalInputPoints * 250, 'Stress payload growth remains approximately linear and bounded');
+const stressStats = { rules: stressRules.length, totalInputPoints, retainedChartPoints: stressSummaries.reduce((sum, row) => sum + (row.chartPoints || []).length, 0), fullEvents: stressSummaries.reduce((sum, row) => sum + (row.deviationEventCount || 0), 0), returnedEvents: stressSummaries.reduce((sum, row) => sum + (row.returnedDeviationEventCount || 0), 0), payloadBytes: Buffer.byteLength(stressJson), runtimeMs: Math.round(performance.now() - stressStart) };
+console.log('stress stats', JSON.stringify(stressStats));
 
 const forbiddenBinary = /\.(png|jpe?g|webp|gif|bmp|ico|zip|xlsx?|pdf|docx|pptx|ttf|otf|woff2?)$/i;
 const changedFiles = isInsideGitWorkTree() ? execSync('git diff --name-only', { encoding: 'utf8' }).trim().split(/\n/).filter(Boolean) : [];

@@ -20,10 +20,10 @@ export function renderDrilldown(app, handlers) {
   const system = app.selectedSystem || decision.primarySystem || chooseInitialSystem(result);
   app.selectedSystem = system;
   const health = (decision.systemSummaries || result.systemHealth || []).find(item => item.system === system) || { system, status: 'no_rule', label: 'Rules not configured' };
-  const summaries = sortComparisonRows((decision.parameterSummaries || result.signalSummaries || []).filter(item => item.system === system));
+  const summaries = sortComparisonRows((result.signalSummaries || decision.parameterSummaries || []).filter(item => item.system === system));
   const selected = summaries.find(item => item.ruleId === app.selectedRuleId) || chooseInitialParameter({ signalSummaries: summaries }, system);
   if (selected && app.selectedRuleId !== selected.ruleId) app.selectedRuleId = selected.ruleId;
-  const chart = selected ? result.chartSeries?.[selected.ruleId] || [] : [];
+  const chart = selected ? (selected.chartPoints || result.chartSeries?.[selected.ruleId] || []) : [];
   const events = selected ? (decision.deviationEvents || result.deviationEvents || []).filter(event => event.system === selected.system && event.signal === selected.signal).sort((a, b) => (b.endTimestampMs || 0) - (a.endTimestampMs || 0)) : [];
   $('drillSubtitle').textContent = `${system || 'No system selected'} · ${statusLabel(health.status)} · ${result.metadata?.timeRange || 'No evaluated time range'}`;
   $('drilldownRoot').innerHTML = `
@@ -102,7 +102,8 @@ export function renderParameterSummary(selected, events = []) {
   const first = events.at(-1);
   const last = events[0];
   const maxDeviation = Math.max(0, ...events.map(event => Math.abs(event.maximumDeviation || 0)));
-  const minDeviation = Math.min(...events.map(event => Math.abs(event.maximumDeviation || 0)).filter(Number.isFinite));
+  let minDeviation = null;
+  for (const event of events) { const value = Math.abs(event.maximumDeviation || 0); if (Number.isFinite(value)) minDeviation = minDeviation === null ? value : Math.min(minDeviation, value); }
   return `<div class="summary-panel"><h2>Parameter Summary</h2>${fact('Component', selected.component || selected.subsystem)}${fact('Signal Source', selected.sourceFile || selected.signal)}${fact('Current Machine State', selected.currentMachineState)}${fact('Current System State', selected.currentSystemState)}${fact('First Deviation', fmtTime(first?.startTimestampMs ?? selected.stateSummaries?.find(row => row.firstDeviation)?.firstDeviation))}${fact('Last Deviation', fmtTime(last?.endTimestampMs ?? selected.stateSummaries?.find(row => row.lastDeviation)?.lastDeviation))}${fact('Total Duration Out of Range', fmtDuration(selected.totalDeviationDurationMs || events.reduce((sum, event) => sum + (event.durationMs || 0), 0)))}${fact('Maximum Deviation', Number.isFinite(maxDeviation) && maxDeviation ? unitValue(maxDeviation, selected.unit) : '—')}${fact('Minimum Deviation', Number.isFinite(minDeviation) ? unitValue(minDeviation, selected.unit) : '—')}${fact('Impact', statusLabel(selected.status))}<div class="action-box ${statusClass(selected.status)}"><strong>Recommended Action</strong><p>${escapeHtml(recommendedAction(selected))}</p></div></div>`;
 }
 
