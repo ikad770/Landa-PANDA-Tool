@@ -3,6 +3,7 @@ import { performance } from 'node:perf_hooks';
 import { authenticateLocalPrototype, validateLoginFields } from '../auth.js';
 import { AUTH_CONFIG, MAX_CHART_POINTS_PER_SIGNAL, USER_FACING_STAGES, normalizeSourceIdentity } from '../config.js';
 import { normalizeSourceRow, parseDelimitedText, parseFlexibleTimestamp } from '../adapters.js';
+import { appendRows, parseTextLogsToRows } from '../parsing-utils.js';
 import { normalizeRulesRows } from '../rules.js';
 import { comparePoint, computeAllowedRange, normalizeState, normalizeToken, parseNumber, resolveExpected } from '../evaluation.js';
 import { createStateTimeline } from '../machine-states.js';
@@ -98,6 +99,38 @@ assert.equal(parsedRows[0].machineState, 'Printing');
 assert.equal(normalizeSourceRow({ Timestamp: '2026-01-01T00:00:00Z', Signal: 'Temp', Value: '25.2', Source: 'source-a' }).normalizedSignal, 'temp');
 const partialRule = normalizeRulesRows([{ System: 'IPS', 'Log Signal Name': 'Temp', 'Log Source': 'source-a', 'Expected Printing': 0 }])[0];
 assert.equal(partialRule.expectedByState.get('Printing'), 0, 'numeric zero remains configured');
+
+const appendRegressionRowCount = 150_000;
+const appendRegressionText = `Timestamp,Signal,Value,Unit,Machine State,Source
+${Array.from({ length: appendRegressionRowCount }, (_, i) => `2026-01-01T00:00:${String(i % 60).padStart(2, '0')}Z,Pressure,${i},bar,Printing,source-a`).join('\n')}`;
+const appendRegressionParsedRows = parseDelimitedText(appendRegressionText, 'append-regression.csv');
+assert.equal(appendRegressionParsedRows.length, appendRegressionRowCount);
+const appendedRows = [];
+assert.doesNotThrow(() => appendRows(appendedRows, appendRegressionParsedRows), 'appendRows must not spread parsed rows as call arguments');
+assert.equal(appendedRows.length, appendRegressionRowCount);
+
+const largeParseLogs = Array.from({ length: 3 }, (_, fileIndex) => ({
+  name: `large-generated-${fileIndex + 1}.csv`,
+  text: `Timestamp,Signal,Value,Unit,Machine State,Source
+${Array.from({ length: 50_000 }, (_, rowIndex) => {
+    const absoluteIndex = fileIndex * 50_000 + rowIndex;
+    return `2026-01-01T00:${String(Math.floor(rowIndex / 60) % 60).padStart(2, '0')}:${String(rowIndex % 60).padStart(2, '0')}Z,Configured Signal ${absoluteIndex % 2},${100 + (absoluteIndex % 10)},u,Printing,source-a`;
+  }).join('\n')}`
+}));
+const parseStageEvents = [];
+const largeParsedRows = parseTextLogsToRows(largeParseLogs, (processed, total, name, rowCount) => parseStageEvents.push({ stage: 'parse', processed, total, name, rowCount }));
+assert.equal(largeParsedRows.length, 150_000);
+assert.equal(parseStageEvents.length, largeParseLogs.length);
+const parseIndexProgressEvents = [];
+const parseIndexResult = runV2Pipeline({
+  rows: largeParsedRows,
+  rules: normalizeRulesRows([{ System: 'IPS', 'Log Signal Name': 'Configured Signal 0', 'Log Source': 'source-a', 'Expected Printing': 100, 'Spec Tolerance': 5 }]),
+  inputFiles: largeParseLogs.map(log => ({ name: log.name })),
+  startedMs: Date.now(),
+  progress: (stage, fraction, message, processed, total) => parseIndexProgressEvents.push({ stage, fraction, message, processed, total })
+});
+assert.equal(parseIndexResult.metadata.rowsProcessed, largeParsedRows.length);
+assert.ok(parseIndexProgressEvents.some(event => event.stage === 'index'), 'parse-stage integration reaches Index stage');
 
 // Level 2 — signal discovery and chart sampling.
 const sampler = createChartSampler(50);
