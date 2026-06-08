@@ -1,55 +1,27 @@
-import { APP_STAGES, AUTH_CONFIG } from './config.js';
+import { AUTH_CONFIG } from './config.js';
 import { authenticateLocalPrototype, clearSession, createLocalSession, readStoredSession, storeSession, validateLoginFields } from './auth.js';
 import { renderLoginShell, renderLoginValidation, setAccessGranted, setLoginAuthenticating } from './render-login.js';
-import { renderAnalysisShell, renderUserStages, updateProgressPresentation, updateUploadValidation } from './render-analysis.js';
-import { getServiceDecision } from './render.js';
+import { renderAnalysisShell, updateProgressPresentation, updateUploadValidation } from './render-analysis.js';
 import { chooseInitialSystem, renderDiagnostics, renderServiceRadar, validateAnalysisResult } from './render-radar.js';
-import { renderDrilldown } from './render-drilldown.js';
 
 const $ = id => document.getElementById(id);
 const fmtDuration = ms => !Number.isFinite(ms) ? '—' : ms < 1000 ? '<1s' : ms < 60000 ? `${Math.round(ms / 1000)}s` : `${Math.round(ms / 60000)}m ${Math.round(ms % 60000 / 1000)}s`;
 
-const app = {
-  autocollectFile: null,
-  rulesFile: null,
-  worker: null,
-  analysisResult: null,
-  progress: null,
-  selectedSystem: null,
-  selectedEventId: null,
-  selectedRuleId: null,
-  systemFilter: 'issues',
-  lastView: 'analysis',
-  workerUrl: null,
-  session: null,
-  authLoading: false
-};
+const app = { autocollectFile: null, rulesFile: null, worker: null, analysisResult: null, progress: null, selectedSystem: null, lastView: 'analysis', session: null, authLoading: false };
+const loginState = { username: AUTH_CONFIG.username, password: '', touched: { username: false, password: false }, submitted: false, errors: {}, message: '' };
 
 renderLoginShell($('loginView'));
 renderAnalysisShell($('analysisView'));
 app.session = readStoredSession();
 
-const loginState = { username: AUTH_CONFIG.username, password: AUTH_CONFIG.password, touched: { username: false, password: false }, submitted: false, errors: {}, message: '' };
-
 function show(view) {
-  ['loginView', 'analysisView', 'radarView', 'drilldownView', 'diagnosticsView'].forEach(id => $(id).classList.toggle('hidden', id !== view));
-  app.lastView = view === 'diagnosticsView' ? app.lastView : view.replace('View', '');
+  ['loginView', 'analysisView', 'radarView', 'drilldownView', 'diagnosticsView'].forEach(id => $(id)?.classList.toggle('hidden', id !== view));
+  if (view !== 'diagnosticsView') app.lastView = view.replace('View', '');
 }
 
-
-function setLoginLoading(loading) {
-  app.authLoading = loading;
-  setLoginAuthenticating(loading);
-}
-
-function validateLoginState() {
+function syncLoginValidation(message = '') {
   const validation = validateLoginFields({ username: loginState.username, password: loginState.password });
   loginState.errors = validation.errors;
-  return validation;
-}
-
-function syncLoginValidation(message = loginState.message) {
-  validateLoginState();
   renderLoginValidation({ errors: loginState.errors, message, touched: loginState.touched, submitted: loginState.submitted });
 }
 
@@ -57,29 +29,18 @@ function submitLogin(event) {
   event.preventDefault();
   if (app.authLoading) return;
   loginState.submitted = true;
-  loginState.message = '';
   const result = authenticateLocalPrototype({ username: loginState.username, password: loginState.password });
-  loginState.errors = result.errors || {};
-  if (!result.valid) { renderLoginValidation({ errors: loginState.errors, touched: loginState.touched, submitted: true }); return; }
+  if (!result.valid) { loginState.errors = result.errors || {}; syncLoginValidation(''); return; }
   if (!result.ok) { renderLoginValidation({ errors: {}, message: 'Invalid username or password.', touched: loginState.touched, submitted: true }); return; }
-  renderLoginValidation({ errors: {}, message: '', touched: loginState.touched, submitted: true });
-  setLoginLoading(true);
+  app.authLoading = true;
+  setLoginAuthenticating(true);
   window.setTimeout(() => {
     app.session = createLocalSession(result.username);
     storeSession(app.session);
-    const userPill = document.querySelector('.user-pill');
-    if (userPill) userPill.textContent = app.session.username;
+    document.querySelectorAll('.user-pill').forEach(pill => { pill.textContent = app.session.username; });
     setAccessGranted(true);
-    window.setTimeout(() => {
-      setLoginLoading(false);
-      setAccessGranted(false);
-      showAnalysisWorkspace();
-    }, 700);
-  }, 180);
-}
-
-function forgotPassword() {
-  document.getElementById('forgotModal')?.classList.remove('hidden');
+    window.setTimeout(() => { app.authLoading = false; setLoginAuthenticating(false); setAccessGranted(false); showAnalysisWorkspace(); }, 250);
+  }, 100);
 }
 
 function logout() {
@@ -103,116 +64,120 @@ function setWorkspaceMode(mode) {
   $('failedWorkspace').classList.toggle('hidden', mode !== 'failed');
 }
 
+function terminateWorker() {
+  if (app.worker) app.worker.terminate();
+  app.worker = null;
+}
+
 function startAnalysis() {
   if (!app.autocollectFile || !app.rulesFile) return;
-  app.analysisResult = null; app.progress = null; app.selectedSystem = null; app.selectedEventId = null; app.selectedRuleId = null;
+  terminateWorker();
+  app.analysisResult = null;
+  app.progress = null;
+  app.selectedSystem = null;
   setWorkspaceMode('processing');
-  renderSequence('rules_loading');
+  updateProgressPresentation({ stage: 'upload', stageLabel: 'Upload', overallPercent: 0, message: 'Starting V2 analysis.' });
   const worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
   app.worker = worker;
   worker.onmessage = event => handleWorkerMessage(event.data);
-  worker.onerror = event => failAnalysis(event.message || 'Worker failed');
+  worker.onerror = event => failAnalysis(event.message || 'Worker failed.');
   worker.postMessage({ type: 'start', autocollectFile: app.autocollectFile, rulesFile: app.rulesFile });
+  renderAnalysisWorkspace();
 }
 
 function handleWorkerMessage(message) {
   if (message.type === 'progress') {
     app.progress = message.progress;
     renderProgress(message.progress);
-  } else if (message.type === 'complete') {
-    finishWorker();
-    const result = message.analysisResult || message.result;
+    return;
+  }
+  if (message.type === 'complete') {
+    terminateWorker();
+    const result = message.analysisResult;
     const validation = validateAnalysisResult(result);
-    if (!validation.valid) {
-      failAnalysis(validation.reason);
-      return;
-    }
+    if (!validation.valid) { failAnalysis(validation.reason); return; }
     app.analysisResult = result;
     app.analysisResult.validation = validation;
-    app.selectedSystem = chooseInitialSystem(app.analysisResult);
-    app.selectedEventId = app.analysisResult.deviationEvents[0]?.id || null;
+    app.selectedSystem = chooseInitialSystem(result);
     renderReady();
     setWorkspaceMode('ready');
-    renderDiagnostics(app.analysisResult);
-    if ($('autoOpenToggle').checked) showServiceRadar();
-  } else if (message.type === 'error') {
-    finishWorker();
-    app.analysisResult = message.diagnosticsSummary ? { diagnosticsSummary: message.diagnosticsSummary } : app.analysisResult;
-    failAnalysis(message.message);
+    renderDiagnostics(result);
+    renderAnalysisWorkspace();
+    if ($('autoOpenToggle').checked) showResultsWorkspace();
+    return;
+  }
+  if (message.type === 'error') {
+    terminateWorker();
+    app.analysisResult = { schemaVersion: '2.0', error: message.error, metadata: {}, summary: {}, diagnostics: { counts: { error: 1 }, recentEntries: [message.error] }, signalCatalog: [], parameterSummaries: [], systems: [], stateTimeline: [] };
+    failAnalysis(`${message.error?.stage || 'analysis'}: ${message.message || 'Analysis failed.'}`);
   }
 }
 
-function finishWorker() {
-  if (app.worker) app.worker.terminate();
-  app.worker = null;
+function renderProgress(progress) {
+  updateProgressPresentation(progress);
+  $('currentSource').textContent = progress.stageLabel || progress.stage || '—';
+  $('currentFile').textContent = progress.message || '—';
+  $('filesCount').textContent = `${progress.processed || 0} / ${progress.total || 0}`;
+  $('relevantValues').textContent = progress.processed || 0;
+  $('signalsMatched').textContent = progress.total || 0;
+  $('elapsedTime').textContent = '—';
+  $('remainingTime').textContent = '—';
+  $('warningErrorCount').textContent = '0 / 0';
+}
+
+function renderReady() {
+  const result = app.analysisResult;
+  const s = result.summary;
+  const meta = result.metadata;
+  $('readyEyebrow').textContent = 'Analysis complete';
+  $('readyTitle').textContent = 'V2 Results Workspace ready';
+  $('readySubtitle').textContent = 'Stable bounded V2 result finalized. Open the Results Workspace to explore real uploaded signals.';
+  $('readyRules').textContent = `${s.evaluatedSignals} / ${s.configuredSignals}`;
+  $('readySignals').textContent = `${s.discoveredSignals}`;
+  $('readyRelevantValues').textContent = `${s.criticalParameters}`;
+  $('readyFullyEvaluated').textContent = `${result.systems.length}`;
+  $('readyNeedsValidation').textContent = `${s.validationIssues}`;
+  $('readySystems').textContent = `${s.configurationIssues}`;
+  $('readyDeviations').textContent = `${s.warningParameters + s.criticalParameters}`;
+  $('readyTime').textContent = fmtDuration(meta.durationMs);
+  $('readyTopBlocker').textContent = s.noDataRules ? `${s.noDataRules} no-data rules` : 'None';
+}
+
+function failAnalysis(message) {
+  terminateWorker();
+  $('failedReason').textContent = message || 'Analysis could not produce a valid V2 result.';
+  setWorkspaceMode('failed');
   renderAnalysisWorkspace();
 }
 
 function cancelAnalysis() {
   if (app.worker) app.worker.postMessage({ type: 'cancel' });
-  finishWorker();
+  terminateWorker();
   setWorkspaceMode('upload');
-}
-
-function failAnalysis(message) {
-  $('failedReason').textContent = message || 'Analysis could not produce a valid result.';
-  setWorkspaceMode('failed');
   renderAnalysisWorkspace();
 }
 
-function renderProgress(progress) {
-  updateProgressPresentation(progress);
-  $('currentSource').textContent = progress.currentSource || '—';
-  const currentFilePath = progress.currentFile || '';
-  $('currentFile').textContent = currentFilePath ? currentFilePath.split(/[\\/!]+/).filter(Boolean).at(-1) : '—';
-  $('currentFile').title = currentFilePath;
-  $('filesCount').textContent = `${progress.filesCompleted || 0} / ${progress.filesTotal || 0}`;
-  $('relevantValues').textContent = progress.relevantValuesFound || 0;
-  $('signalsMatched').textContent = progress.signalsMatched || 0;
-  $('elapsedTime').textContent = fmtDuration(progress.elapsedMs || 0);
-  $('remainingTime').textContent = progress.remainingMs === null ? '—' : fmtDuration(progress.remainingMs);
-  $('warningErrorCount').textContent = `${progress.warnings || 0} / ${progress.errors || 0}`;
-  renderSequence(progress.stage);
-}
-
-function renderSequence(activeStage) {
-  updateProgressPresentation({ stage: activeStage, percent: app.progress?.percent || 0 });
-}
-
-function renderReady() {
-  const meta = app.analysisResult.metadata;
-  const validation = app.analysisResult.validation || { status: 'completed' };
-  const decision = getServiceDecision(app.analysisResult);
-  const topBlocker = app.analysisResult.diagnosticsSummary?.evaluationBlockers?.topBlocker;
-  $('readyEyebrow').textContent = validation.status === 'completed_with_warnings' ? 'Ready with service actions' : 'Analysis complete';
-  $('readyTitle').textContent = decision.machineStatusLabel || 'Service Radar ready';
-  $('readySubtitle').textContent = decision.machineSummary || 'Service Radar is ready. Diagnostics remain separate from operational findings.';
-  $('readyRules').textContent = `${decision.kpis.evaluationReadiness.evaluated || 0} / ${decision.kpis.evaluationReadiness.total || 0}`;
-  $('readySignals').textContent = `${decision.kpis.signalCoverage.found} / ${decision.kpis.signalCoverage.required}`;
-  $('readyRelevantValues').textContent = `${decision.systemsAtRiskCount || 0}`;
-  $('readyFullyEvaluated').textContent = `${decision.fullyEvaluatedSystems.length || 0}`;
-  $('readyNeedsValidation').textContent = `${decision.validationProblems.length || 0}`;
-  $('readySystems').textContent = `${decision.configurationProblems.length || 0}`;
-  $('readyDeviations').textContent = `${decision.operationalFindings.length || 0}`;
-  $('readyTime').textContent = fmtDuration(meta.analysisTimeMs);
-  $('readyTopBlocker').textContent = topBlocker?.label || 'None';
-}
-
-function showServiceRadar() {
-  if (!app.analysisResult?.metadata) return;
-  renderServiceRadar(app, { selectEvent, openDrilldown });
-  show('radarView');
-}
 function showAnalysisWorkspace() { show('analysisView'); }
+function showResultsWorkspace() { if (app.analysisResult) renderServiceRadar(app); show('radarView'); }
 function openDiagnostics() { renderDiagnostics(app.analysisResult); show('diagnosticsView'); }
-function showDrilldown() { renderDrilldown(app, { selectRule }); show('drilldownView'); }
-function openDrilldown(system) { app.selectedSystem = system; showDrilldown(); }
-function selectEvent(id) { app.selectedEventId = id; renderServiceRadar(app, { selectEvent, openDrilldown }); }
-function selectRule(id) { app.selectedRuleId = id; renderDrilldown(app, { selectRule }); }
-function resetAnalysis() { cancelAnalysis(); app.autocollectFile = null; app.rulesFile = null; app.analysisResult = null; app.progress = null; app.selectedSystem = null; app.selectedEventId = null; app.selectedRuleId = null; $('autocollectInput').value = ''; $('rulesInput').value = ''; $('autocollectName').textContent = 'No file selected'; $('rulesName').textContent = 'No file selected'; setWorkspaceMode('upload'); showAnalysisWorkspace(); renderAnalysisWorkspace(); }
+function resetAnalysis() {
+  cancelAnalysis();
+  app.autocollectFile = null;
+  app.rulesFile = null;
+  app.analysisResult = null;
+  app.progress = null;
+  app.selectedSystem = null;
+  $('autocollectInput').value = '';
+  $('rulesInput').value = '';
+  $('autocollectName').textContent = 'No file selected';
+  $('rulesName').textContent = 'No file selected';
+  setWorkspaceMode('upload');
+  renderAnalysisWorkspace();
+  showAnalysisWorkspace();
+}
 
 $('loginForm').addEventListener('submit', submitLogin);
-$('forgotPassword').onclick = forgotPassword;
+$('forgotPassword').onclick = () => document.getElementById('forgotModal')?.classList.remove('hidden');
 $('usernameInput').addEventListener('input', e => { loginState.username = e.target.value; loginState.message = ''; syncLoginValidation(''); });
 $('passwordInput').addEventListener('input', e => { loginState.password = e.target.value; loginState.message = ''; syncLoginValidation(''); });
 $('usernameInput').addEventListener('blur', () => { loginState.touched.username = true; syncLoginValidation(''); });
@@ -220,28 +185,22 @@ $('passwordInput').addEventListener('blur', () => { loginState.touched.password 
 $('togglePassword').onclick = () => { const input = $('passwordInput'); const showing = input.type === 'text'; input.type = showing ? 'password' : 'text'; $('togglePassword').setAttribute('aria-pressed', String(!showing)); $('togglePassword').setAttribute('aria-label', showing ? 'Show password' : 'Hide password'); };
 document.querySelectorAll('[data-close-modal]').forEach(button => button.addEventListener('click', () => button.closest('.modal-backdrop')?.classList.add('hidden')));
 $('logoutButton').onclick = logout;
-
 $('autocollectInput').addEventListener('change', e => { app.autocollectFile = e.target.files[0] || null; $('autocollectName').textContent = app.autocollectFile?.name || 'No file selected'; renderAnalysisWorkspace(); });
 $('rulesInput').addEventListener('change', e => { app.rulesFile = e.target.files[0] || null; $('rulesName').textContent = app.rulesFile?.name || 'No file selected'; renderAnalysisWorkspace(); });
 $('startAnalysis').onclick = startAnalysis;
 $('cancelAnalysis').onclick = cancelAnalysis;
-$('openRadar').onclick = showServiceRadar;
+$('openRadar').onclick = showResultsWorkspace;
 $('viewDiagnosticsReady').onclick = openDiagnostics;
 $('viewDiagnosticsFailed').onclick = openDiagnostics;
 $('diagnosticsFromAnalysis').onclick = openDiagnostics;
-$('diagnosticsFromRadar').onclick = openDiagnostics;
-$('diagnosticsFromDrill').onclick = openDiagnostics;
-$('backToAnalysis').onclick = showAnalysisWorkspace;
-$('backToRadar').onclick = showServiceRadar;
 $('resetReady').onclick = resetAnalysis;
 $('resetFailed').onclick = resetAnalysis;
 $('resetUpload').onclick = resetAnalysis;
-$('resetFromRadar').onclick = resetAnalysis;
-$('resetFromDiagnostics').onclick = resetAnalysis;
-$('showIssues').onclick = () => { app.systemFilter = 'issues'; $('showIssues').setAttribute('aria-pressed', 'true'); $('showAllSystems').setAttribute('aria-pressed', 'false'); renderServiceRadar(app, { selectEvent, openDrilldown }); };
-$('showAllSystems').onclick = () => { app.systemFilter = 'all'; $('showIssues').setAttribute('aria-pressed', 'false'); $('showAllSystems').setAttribute('aria-pressed', 'true'); renderServiceRadar(app, { selectEvent, openDrilldown }); };
-$('closeDiagnostics').onclick = () => app.lastView === 'radar' ? showServiceRadar() : app.lastView === 'drilldown' ? showDrilldown() : showAnalysisWorkspace();
+$('closeDiagnostics').onclick = () => app.lastView === 'radar' ? showResultsWorkspace() : showAnalysisWorkspace();
+window.addEventListener('panda:navigate-analysis', showAnalysisWorkspace);
+window.addEventListener('panda:diagnostics', openDiagnostics);
+window.addEventListener('panda:reset', resetAnalysis);
 
 syncLoginValidation('');
 renderAnalysisWorkspace();
-if (app.session) { const userPill = document.querySelector('.user-pill'); if (userPill) userPill.textContent = app.session.username || AUTH_CONFIG.username; showAnalysisWorkspace(); } else { show('loginView'); }
+if (app.session) { document.querySelectorAll('.user-pill').forEach(pill => { pill.textContent = app.session.username || AUTH_CONFIG.username; }); showAnalysisWorkspace(); } else { show('loginView'); }

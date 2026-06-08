@@ -1,168 +1,89 @@
-import { ADAPTERS } from './adapters.js';
 import { normalizeSourceIdentity } from './config.js';
-import { expectedValuesFromRow, inferCheckType, normalizeCheckType, normalizeText, normalizeToken, parseRangeSpec, parseThreshold, parseTolerance, validateRule } from './evaluation.js';
+import { normalizeState, normalizeText, normalizeToken, parseNumber } from './evaluation.js';
 
-const HEADER_ALIASES = {
-  System: ['System', 'Machine System', 'PANDA System'],
-  Subsystem: ['Subsystem', 'Sub System', 'Sub-system'],
-  Component: ['Component', 'Machine Component'],
-  'Log Signal Name': ['Log Signal Name', 'Signal Name', 'Log Signal', 'Signal', 'Parameter Signal'],
-  'Log Source': ['Log Source', 'Source', 'LogSource', 'Log File', 'Data Source'],
-  'Parameter Name': ['Parameter Name', 'Parameter', 'Name'],
-  'Parameter Type': ['Parameter Type', 'Type'],
-  Unit: ['Unit', 'Units'],
-  'Check Type': ['Check Type', 'Check', 'Validation Type'],
-  'Expected ON': ['Expected ON', 'ON Expected'],
-  'Expected Standby': ['Expected Standby', 'Standby Expected'],
-  'Expected Ready': ['Expected Ready', 'Ready Expected'],
-  'Expected Prepare2Print': ['Expected Prepare2Print', 'Prepare2Print Expected', 'Expected Prepare To Print'],
-  'Expected Printing': ['Expected Printing', 'Printing Expected'],
-  'Expected PrintEnd': ['Expected PrintEnd', 'PrintEnd Expected', 'Expected Print End'],
-  'Expected Recovery': ['Expected Recovery', 'Recovery Expected'],
-  'Expected Error': ['Expected Error', 'Error Expected'],
-  'Spec Tolerance': ['Spec Tolerance', 'Tolerance', 'Allowed Tolerance', 'Limit', 'Threshold'],
-  'Warning Low': ['Warning Low', 'Warning Min', 'WarningLow'],
-  'Warning High': ['Warning High', 'Warning Max', 'WarningHigh'],
-  'Critical Low': ['Critical Low', 'Critical Min', 'CriticalLow'],
-  'Critical High': ['Critical High', 'Critical Max', 'CriticalHigh'],
-  'Warning Duration Sec': ['Warning Duration Sec', 'Warning Duration', 'WarningDurationSec'],
-  'Critical Duration Sec': ['Critical Duration Sec', 'Critical Duration', 'CriticalDurationSec'],
-  'Transition Grace Sec': ['Transition Grace Sec', 'Transition Grace', 'TransitionGraceSec'],
-  'Warning Severity': ['Warning Severity'],
-  'Critical Severity': ['Critical Severity'],
-  'Warning Action': ['Warning Action'],
-  'Critical Action': ['Critical Action'],
-  'Out of Spec Action': ['Out of Spec Action', 'Out-of-Spec Action', 'OutOfSpecAction']
+const FIELD_ALIASES = {
+  system: ['System'], subsystem: ['Subsystem'], component: ['Component'], signalName: ['Log Signal Name', 'Signal', 'Signal Name'], sourceName: ['Log Source', 'Source'],
+  valueMetric: ['Value Metric'], checkType: ['Check Type'], genericExpected: ['Expected', 'Generic Expected'], specTolerance: ['Spec Tolerance'],
+  warningLow: ['Warning Low'], warningHigh: ['Warning High'], criticalLow: ['Critical Low'], criticalHigh: ['Critical High'],
+  warningDurationSec: ['Warning Duration Sec'], criticalDurationSec: ['Critical Duration Sec'], transitionGraceSec: ['Transition Grace Sec'],
+  warningAction: ['Warning Action'], criticalAction: ['Critical Action'], outOfSpecAction: ['Out of Spec Action'], notes: ['Notes']
 };
-const REQUIRED_HEADER_GROUPS = ['System', 'Subsystem', 'Component', 'Log Signal Name', 'Log Source'];
+const STATE_FIELDS = ['ON', 'Standby', 'Ready', 'Prepare2Print', 'Printing', 'PrintEnd', 'Recovery', 'Error'];
 
-function headerKey(value) {
-  return normalizeToken(value);
-}
-
-function rowHasHeader(row, canonical) {
-  const keys = new Set(row.map(headerKey));
-  return (HEADER_ALIASES[canonical] || [canonical]).some(alias => keys.has(headerKey(alias)));
-}
-
-function getCell(row, candidates) {
-  const normalized = Object.fromEntries(Object.entries(row || {}).map(([key, value]) => [headerKey(key), value]));
-  for (const name of candidates) {
-    const value = row[name] ?? normalized[headerKey(name)];
-    if (value !== undefined && normalizeText(value) !== '') return value;
-  }
-  return '';
-}
-
-function canonicalizeHeader(name, idx) {
-  const clean = normalizeText(name) || `Column ${idx + 1}`;
-  for (const [canonical, aliases] of Object.entries(HEADER_ALIASES)) {
-    if (aliases.some(alias => headerKey(alias) === headerKey(clean))) return canonical;
-  }
-  return clean;
-}
-
-export function parseRulesWorkbook(XLSX, buffer, audit) {
-  audit.rulesFileLoaded = true;
-  const workbook = XLSX.read(buffer, { type: 'array' });
-  const sheetName = workbook.SheetNames.find(name => /panda rules template/i.test(name)) || workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) throw new Error('Rules workbook does not contain a readable sheet.');
-  audit.rulesSheetFound = true;
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-  const headerIndex = rows.findIndex(row => REQUIRED_HEADER_GROUPS.every(required => rowHasHeader(row, required)));
-  if (headerIndex < 0) throw new Error('Could not detect the real Rules header row with System, Subsystem, Component, Log Signal Name, and Log Source.');
-  audit.rulesHeaderRow = headerIndex + 1;
-  const rawHeader = rows[headerIndex].map(normalizeText);
-  const normalizedHeaderByIndex = rawHeader.map(canonicalizeHeader);
-  const rules = [];
-  for (let i = headerIndex + 1; i < rows.length; i += 1) {
-    const values = rows[i];
-    if (!values.some(cell => normalizeText(cell))) continue;
-    const row = Object.fromEntries(normalizedHeaderByIndex.map((name, idx) => [name, values[idx] ?? '']));
-    const { expectedByState, expectedRangeByState, genericExpected, genericExpectedRange } = expectedValuesFromRow(row);
-    const explicitRange = parseRangeSpec(getCell(row, ['Allowed Range', 'Spec Range', 'Expected Range']));
-    const rawLogSource = normalizeText(getCell(row, ['Log Source', 'Source', 'LogSource']));
-    const logSource = normalizeSourceIdentity(rawLogSource);
-    const checkType = normalizeText(getCell(row, ['Check Type', 'Check', 'Validation Type']));
-    const rule = {
-      id: `R${i + 1}`,
-      ruleId: `R${i + 1}`,
-      row: i + 1,
-      system: normalizeText(row.System),
-      subsystem: normalizeText(row.Subsystem),
-      component: normalizeText(row.Component),
-      parameterName: normalizeText(getCell(row, ['Parameter Name', 'Parameter', 'Name']) || row['Log Signal Name']),
-      parameterType: normalizeText(getCell(row, ['Parameter Type', 'Type'])),
-      unit: normalizeText(getCell(row, ['Unit', 'Units'])),
-      signal: normalizeText(row['Log Signal Name']),
-      normSignal: normalizeToken(row['Log Signal Name']),
-      logSource,
-      sourceType: logSource,
-      checkType,
-      checkTypeNormalized: normalizeCheckType(checkType),
-      expectedByState,
-      expectedRangeByState,
-      genericExpected,
-      genericExpectedRange,
-      expectedLow: explicitRange?.low ?? genericExpectedRange?.low ?? null,
-      expectedHigh: explicitRange?.high ?? genericExpectedRange?.high ?? null,
-      tolerance: parseTolerance(getCell(row, ['Spec Tolerance', 'Tolerance', 'Allowed Tolerance', 'Limit', 'Threshold', 'Allowed Range'])),
-      warningLow: parseThreshold(getCell(row, ['Warning Low', 'Warning Min', 'WarningLow'])),
-      warningHigh: parseThreshold(getCell(row, ['Warning High', 'Warning Max', 'WarningHigh'])),
-      criticalLow: parseThreshold(getCell(row, ['Critical Low', 'Critical Min', 'CriticalLow'])),
-      criticalHigh: parseThreshold(getCell(row, ['Critical High', 'Critical Max', 'CriticalHigh'])),
-      warningDurationSec: parseThreshold(getCell(row, ['Warning Duration Sec', 'Warning Duration', 'WarningDurationSec'])),
-      criticalDurationSec: parseThreshold(getCell(row, ['Critical Duration Sec', 'Critical Duration', 'CriticalDurationSec'])),
-      transitionGraceSec: parseThreshold(getCell(row, ['Transition Grace Sec', 'Transition Grace', 'TransitionGraceSec'])),
-      warningSeverity: normalizeText(getCell(row, ['Warning Severity'])),
-      criticalSeverity: normalizeText(getCell(row, ['Critical Severity'])),
-      outOfSpecAction: normalizeText(getCell(row, ['Out of Spec Action', 'Out-of-Spec Action', 'OutOfSpecAction'])),
-      warningAction: normalizeText(getCell(row, ['Warning Action', 'Recommended Action', 'Action'])),
-      criticalAction: normalizeText(getCell(row, ['Critical Action', 'Service Action'])),
-      recommendedAction: normalizeText(getCell(row, ['Recommended Action', 'Action', 'Service Action']))
-    };
-    rule.evaluator = inferCheckType(rule);
-    rule.evaluatorInferred = !rule.checkType && !!rule.evaluator;
-    rule.checkTypeNormalized = rule.evaluator || normalizeCheckType(checkType);
-    const invalidReason = ADAPTERS[rule.sourceType] ? validateRule(rule) : 'unsupported_log_source';
-    rule.validity = invalidReason === 'valid' ? 'valid' : 'invalid';
-    rule.invalidReason = invalidReason === 'valid' ? '' : invalidReason;
-    rules.push(rule);
-  }
-  audit.rulesParsed = rules.length;
-  audit.validRules = rules.filter(rule => rule.validity === 'valid').length;
-  audit.invalidRules = rules.length - audit.validRules;
-  return rules;
-}
-
-export function buildAnalysisPlan(rules) {
-  const validRules = rules.filter(rule => rule.validity === 'valid' && ADAPTERS[rule.sourceType]);
-  const systems = new Set();
-  const adaptersRequired = new Set();
-  const rulesBySystem = new Map();
-  const rulesBySource = new Map();
-  const requiredSignals = new Map();
-  for (const rule of validRules) {
-    systems.add(rule.system);
-    adaptersRequired.add(rule.sourceType);
-    if (!rulesBySystem.has(rule.system)) rulesBySystem.set(rule.system, []);
-    if (!rulesBySource.has(rule.sourceType)) rulesBySource.set(rule.sourceType, []);
-    if (!requiredSignals.has(rule.sourceType)) requiredSignals.set(rule.sourceType, new Set());
-    rulesBySystem.get(rule.system).push(rule);
-    rulesBySource.get(rule.sourceType).push(rule);
-    requiredSignals.get(rule.sourceType).add(rule.normSignal);
-  }
-  const stateContextRequired = validRules.some(rule => Object.keys(rule.expectedByState || {}).length > 0);
-  return { validRules, systems, adaptersRequired, rulesBySystem, rulesBySource, requiredSignals, stateContextRequired };
-}
-
-export function serializePlan(plan) {
-  return {
-    systems: [...plan.systems],
-    adaptersRequired: [...plan.adaptersRequired],
-    stateContextRequired: plan.stateContextRequired,
-    rulesBySystem: Object.fromEntries([...plan.rulesBySystem].map(([system, rows]) => [system, rows.length])),
-    requiredSignals: Object.fromEntries([...plan.requiredSignals].map(([source, signals]) => [source, [...signals]]))
+export function normalizeRuleRow(row, index = 0) {
+  const get = aliases => {
+    for (const alias of aliases) {
+      if (row[alias] !== undefined) return row[alias];
+      const found = Object.keys(row).find(key => normalizeToken(key) === normalizeToken(alias));
+      if (found) return row[found];
+    }
+    return null;
   };
+  const signalName = normalizeText(get(FIELD_ALIASES.signalName));
+  const sourceName = normalizeText(get(FIELD_ALIASES.sourceName));
+  const expectedByState = new Map();
+  for (const state of STATE_FIELDS) {
+    const value = parseNumber(get([`Expected ${state}`]));
+    if (Number.isFinite(value)) expectedByState.set(normalizeState(state), value);
+  }
+  const rule = {
+    parameterId: `param-${index + 1}`,
+    ruleId: `rule-${index + 1}`,
+    ruleRow: Number(row.__rowNum__ || row.ruleRow || index + 2),
+    system: normalizeText(get(FIELD_ALIASES.system)) || 'Unassigned',
+    subsystem: normalizeText(get(FIELD_ALIASES.subsystem)) || null,
+    component: normalizeText(get(FIELD_ALIASES.component)) || null,
+    signalName,
+    normalizedSignal: normalizeToken(signalName),
+    sourceName: sourceName || 'unknown',
+    normalizedSource: normalizeSourceIdentity(sourceName),
+    valueMetric: normalizeText(get(FIELD_ALIASES.valueMetric)) || null,
+    checkType: normalizeText(get(FIELD_ALIASES.checkType)) || 'tolerance',
+    genericExpected: parseNumber(get(FIELD_ALIASES.genericExpected)),
+    expectedByState,
+    hasStateSpecificExpected: expectedByState.size > 0,
+    specTolerance: parseNumber(get(FIELD_ALIASES.specTolerance)),
+    warningLow: parseNumber(get(FIELD_ALIASES.warningLow)),
+    warningHigh: parseNumber(get(FIELD_ALIASES.warningHigh)),
+    criticalLow: parseNumber(get(FIELD_ALIASES.criticalLow)),
+    criticalHigh: parseNumber(get(FIELD_ALIASES.criticalHigh)),
+    warningDurationSec: parseNumber(get(FIELD_ALIASES.warningDurationSec)),
+    criticalDurationSec: parseNumber(get(FIELD_ALIASES.criticalDurationSec)),
+    transitionGraceSec: parseNumber(get(FIELD_ALIASES.transitionGraceSec)),
+    warningAction: normalizeText(get(FIELD_ALIASES.warningAction)) || null,
+    criticalAction: normalizeText(get(FIELD_ALIASES.criticalAction)) || null,
+    outOfSpecAction: normalizeText(get(FIELD_ALIASES.outOfSpecAction)) || null,
+    notes: normalizeText(get(FIELD_ALIASES.notes)) || null
+  };
+  rule.validity = signalName ? 'valid' : 'invalid';
+  rule.invalidReason = signalName ? '' : 'missing_signal_name';
+  return rule;
+}
+
+export function normalizeRulesRows(rows = []) {
+  return rows.map((row, index) => normalizeRuleRow(row, index)).filter(rule => rule.validity === 'valid');
+}
+
+export function parseRulesWorkbook(XLSX, arrayBuffer) {
+  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+  const sheetName = workbook.SheetNames.find(name => /rule|panda/i.test(name)) || workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+  return normalizeRulesRows(rows);
+}
+
+export function buildRulesIndex(rules) {
+  const exact = new Map();
+  const bySignal = new Map();
+  for (const rule of rules) {
+    const key = `${rule.normalizedSource}::${rule.normalizedSignal}`;
+    exact.set(key, rule);
+    if (!bySignal.has(rule.normalizedSignal)) bySignal.set(rule.normalizedSignal, []);
+    bySignal.get(rule.normalizedSignal).push(rule);
+  }
+  return { exact, bySignal };
+}
+
+export function findRuleForStream(index, stream) {
+  return index.exact.get(`${stream.sourceId}::${stream.normalizedSignal}`) || index.bySignal.get(stream.normalizedSignal)?.[0] || null;
 }

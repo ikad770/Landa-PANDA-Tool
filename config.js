@@ -1,147 +1,76 @@
 export const AUTH_CONFIG = {
-  username: "Landa",
-  password: "Landa123456",
-  sessionKey: "panda_authenticated"
+  username: 'Landa',
+  password: 'Landa123456',
+  sessionKey: 'panda_authenticated'
 };
 
-export const CMYKOGB_TOKENS = [
-  ['C', 'cyan', '#20d7ff'],
-  ['M', 'magenta', '#ff4fb3'],
-  ['Y', 'yellow', '#f4d94d'],
-  ['K', 'black', '#0b1118'],
-  ['O', 'orange', '#ff8a3d'],
-  ['G', 'green', '#43d17d'],
-  ['B', 'blue', '#4a8dff']
+export const V2_PROGRESS_STAGES = [
+  { key: 'upload', label: 'Upload', start: 0, end: 12 },
+  { key: 'parse', label: 'Parse', start: 12, end: 45 },
+  { key: 'index', label: 'Index', start: 45, end: 65 },
+  { key: 'analyze', label: 'Analyze', start: 65, end: 88 },
+  { key: 'finalize', label: 'Finalize', start: 88, end: 99 },
+  { key: 'complete', label: 'Complete', start: 100, end: 100 }
 ];
 
-export const USER_FACING_STAGES = [
-  { key: 'upload', label: 'Upload', weight: 15, stages: ['rules_loading', 'archive_validation'] },
-  { key: 'parse', label: 'Parse', weight: 30, stages: ['opc_indexing', 'source_discovery', 'machine_states', 'source_parsing'] },
-  { key: 'analyze', label: 'Analyze', weight: 25, stages: ['evaluation'] },
-  { key: 'validate', label: 'Validate', weight: 15, stages: ['timeline_finalization'] },
-  { key: 'report', label: 'Report', weight: 15, stages: ['result_validation'] }
-];
+export const USER_FACING_STAGES = V2_PROGRESS_STAGES.filter(stage => stage.key !== 'complete').map(stage => ({
+  key: stage.key,
+  label: stage.label,
+  weight: stage.end - stage.start,
+  stages: [stage.key]
+}));
 
 export const PROGRESS_MESSAGES = {
   upload: 'Receiving archive and rules workbook…',
-  parse: 'Scanning systems, parameters and events…',
-  analyze: 'Evaluating state-aware rule thresholds…',
-  validate: 'Validating findings and diagnostics…',
-  report: 'Preparing Service Radar output…'
+  parse: 'Parsing supported text logs and rules…',
+  index: 'Building signal and state indexes…',
+  analyze: 'Evaluating configured signal streams…',
+  finalize: 'Building bounded V2 result…',
+  complete: 'Analysis complete.'
 };
 
-export const MACHINE_IMAGE_SRC = './assets/landa-machine.png';
-
-export const APP_STAGES = [
-  ['rules_loading', 'Upload', 5],
-  ['archive_validation', 'Archive validation', 5],
-  ['opc_indexing', 'opc.zip indexing', 10],
-  ['source_discovery', 'Source discovery', 5],
-  ['machine_states', 'MachineStates parsing', 15],
-  ['source_parsing', 'Required log parsing', 40],
-  ['evaluation', 'Rule evaluation', 10],
-  ['timeline_finalization', 'Timeline / chart preparation', 5],
-  ['result_validation', 'Result validation', 5]
-];
-
-export const MAX_CHART_POINTS_PER_RULE = 2000;
-export const MAX_EVIDENCE_PREVIEW_PER_RULE = 20;
-export const MAX_EVIDENCE_SAMPLES_PER_RULE = 20;
-export const MAX_INVALID_TIMESTAMP_EXAMPLES = 5;
+export const MAX_CHART_POINTS_PER_SIGNAL = 1500;
+export const MAX_CONFIGURED_CHART_POINTS = 3000;
 export const MAX_DEVIATION_EVENTS_PER_RULE = 200;
-export const MIN_DEVIATION_GAP_MS = 30000;
+export const MAX_DIAGNOSTIC_ENTRIES = 250;
+export const MAX_DIAGNOSTIC_MESSAGE_LENGTH = 500;
+export const MAX_STACK_FRAMES = 10;
 export const MAX_STATE_LOOKUP_GAP_MS = 30 * 60 * 1000;
 
-export const RADAR_SYSTEMS = ['DPS', 'DFES', 'MSPS', 'ITS', 'IPS', 'ICS', 'Ventilation', 'ECS', 'IRD', 'QCS', 'BSS', 'STS', 'IPU'];
-export const SYSTEMS = [...RADAR_SYSTEMS, 'FEC', 'CWS', 'PSS', 'Dryer'];
 export const MACHINE_STATE_SYSTEMS = ['Machine', 'BSS', 'IPS', 'PSS', 'Dryer', 'IPU', 'Ventilation', 'CWS', 'IRD', 'DFES', 'DPS', 'QCS', 'ICS', 'ECS', 'MSPS', 'ITS'];
+export const SYSTEMS = ['DPS', 'DFES', 'MSPS', 'ITS', 'IPS', 'ICS', 'Ventilation', 'ECS', 'IRD', 'QCS', 'BSS', 'STS', 'IPU', 'FEC', 'CWS', 'PSS', 'Dryer', 'Machine', 'Unassigned'];
 
-export const SYSTEM_HOTSPOTS = {
-  DPS: { anchorX: 14, anchorY: 60, labelX: 6, labelY: 39, labelAlign: 'left', region: 'front_cockpit' },
-  DFES: { anchorX: 18, anchorY: 45, labelX: 7, labelY: 24, labelAlign: 'left', region: 'front_cockpit' },
-  MSPS: { anchorX: 23, anchorY: 68, labelX: 10, labelY: 82, labelAlign: 'left', region: 'front_cockpit' },
-  ITS: { anchorX: 28, anchorY: 39, labelX: 22, labelY: 14, labelAlign: 'center', region: 'front_cockpit' },
-  IPS: { anchorX: 39, anchorY: 38, labelX: 35, labelY: 10, labelAlign: 'center', region: 'central_print_engine' },
-  ICS: { anchorX: 49, anchorY: 35, labelX: 49, labelY: 8, labelAlign: 'center', region: 'central_print_engine' },
-  Ventilation: { anchorX: 58, anchorY: 30, labelX: 63, labelY: 10, labelAlign: 'center', region: 'central_print_engine' },
-  ECS: { anchorX: 66, anchorY: 39, labelX: 74, labelY: 16, labelAlign: 'center', region: 'central_print_engine' },
-  IRD: { anchorX: 70, anchorY: 58, labelX: 80, labelY: 43, labelAlign: 'right', region: 'right_imaging_delivery' },
-  QCS: { anchorX: 75, anchorY: 43, labelX: 87, labelY: 27, labelAlign: 'right', region: 'right_imaging_delivery' },
-  BSS: { anchorX: 78, anchorY: 64, labelX: 88, labelY: 72, labelAlign: 'right', region: 'right_imaging_delivery' },
-  STS: { anchorX: 84, anchorY: 49, labelX: 94, labelY: 54, labelAlign: 'right', region: 'right_imaging_delivery' },
-  IPU: { anchorX: 89, anchorY: 66, labelX: 94, labelY: 84, labelAlign: 'right', region: 'right_imaging_delivery' },
-  FEC: { anchorX: 93, anchorY: 52, labelX: 95, labelY: 36, labelAlign: 'right', region: 'right_imaging_delivery' },
-  CWS: { anchorX: 34, anchorY: 70, labelX: 28, labelY: 89, labelAlign: 'center', region: 'lower_services' },
-  PSS: { anchorX: 55, anchorY: 72, labelX: 53, labelY: 91, labelAlign: 'center', region: 'lower_services' },
-  Dryer: { anchorX: 68, anchorY: 71, labelX: 70, labelY: 90, labelAlign: 'center', region: 'right_imaging_delivery' },
-  LLCI: { anchorX: 46, anchorY: 58, labelX: 43, labelY: 78, labelAlign: 'center', region: 'central_print_engine' }
-};
-
-export const REQUIRED_SOURCE_PATHS = {
-  BSSNotifications: ['logs/LLCINotifications/BSS/'],
-  IPSNotifications: ['logs/LLCINotifications/IPS/'],
-  FECNotifications: ['logs/FECNotifications/'],
-  MachineStates: ['logs/MachineStates/'],
-  AlertsMonitoring: ['logs/AlertsMonitoring.txt', 'logs/AletrsMonitoring.txt']
-};
-
-export const SOURCE_ALIASES = {
-  BSSNotifications: ['BSSNotifications', 'BSS Notifications', 'bssnotifications', 'BSS', 'LLCINotifications/BSS', 'logs/LLCINotifications/BSS'],
-  IPSNotifications: ['IPSNotifications', 'IPS Notifications', 'ipsnotifications', 'IPS', 'LLCINotifications/IPS', 'logs/LLCINotifications/IPS'],
-  FECNotifications: ['FECNotifications', 'FEC Notifications', 'fecnotifications', 'FEC', 'logs/FECNotifications'],
-  MachineStates: ['MachineStates', 'Machine States', 'logs/MachineStates'],
-  AlertsMonitoring: ['AlertsMonitoring', 'Alerts Monitoring', 'AletrsMonitoring', 'logs/AlertsMonitoring.txt', 'logs/AletrsMonitoring.txt']
-};
-
-function sourceToken(value) {
-  const path = String(value ?? '').replace(/\\/g, '/').replace(/\uFEFF/g, '').replace(/\u00A0/g, ' ').trim();
-  const parts = path.split('/').filter(Boolean);
-  const tail = parts.slice(-2).join('/') || path;
-  return tail.toLowerCase().replace(/[^a-z0-9/]+/g, '').replace(/\.(csv|txt|zip)$/i, '');
-}
-
-const SOURCE_ALIAS_INDEX = Object.fromEntries(Object.entries(SOURCE_ALIASES).flatMap(([canonical, aliases]) => aliases.map(alias => [sourceToken(alias), canonical])));
-
-export function normalizeSourceIdentity(value) {
-  const token = sourceToken(value);
-  if (!token) return '';
-  if (SOURCE_ALIAS_INDEX[token]) return SOURCE_ALIAS_INDEX[token];
-  const byPath = Object.entries(SOURCE_ALIAS_INDEX).find(([alias]) => token.endsWith(alias) || token.includes(`/${alias}`));
-  return byPath?.[1] || String(value ?? '').trim();
-}
-
-
-export const SIGNAL_ALIASES = {
-  fillflowmeteractualvalve: ['fillflowmeteractualvalue'],
-  fillflowmeteractualvalue: ['fillflowmeteractualvalve'],
-  waterflowmeteractualvalve: ['waterflowmeteractualvalue'],
-  waterflowmeteractualvalue: ['waterflowmeteractualvalve']
+export const STATUS_PRIORITY = {
+  critical: 90,
+  warning: 70,
+  ok: 50,
+  needs_validation: 40,
+  needs_configuration: 30,
+  no_data: 20,
+  no_rule: 10,
+  not_analyzed: 0
 };
 
 export const STATUS_TAXONOMY = {
-  critical: { key: 'critical', label: 'Critical', shortLabel: 'Critical', icon: '⚠', cssClass: 'critical', priority: 70, colorRole: 'critical', explanation: 'A fully evaluated actual value is outside a configured critical threshold.' },
-  warning: { key: 'warning', label: 'Warning', shortLabel: 'Warning', icon: '!', cssClass: 'warning', priority: 60, colorRole: 'warning', explanation: 'A fully evaluated actual value is outside the permitted or warning range.' },
-  needs_validation: { key: 'needs_validation', label: 'Validation required', shortLabel: 'Validate', icon: '◇', cssClass: 'needs-validation', priority: 50, colorRole: 'validation', explanation: 'Source data was found, but missing or invalid context prevents evaluation.' },
-  needs_configuration: { key: 'needs_configuration', label: 'Configuration required', shortLabel: 'Configure', icon: '⚙', cssClass: 'needs-configuration', priority: 45, colorRole: 'configuration', explanation: 'Valid log data was found, but the rule lacks expected values, tolerances, thresholds, or evaluator support.' },
-  ok: { key: 'ok', label: 'OK', shortLabel: 'OK', icon: '✓', cssClass: 'ok', priority: 30, colorRole: 'ok', explanation: 'The rule was fully evaluated and relevant values are inside the configured range.' },
-  no_data: { key: 'no_data', label: 'No data', shortLabel: 'No data', icon: '∅', cssClass: 'no-data', priority: 20, colorRole: 'no-data', explanation: 'A valid rule exists, but no matching log value was found.' },
-  no_rule: { key: 'no_rule', label: 'No rule', shortLabel: 'No rule', icon: '—', cssClass: 'no-rule', priority: 10, colorRole: 'no-data', explanation: 'No evaluation rule exists for this system.' },
-  not_analyzed: { key: 'not_analyzed', label: 'Not analyzed', shortLabel: 'Pending', icon: '○', cssClass: 'not-analyzed', priority: 0, colorRole: 'no-data', explanation: 'No AnalysisResult is available yet.' }
+  critical: { label: 'Critical', shortLabel: 'Critical', cssClass: 'critical', icon: '●' },
+  warning: { label: 'Warning', shortLabel: 'Warning', cssClass: 'warning', icon: '▲' },
+  ok: { label: 'OK', shortLabel: 'OK', cssClass: 'ok', icon: '✓' },
+  needs_validation: { label: 'Needs validation', shortLabel: 'Validate', cssClass: 'needs-validation', icon: '?' },
+  needs_configuration: { label: 'Needs configuration', shortLabel: 'Config', cssClass: 'needs-configuration', icon: '!' },
+  no_data: { label: 'No data', shortLabel: 'No data', cssClass: 'no-data', icon: '○' },
+  no_rule: { label: 'No Rule', shortLabel: 'No Rule', cssClass: 'no-rule', icon: '◇' },
+  not_analyzed: { label: 'Not analyzed', shortLabel: 'Pending', cssClass: 'not-analyzed', icon: '○' }
 };
+export const STATUS_LABEL = Object.fromEntries(Object.entries(STATUS_TAXONOMY).map(([key, value]) => [key, value.label]));
 
-export const STATUS_PRIORITY = { ...Object.fromEntries(Object.entries(STATUS_TAXONOMY).map(([key, meta]) => [key, meta.priority])), evaluator_pending: STATUS_TAXONOMY.needs_validation.priority };
-export const STATUS_LABEL = Object.fromEntries(Object.entries(STATUS_TAXONOMY).map(([key, meta]) => [key, meta.label]));
-
-export const EXPECTED_STATE_COLUMNS = {
-  ON: 'Expected ON',
-  Standby: 'Expected Standby',
-  Ready: 'Expected Ready',
-  Prepare2Print: 'Expected Prepare2Print',
-  Printing: 'Expected Printing',
-  PrintEnd: 'Expected PrintEnd',
-  Recovery: 'Expected Recovery',
-  Error: 'Expected Error'
-};
-
-export const SUPPORTED_CHECK_TYPES = new Set(['range', 'range_percent', 'threshold', 'above threshold', 'below threshold', 'exact', 'max', 'min']);
-export const PENDING_CHECK_TYPES = new Set(['delta', 'trend', 'flatline']);
+export function normalizeSourceIdentity(value) {
+  return String(value || 'unknown')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    .slice(-2)
+    .join('/')
+    .replace(/\.(csv|txt|log)$/i, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9/]+/g, '_') || 'unknown';
+}

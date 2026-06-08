@@ -1,85 +1,49 @@
-import { MACHINE_STATE_SYSTEMS, MAX_STATE_LOOKUP_GAP_MS } from './config.js';
-import { normalizeState, normalizeText } from './evaluation.js';
+import { MAX_STATE_LOOKUP_GAP_MS } from './config.js';
+import { normalizeState } from './evaluation.js';
 
-const CANONICAL_STATES = new Set(['ON', 'Standby', 'Ready', 'Prepare2Print', 'Printing', 'PrintEnd', 'Recovery', 'Error']);
-
-function isSupportedState(value) {
-  return CANONICAL_STATES.has(normalizeState(value));
-}
-
-export function createStateIndex(options = {}) {
-  const maxLookupGapMs = options.maxLookupGapMs ?? MAX_STATE_LOOKUP_GAP_MS;
-  const series = Object.fromEntries(MACHINE_STATE_SYSTEMS.map(system => [system, []]));
-  const previous = {};
-  const unknownStates = {};
-  return {
-    series,
-    unknownStates,
-    addRow(timestampMs, row) {
-      if (!Number.isFinite(timestampMs)) return;
-      for (const system of MACHINE_STATE_SYSTEMS) {
-        const raw = row[system] ?? row[system.toUpperCase()] ?? row[system.toLowerCase()];
-        const clean = normalizeText(raw);
-        if (clean && clean !== '---' && clean.toLowerCase() !== 'null') {
-          const normalized = normalizeState(clean);
-          previous[system] = normalized;
-          if (!isSupportedState(normalized)) unknownStates[clean] = (unknownStates[clean] || 0) + 1;
-        }
-        const current = previous[system];
-        if (!current) continue;
-        const target = series[system] || (series[system] = []);
-        if (target[target.length - 1]?.value !== current) target.push({ timestampMs, value: current, supported: isSupportedState(current) });
-      }
-    },
-    finalize() {
-      for (const [system, rows] of Object.entries(series)) {
-        rows.sort((a, b) => a.timestampMs - b.timestampMs);
-        series[system] = rows.filter((row, idx) => idx === 0 || row.timestampMs !== rows[idx - 1].timestampMs || row.value !== rows[idx - 1].value);
-      }
-    },
-    getStateAt(timestampMs, system) {
-      if (!Number.isFinite(timestampMs)) return missingState('missing');
-      const machine = binaryState(series.Machine || [], timestampMs);
-      const sys = binaryState(series[system] || [], timestampMs);
-      const selected = sys || machine;
-      if (!selected) return missingState('missing');
-      const stateAgeMs = Math.max(0, timestampMs - selected.timestampMs);
-      if (stateAgeMs > maxLookupGapMs) return { ...statePayload(machine, sys, selected, stateAgeMs), stateMatchStatus: 'too_old', status: 'too_old' };
-      if (!selected.supported) return { ...statePayload(machine, sys, selected, stateAgeMs), stateMatchStatus: 'unsupported_state', status: 'unsupported_state' };
-      const exact = selected.timestampMs === timestampMs;
-      return { ...statePayload(machine, sys, selected, stateAgeMs), stateMatchStatus: exact ? 'exact' : 'previous_state', status: 'matched' };
-    }
-  };
-}
-
-function statePayload(machine, sys, selected, stateAgeMs) {
-  return {
-    machineState: machine?.value || null,
-    systemState: sys?.value || null,
-    matchedStateTimestamp: selected?.timestampMs ?? null,
-    matchedStateTimestampMs: selected?.timestampMs ?? null,
-    stateAgeMs,
-    machineMatchedTimestampMs: machine?.timestampMs || null,
-    systemMatchedTimestampMs: sys?.timestampMs || null
-  };
-}
-
-function missingState(status) {
-  return { machineState: null, systemState: null, matchedStateTimestamp: null, matchedStateTimestampMs: null, stateAgeMs: null, stateMatchStatus: status, status, machineMatchedTimestampMs: null, systemMatchedTimestampMs: null };
-}
-
-function binaryState(rows, timestampMs) {
-  let lo = 0;
-  let hi = rows.length - 1;
-  let match = null;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (rows[mid].timestampMs <= timestampMs) {
-      match = rows[mid];
-      lo = mid + 1;
+export function createStateTimeline(points = [], selectedRange = {}) {
+  const transitions = [];
+  for (const point of points) {
+    const state = normalizeState(point.machineState || point.rawState);
+    if (!Number.isFinite(point.timestampMs) || !state) continue;
+    const last = transitions[transitions.length - 1];
+    if (!last || last.state !== state || last.timestampMs !== point.timestampMs) transitions.push({ state, timestampMs: point.timestampMs });
+  }
+  transitions.sort((a, b) => a.timestampMs - b.timestampMs);
+  const start = selectedRange.startTimestampMs ?? transitions[0]?.timestampMs ?? null;
+  const end = selectedRange.endTimestampMs ?? transitions[transitions.length - 1]?.timestampMs ?? start;
+  const intervals = [];
+  for (let i = 0; i < transitions.length; i += 1) {
+    const current = transitions[i];
+    const next = transitions[i + 1];
+    const startTimestampMs = Math.max(current.timestampMs, start ?? current.timestampMs);
+    const endTimestampMs = Math.min(next?.timestampMs ?? end ?? current.timestampMs, end ?? next?.timestampMs ?? current.timestampMs);
+    if (!Number.isFinite(startTimestampMs) || !Number.isFinite(endTimestampMs) || endTimestampMs <= startTimestampMs) continue;
+    const previous = intervals[intervals.length - 1];
+    if (previous?.state === current.state && previous.endTimestampMs === startTimestampMs) {
+      previous.endTimestampMs = endTimestampMs;
+      previous.durationMs = previous.endTimestampMs - previous.startTimestampMs;
     } else {
-      hi = mid - 1;
+      intervals.push({ state: current.state, startTimestampMs, endTimestampMs, durationMs: endTimestampMs - startTimestampMs });
     }
   }
-  return match;
+  return intervals;
+}
+
+export function createStateResolver(timeline = [], maxLookupGapMs = MAX_STATE_LOOKUP_GAP_MS) {
+  return function resolve(timestampMs) {
+    if (!Number.isFinite(timestampMs)) return { machineState: null, systemState: null, status: 'missing' };
+    let lo = 0;
+    let hi = timeline.length - 1;
+    let match = null;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (timeline[mid].startTimestampMs <= timestampMs) { match = timeline[mid]; lo = mid + 1; } else { hi = mid - 1; }
+    }
+    if (!match) return { machineState: null, systemState: null, status: 'missing' };
+    if (timestampMs <= match.endTimestampMs) return { machineState: match.state, systemState: match.state, status: 'matched' };
+    const age = timestampMs - match.endTimestampMs;
+    if (age > maxLookupGapMs) return { machineState: match.state, systemState: match.state, status: 'too_old' };
+    return { machineState: match.state, systemState: match.state, status: 'previous_state' };
+  };
 }
