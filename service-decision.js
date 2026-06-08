@@ -20,7 +20,6 @@ export function isOperationalStatus(status) {
 export function buildServiceDecision(result = {}) {
   const metadata = result.metadata || {};
   const parameterSummaries = result.signalSummaries || [];
-  const parameterStateSummaries = buildParameterStateSummaries(parameterSummaries);
   const deviationEvents = (result.deviationEvents || []).map(normalizeDeviationEvent).sort(byFindingPriority);
   const systemSummaries = buildSystemSummaries(result.systemHealth || [], parameterSummaries, deviationEvents);
   const statusCounts = countRulesByStatus(parameterSummaries);
@@ -36,40 +35,44 @@ export function buildServiceDecision(result = {}) {
   const operationalFindings = [...criticalFindings, ...warningFindings].sort(byFindingPriority);
   const systemsAtRisk = systemSummaries.filter(system => OPERATIONAL_STATUSES.has(normalizeDecisionStatus(system.status)));
   const systemsRequiringAttention = systemSummaries.filter(system => ATTENTION_STATUSES.has(normalizeDecisionStatus(system.status)));
-  const primaryFinding = operationalFindings[0] || sortRules([...validationProblems, ...configurationProblems, ...parameterSummaries])[0] || null;
+  const fallbackFinding = sortRules([...validationProblems, ...configurationProblems, ...parameterSummaries])[0] || null;
+  const primaryFinding = operationalFindings[0] || (fallbackFinding ? findingCard(fallbackFinding) : null);
   const primarySystem = systemsAtRisk[0]?.system || primaryFinding?.system || systemsRequiringAttention[0]?.system || systemSummaries.find(system => normalizeDecisionStatus(system.status) === 'ok')?.system || systemSummaries[0]?.system || null;
   const machineStatus = chooseMachineStatus(systemSummaries, parameterSummaries);
   const nextRecommendedAction = buildRecommendedAction(machineStatus, primaryFinding, { configurationProblems, validationProblems });
   const affectedParameters = new Set(parameterSummaries.filter(row => ['warning', 'critical'].includes(normalizeDecisionStatus(row.status))).map(parameterKey));
+  const topFindings = topOperationalFindings(parameterSummaries, deviationEvents).map(findingCard);
   return {
     machineStatus,
+    operationalStatus: machineStatus,
+    readinessStatus: validationProblems.length || configurationProblems.length ? 'attention_required' : 'ready',
     machineStatusLabel: STATUS_TAXONOMY[machineStatus]?.label || machineStatus,
     machineSummary: buildMachineSummary(machineStatus, primarySystem, primaryFinding, { criticalFindings, warningFindings, validationProblems, configurationProblems, affectedParameters, deviationEvents }),
-    systemsAtRisk,
+    systemsAtRisk: systemsAtRisk.map(row => row.system),
     systemsAtRiskCount: systemsAtRisk.length,
-    systemsRequiringAttention,
+    systemsRequiringAttention: systemsRequiringAttention.map(row => row.system),
     systemsRequiringAttentionCount: systemsRequiringAttention.length,
-    criticalFindings,
-    warningFindings,
-    operationalFindings,
-    validationProblems,
-    configurationProblems,
-    fullyEvaluatedSystems: systemSummaries.filter(system => isOperationalStatus(system.status) && (system.evaluatedParameters || 0) > 0),
-    partiallyEvaluatedSystems: systemSummaries.filter(system => !isOperationalStatus(system.status) && (system.rules || 0) > 0),
+    criticalFindings: criticalFindings.map(findingCard),
+    warningFindings: warningFindings.map(findingCard),
+    operationalFindings: operationalFindings.map(findingCard),
+    criticalParameterIds: criticalParameters.map(parameterKey),
+    warningParameterIds: warningParameters.map(parameterKey),
+    healthyParameterIds: healthyParameters.map(parameterKey),
+    validationProblemIds: validationProblems.map(parameterKey),
+    configurationProblemIds: configurationProblems.map(parameterKey),
+    fullyEvaluatedRuleIds: fullyEvaluatedRules.map(parameterKey),
+    matchedSignalIds: matchedSignals.map(parameterKey),
+    fullyEvaluatedSystems: systemSummaries.filter(system => isOperationalStatus(system.status) && (system.evaluatedParameters || 0) > 0).map(row => row.system),
+    partiallyEvaluatedSystems: systemSummaries.filter(system => !isOperationalStatus(system.status) && (system.rules || 0) > 0).map(row => row.system),
     primarySystem,
-    primaryFinding,
-    topFindings: topOperationalFindings(parameterSummaries, deviationEvents),
-    parameterSummaries,
-    parameterStateSummaries,
+    primaryFindingId: primaryFinding ? findingId(primaryFinding) : null,
+    primaryFinding: primaryFinding ? findingCard(primaryFinding) : null,
+    topFindingIds: topFindings.map(findingId),
+    topFindings,
     systemSummaries,
-    stateSummaries: parameterStateSummaries,
-    deviationEvents,
-    recommendedActions: buildRecommendedActions(parameterSummaries),
+    recommendedActions: buildRecommendedActions(parameterSummaries).map((action, index) => ({ id: action.id || `action-${index + 1}`, parameterId: action.parameterId || parameterKey(action), system: action.system || '', signal: action.signal || '', status: normalizeDecisionStatus(action.status), action: action.action || action.recommendedAction || '', priority: action.priority || normalizeDecisionStatus(action.status) })),
     evaluationCoverage: { fullyEvaluatedRules: fullyEvaluatedRules.length, matchedSignals: matchedSignals.length, rulesRequiringConfiguration: configurationProblems.length, rulesRequiringValidation: validationProblems.length },
-    diagnosticsSummary: result.diagnosticsSummary || {},
     nextRecommendedAction,
-    fullyEvaluatedRules,
-    matchedSignals,
     analysisCompleteness: ratio(fullyEvaluatedRules.length, metadata.rulesValid || parameterSummaries.length),
     dataQuality: ratio((metadata.relevantValuesFound || 0) - (metadata.needsValidationPoints || 0), metadata.relevantValuesFound || 0),
     ruleCoverage: ratio(metadata.relevantSignalsFound || 0, metadata.relevantSignalsRequired || 0),
@@ -93,6 +96,11 @@ export function buildServiceDecision(result = {}) {
       signalCoverage: { found: metadata.relevantSignalsFound || matchedSignals.length, required: metadata.relevantSignalsRequired || parameterSummaries.length }
     }
   };
+}
+
+function findingId(finding = {}) { return finding.parameterId || finding.ruleId || `${finding.system || ''}::${finding.signal || ''}`; }
+function findingCard(finding = {}) {
+  return { id: findingId(finding), parameterId: finding.parameterId || finding.ruleId || findingId(finding), system: finding.system || '', signal: finding.signal || '', parameterName: finding.parameterName || finding.signal || '', status: normalizeDecisionStatus(finding.status || finding.severity), severity: normalizeDecisionStatus(finding.severity || finding.status), eventCount: finding.eventCount || finding.deviationEventCount || 0, durationMs: finding.durationMs || finding.totalOutOfRangeDurationMs || 0, maximumDeviation: finding.maximumDeviation ?? null, outOfRangePercent: finding.outOfRangePercent || 0, recommendedAction: finding.recommendedAction || '' };
 }
 
 export function buildParameterStateSummaries(parameters = []) {
@@ -201,7 +209,9 @@ function topOperationalFindings(parameters = [], events = []) {
 }
 
 function maxStateOutOfRange(parameter = {}) {
-  return Math.max(0, ...(parameter.stateSummaries || []).map(row => row.outOfRangePercent || 0));
+  let max = 0;
+  for (const row of parameter.stateSummaries || []) if ((row.outOfRangePercent || 0) > max) max = row.outOfRangePercent || 0;
+  return max;
 }
 
 function countRulesByStatus(rules) {

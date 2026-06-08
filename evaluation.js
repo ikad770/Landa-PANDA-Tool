@@ -372,26 +372,197 @@ function evaluatedPointFromInput(rule, input, previous) {
   };
 }
 
+export function createParameterAccumulator(rule = {}, options = {}) {
+  const maxChartPoints = Number.isFinite(options.maxChartPoints) ? options.maxChartPoints : 2000;
+  const maxDeviationEvents = Number.isFinite(options.maxDeviationEvents) ? options.maxDeviationEvents : 200;
+  return {
+    __kind: 'ParameterAccumulator',
+    rule: rule || {}, options, maxChartPoints, maxDeviationEvents,
+    sourceFiles: new Set(), rawPointCount: 0, sampleCount: 0, evaluatedSampleCount: 0, numericCount: 0,
+    invalidTimestampCount: 0, stateDataCount: 0, sumActual: 0, minimumActual: null, maximumActual: null,
+    latest: null, previous: null, sequence: 0,
+    coverage: { ruleAvailable: Boolean(rule), sourceAvailable: Boolean(options.sourceAvailable), signalMatched: false, dataAvailable: false, numericDataAvailable: false, timestampDataAvailable: false, stateDataAvailable: false, fullyEvaluated: false, blocker: null, blockerReason: null },
+    statusCounts: {}, finalStatusCounts: {}, blockerCounts: {}, durationStreakMs: 0, totalObservedDurationMs: 0, totalOutOfRangeDurationMs: 0,
+    firstTimestampMs: null, lastTimestampMs: null, firstDeviationTimestampMs: null, lastDeviationTimestampMs: null,
+    longestDeviationDurationMs: 0, maximumDeviation: null, minimumDeviation: null,
+    stateAccumulators: new Map(), activeEvent: null, latestEvents: [], worstEvents: [], deviationEventCount: 0,
+    chartSampler: createChartSampler(maxChartPoints), firstNonOperational: null
+  };
+}
+
+export function evaluatePoint(rule = {}, input = {}, context = {}) {
+  return evaluatedPointFromInput(rule, input, context.previous || null);
+}
+
+export function updateParameterAccumulator(accumulator, evaluatedPoint) {
+  const acc = accumulator;
+  const point = evaluatedPoint || {};
+  acc.rawPointCount += 1;
+  acc.sampleCount += 1;
+  if (point.sourceFile || point.file) acc.sourceFiles.add(point.sourceFile || point.file);
+  acc.coverage.signalMatched = true;
+  acc.coverage.dataAvailable = true;
+  if (Number.isFinite(point.actual)) {
+    acc.numericCount += 1; acc.coverage.numericDataAvailable = true; acc.sumActual += point.actual;
+    acc.minimumActual = acc.minimumActual === null ? point.actual : Math.min(acc.minimumActual, point.actual);
+    acc.maximumActual = acc.maximumActual === null ? point.actual : Math.max(acc.maximumActual, point.actual);
+  }
+  if (Number.isFinite(point.timestampMs)) {
+    acc.coverage.timestampDataAvailable = true;
+    acc.firstTimestampMs = acc.firstTimestampMs === null ? point.timestampMs : Math.min(acc.firstTimestampMs, point.timestampMs);
+    acc.lastTimestampMs = acc.lastTimestampMs === null ? point.timestampMs : Math.max(acc.lastTimestampMs, point.timestampMs);
+  } else acc.invalidTimestampCount += 1;
+  if (point.machineState || point.systemState) { acc.stateDataCount += 1; acc.coverage.stateDataAvailable = true; }
+  acc.latest = point;
+  if (point.evaluated) acc.evaluatedSampleCount += 1;
+  acc.statusCounts[point.status] = (acc.statusCounts[point.status] || 0) + 1;
+  if (point.reasonCode) acc.blockerCounts[point.reasonCode] = (acc.blockerCounts[point.reasonCode] || 0) + 1;
+  if (!point.evaluated && !acc.firstNonOperational) acc.firstNonOperational = point;
+  if (Number.isFinite(point.deviation)) {
+    acc.maximumDeviation = acc.maximumDeviation === null ? point.deviation : Math.max(acc.maximumDeviation, point.deviation);
+    acc.minimumDeviation = acc.minimumDeviation === null ? point.deviation : Math.min(acc.minimumDeviation, point.deviation);
+  }
+  const important = point.status === 'warning' || point.status === 'critical' || point.status === 'needs_configuration' || point.status === 'needs_validation' || (acc.previous && ((acc.previous.machineState || '') !== (point.machineState || '') || (acc.previous.systemState || '') !== (point.systemState || '')));
+  addChartSample(acc.chartSampler, cleanPoint(point), important);
+  if (acc.previous && Number.isFinite(acc.previous.timestampMs) && Number.isFinite(point.timestampMs)) {
+    creditCompletedPoint(acc, acc.previous, point.timestampMs);
+  }
+  if (Number.isFinite(point.timestampMs)) acc.previous = point;
+  return acc;
+}
+
+export function finalizeParameterAccumulator(accumulator) {
+  const acc = accumulator;
+  if (!acc.rawPointCount) return canonicalSummary(acc.rule, [], { status: 'no_data', reasonCode: 'no_matching_rows', reason: 'Valid rule exists, but no matching rows were found.', coverage: { ...acc.coverage, ruleAvailable: true, sourceAvailable: acc.options.sourceAvailable ?? acc.sourceFiles.size > 0, blocker: 'no_data', blockerReason: 'No matching rows' }, sourceFiles: acc.sourceFiles });
+  if (acc.previous) creditCompletedPoint(acc, acc.previous, acc.previous.timestampMs, true);
+  closeActiveEvent(acc);
+  const status = cleanStatus(chooseStatusFromCounts(Object.keys(acc.finalStatusCounts).length ? acc.finalStatusCounts : acc.statusCounts));
+  const coverage = { ...acc.coverage, sourceAvailable: acc.options.sourceAvailable ?? acc.sourceFiles.size > 0, fullyEvaluated: acc.evaluatedSampleCount > 0, blocker: OPERATIONAL.has(status) ? null : acc.firstNonOperational?.reasonCode || status, blockerReason: OPERATIONAL.has(status) ? null : acc.firstNonOperational?.reason || status };
+  const deviationEvents = boundedDeviationEvents(acc);
+  const outOfRangePercent = acc.totalObservedDurationMs ? Math.min(100, Math.max(0, acc.totalOutOfRangeDurationMs / acc.totalObservedDurationMs * 100)) : 0;
+  const stateSummaries = finalizeStateSummaries(acc, acc.totalObservedDurationMs);
+  const latest = acc.latest || {};
+  const summary = {
+    ruleId: acc.rule.id || acc.rule.ruleId || null, ruleRow: acc.rule.row ?? acc.rule.ruleRow ?? null, system: acc.rule.system || '', subsystem: acc.rule.subsystem || '', component: latest.component || acc.rule.component || '', signal: acc.rule.signal || '', parameterName: acc.rule.parameterName || acc.rule.signal || '', sourceFile: [...acc.sourceFiles][0] || latest.sourceFile || null, logSource: acc.rule.logSource || acc.rule.sourceType || '', valueMetric: acc.rule.valueMetric || acc.rule.parameterType || '', unit: acc.rule.unit || '', checkType: inferCheckType(acc.rule),
+    configuration: { expectedByState: acc.rule.expectedByState || {}, expectedRangeByState: acc.rule.expectedRangeByState || {}, genericExpected: acc.rule.genericExpected ?? null, genericExpectedRange: acc.rule.genericExpectedRange || null, tolerance: acc.rule.tolerance || null, toleranceType: acc.rule.tolerance?.mode || null, warningLow: acc.rule.warningLow ?? null, warningHigh: acc.rule.warningHigh ?? null, criticalLow: acc.rule.criticalLow ?? null, criticalHigh: acc.rule.criticalHigh ?? null, warningDurationSec: acc.rule.warningDurationSec ?? null, criticalDurationSec: acc.rule.criticalDurationSec ?? null, transitionGraceSec: acc.rule.transitionGraceSec ?? null, warningSeverity: acc.rule.warningSeverity || null, criticalSeverity: acc.rule.criticalSeverity || null, warningAction: acc.rule.warningAction || '', criticalAction: acc.rule.criticalAction || '', outOfSpecAction: acc.rule.outOfSpecAction || '' },
+    coverage, status, reasonCode: latest.reasonCode || coverage.blocker || (status === 'ok' ? 'within_allowed_range' : status), reason: latest.reason || coverage.blockerReason || status,
+    latestTimestampMs: latest.timestampMs ?? null, latestActual: latest.actual ?? null, averageActual: acc.numericCount ? cleanNumeric(acc.sumActual / acc.numericCount) : null, minimumActual: acc.minimumActual, maximumActual: acc.maximumActual,
+    currentMachineState: latest.machineState || null, currentSystemState: latest.systemState || null, currentExpected: latest.expected ?? null, currentAllowedLow: latest.allowedLow ?? null, currentAllowedHigh: latest.allowedHigh ?? null, currentDifference: latest.difference ?? null, currentDeviation: latest.deviation ?? null, currentDeviationDirection: latest.deviationDirection ?? null,
+    sampleCount: acc.sampleCount, evaluatedSampleCount: acc.evaluatedSampleCount, fullyEvaluatedPoints: acc.evaluatedSampleCount, matchedRows: acc.rawPointCount, numericRows: acc.numericCount, classifiedPoints: acc.sampleCount, blockedPoints: acc.sampleCount - acc.evaluatedSampleCount,
+    totalObservedDurationMs: cleanNumeric(acc.totalObservedDurationMs), totalOutOfRangeDurationMs: cleanNumeric(Math.min(acc.totalOutOfRangeDurationMs, acc.totalObservedDurationMs)), outOfRangePercent: cleanNumeric(outOfRangePercent), longestDeviationDurationMs: cleanNumeric(acc.longestDeviationDurationMs), deviationEventCount: acc.deviationEventCount, returnedDeviationEventCount: deviationEvents.length, eventsTruncated: acc.deviationEventCount > deviationEvents.length, eventCount: acc.deviationEventCount, firstDeviationTimestampMs: acc.firstDeviationTimestampMs, lastDeviationTimestampMs: acc.lastDeviationTimestampMs, maximumDeviation: acc.maximumDeviation, minimumDeviation: acc.minimumDeviation,
+    stateSummaries, deviationEvents, chartPoints: finalizeChartSamples(acc.chartSampler), rawPointCount: acc.rawPointCount, renderedPointCount: Math.min(acc.rawPointCount, acc.maxChartPoints), downsampled: acc.rawPointCount > acc.maxChartPoints, recommendedAction: actionForStatus(status, acc.rule), expected: latest.expected ?? null, expectedValue: latest.expected ?? null, allowedLow: latest.allowedLow ?? null, allowedHigh: latest.allowedHigh ?? null, expectedLow: latest.expectedLow ?? null, expectedHigh: latest.expectedHigh ?? null, minActual: acc.minimumActual, maxActual: acc.maximumActual, blocker: coverage.blocker, blockerCounts: acc.blockerCounts, evaluatedCounts: Object.keys(acc.finalStatusCounts).length ? acc.finalStatusCounts : acc.statusCounts
+  };
+  return sanitizeSummary(validateCanonicalSummary(summary));
+}
+
 export function analyzeParameter(rule = {}, inputs = [], options = {}) {
-  const sourceFiles = new Set(inputs.map(row => row.sourceFile || row.file).filter(Boolean));
   if (!rule) return canonicalNoRule({}, inputs, options);
-  const baseCoverage = { ruleAvailable: true, sourceAvailable: options.sourceAvailable ?? sourceFiles.size > 0, signalMatched: inputs.length > 0, dataAvailable: inputs.length > 0, numericDataAvailable: inputs.some(row => finiteOrNull(row.actual) !== null), timestampDataAvailable: inputs.some(row => finiteOrNull(row.timestampMs ?? row.t) !== null), stateDataAvailable: inputs.some(row => normalizeState(row.machineState) || normalizeState(row.systemState)), fullyEvaluated: false, blocker: null, blockerReason: null };
-  if (!inputs.length) return canonicalSummary(rule, [], { status: 'no_data', reasonCode: 'no_matching_rows', reason: 'Valid rule exists, but no matching rows were found.', coverage: { ...baseCoverage, blocker: 'no_data', blockerReason: 'No matching rows' }, sourceFiles });
+  const acc = createParameterAccumulator(rule, { ...options, sourceAvailable: options.sourceAvailable ?? inputs.some(row => row.sourceFile || row.file) });
   const sortedInputs = inputs.slice().sort((a, b) => (finiteOrNull(a.timestampMs ?? a.t) ?? Number.MAX_SAFE_INTEGER) - (finiteOrNull(b.timestampMs ?? b.t) ?? Number.MAX_SAFE_INTEGER));
-  let previous = null;
-  let chartPoints = sortedInputs.map(input => {
-    const point = evaluatedPointFromInput(rule, input, previous);
-    if (Number.isFinite(point.timestampMs)) previous = point;
-    return point;
-  });
-  const validTimestampPoints = chartPoints.filter(point => Number.isFinite(point.timestampMs));
-  const model = durationModel(validTimestampPoints, options.gapCapMs || DEFAULT_GAP_CAP_MS);
-  chartPoints = applyDurationGates(chartPoints, model.rows, rule);
-  return canonicalSummary(rule, chartPoints, { status: null, coverage: baseCoverage, sourceFiles, durationRows: durationModel(chartPoints.filter(point => Number.isFinite(point.timestampMs)), options.gapCapMs || DEFAULT_GAP_CAP_MS).rows });
+  for (const input of sortedInputs) {
+    const point = evaluatePoint(rule, input, { previous: acc.previous });
+    updateParameterAccumulator(acc, point);
+  }
+  return finalizeParameterAccumulator(acc);
+}
+
+function chooseStatusFromCounts(counts = {}) {
+  if ((counts.critical || 0) > 0) return 'critical';
+  if ((counts.warning || 0) > 0) return 'warning';
+  if ((counts.ok || 0) > 0) return 'ok';
+  if ((counts.needs_validation || 0) > 0) return 'needs_validation';
+  if ((counts.needs_configuration || 0) > 0) return 'needs_configuration';
+  return 'no_data';
+}
+
+function createChartSampler(limit) { return { limit, first: null, latest: null, priority: [], reservoir: [], seen: 0 }; }
+function addChartSample(sampler, point, important = false) {
+  sampler.seen += 1; if (!sampler.first) sampler.first = point; sampler.latest = point;
+  const target = important ? sampler.priority : sampler.reservoir;
+  const budget = important ? Math.max(20, Math.floor(sampler.limit * 0.6)) : Math.max(1, sampler.limit - sampler.priority.length - 2);
+  if (target.length < budget) target.push(point); else target[sampler.seen % budget] = point;
+}
+function finalizeChartSamples(sampler) {
+  const byTs = new Map();
+  for (const point of [sampler.first, ...sampler.priority, ...sampler.reservoir, sampler.latest]) {
+    if (!point) continue;
+    const key = `${point.timestampMs ?? 'x'}:${point.status}:${point.row ?? ''}`;
+    if (!byTs.has(key)) byTs.set(key, point);
+  }
+  return [...byTs.values()].sort((a, b) => (a.t ?? a.timestampMs ?? 0) - (b.t ?? b.timestampMs ?? 0)).slice(0, sampler.limit);
+}
+function creditCompletedPoint(acc, point, nextTimestampMs, final = false) {
+  let durationMs = 0;
+  if (!final && Number.isFinite(point.timestampMs) && Number.isFinite(nextTimestampMs)) durationMs = Math.max(0, nextTimestampMs - point.timestampMs);
+  if (durationMs > (acc.options.gapCapMs || DEFAULT_GAP_CAP_MS)) durationMs = acc.options.gapCapMs || DEFAULT_GAP_CAP_MS;
+  const creditedPoint = { ...point };
+  const initiallyAbnormal = ['warning', 'critical'].includes(creditedPoint.status) && !creditedPoint.inTransitionGrace && creditedPoint.evaluated !== false;
+  if (initiallyAbnormal && durationMs > 0) {
+    acc.durationStreakMs += durationMs;
+    const warningMs = acc.rule.warningDurationSec === null || acc.rule.warningDurationSec === undefined ? null : Number(acc.rule.warningDurationSec) * 1000;
+    const criticalMs = acc.rule.criticalDurationSec === null || acc.rule.criticalDurationSec === undefined ? null : Number(acc.rule.criticalDurationSec) * 1000;
+    if (creditedPoint.status === 'critical' && creditedPoint.reasonCode !== 'explicit_critical_threshold' && criticalMs !== null && acc.durationStreakMs < criticalMs) creditedPoint.status = warningMs !== null && acc.durationStreakMs >= warningMs ? 'warning' : 'ok';
+    if (creditedPoint.status === 'warning' && warningMs !== null && acc.durationStreakMs < warningMs) {
+      creditedPoint.status = 'ok';
+      creditedPoint.reasonCode = 'duration_below_warning_threshold';
+      creditedPoint.reason = 'Abnormal spike is shorter than configured Warning Duration Sec';
+      creditedPoint.deviation = 0;
+      creditedPoint.deviationDirection = 'within';
+    }
+  } else {
+    acc.durationStreakMs = 0;
+  }
+  acc.finalStatusCounts[creditedPoint.status] = (acc.finalStatusCounts[creditedPoint.status] || 0) + 1;
+  acc.totalObservedDurationMs += durationMs;
+  const abnormal = ['warning', 'critical'].includes(creditedPoint.status) && !creditedPoint.inTransitionGrace && creditedPoint.evaluated !== false;
+  if (abnormal) { acc.totalOutOfRangeDurationMs += durationMs; acc.firstDeviationTimestampMs = acc.firstDeviationTimestampMs ?? creditedPoint.timestampMs; acc.lastDeviationTimestampMs = creditedPoint.timestampMs; updateActiveEvent(acc, creditedPoint, durationMs); }
+  else closeActiveEvent(acc);
+  updateStateAccumulator(acc, creditedPoint, durationMs);
+}
+function updateActiveEvent(acc, point, durationMs) {
+  const key = eventKey(point);
+  if (!acc.activeEvent || acc.activeEvent.key !== key) { closeActiveEvent(acc); acc.activeEvent = { key, ruleId: acc.rule.id || acc.rule.ruleId || null, ruleRow: acc.rule.row ?? acc.rule.ruleRow ?? null, system: acc.rule.system || '', subsystem: acc.rule.subsystem || '', component: point.component || acc.rule.component || '', signal: acc.rule.signal || '', parameterName: acc.rule.parameterName || acc.rule.signal || '', startTimestampMs: point.timestampMs, endTimestampMs: point.timestampMs, durationMs: 0, machineState: point.machineState || null, systemState: point.systemState || null, severity: point.status, pointCount: 0, expected: point.expected ?? null, allowedLow: point.allowedLow ?? null, allowedHigh: point.allowedHigh ?? null, sumActual: 0, minimumActual: null, maximumActual: null, maximumDeviation: null, minimumDeviation: null, deviationDirection: point.deviationDirection || null, recommendedAction: actionForStatus(point.status, acc.rule) }; }
+  const active = acc.activeEvent; active.endTimestampMs = point.timestampMs + durationMs; active.durationMs += durationMs; active.pointCount += 1;
+  if (Number.isFinite(point.actual)) { active.sumActual += point.actual; active.minimumActual = active.minimumActual === null ? point.actual : Math.min(active.minimumActual, point.actual); active.maximumActual = active.maximumActual === null ? point.actual : Math.max(active.maximumActual, point.actual); }
+  if (Number.isFinite(point.deviation)) { active.maximumDeviation = active.maximumDeviation === null ? point.deviation : Math.max(active.maximumDeviation, point.deviation); active.minimumDeviation = active.minimumDeviation === null ? point.deviation : Math.min(active.minimumDeviation, point.deviation); }
+}
+function closeActiveEvent(acc) {
+  if (!acc.activeEvent) return;
+  const event = finalizeActiveEvent(acc.activeEvent); acc.deviationEventCount += 1; acc.longestDeviationDurationMs = Math.max(acc.longestDeviationDurationMs, event.durationMs || 0);
+  acc.latestEvents.push(event); if (acc.latestEvents.length > acc.maxDeviationEvents) acc.latestEvents.shift();
+  acc.worstEvents.push(event); acc.worstEvents.sort((a, b) => (b.durationMs || 0) - (a.durationMs || 0) || (b.maximumDeviation || 0) - (a.maximumDeviation || 0)); if (acc.worstEvents.length > Math.ceil(acc.maxDeviationEvents / 4)) acc.worstEvents.length = Math.ceil(acc.maxDeviationEvents / 4);
+  acc.activeEvent = null;
+}
+function boundedDeviationEvents(acc) {
+  const map = new Map();
+  for (const event of [...acc.worstEvents, ...acc.latestEvents]) map.set(event.id, event);
+  return [...map.values()].sort((a, b) => a.startTimestampMs - b.startTimestampMs).slice(-acc.maxDeviationEvents);
+}
+function updateStateAccumulator(acc, point, durationMs) {
+  const state = matrixState(point.systemState || point.machineState);
+  const row = acc.stateAccumulators.get(state) || { state, timeInStateMs: 0, sampleCount: 0, evaluatedSampleCount: 0, sumActual: 0, sumDifference: 0, diffCount: 0, minimumActual: null, maximumActual: null, totalObservedDurationMs: 0, outOfRangeDurationMs: 0, expected: point.expected ?? null, allowedLow: point.allowedLow ?? null, allowedHigh: point.allowedHigh ?? null, firstDeviationTimestampMs: null, lastDeviationTimestampMs: null, maximumPositiveDifference: null, maximumNegativeDifference: null, maximumDeviation: null, statusCounts: {}, reasonCode: null };
+  row.sampleCount += 1; if (point.evaluated) row.evaluatedSampleCount += 1;
+  if (Number.isFinite(point.actual)) { row.sumActual += point.actual; row.minimumActual = row.minimumActual === null ? point.actual : Math.min(row.minimumActual, point.actual); row.maximumActual = row.maximumActual === null ? point.actual : Math.max(row.maximumActual, point.actual); }
+  if (Number.isFinite(point.difference)) { row.sumDifference += point.difference; row.diffCount += 1; row.maximumPositiveDifference = row.maximumPositiveDifference === null ? point.difference : Math.max(row.maximumPositiveDifference, point.difference); row.maximumNegativeDifference = row.maximumNegativeDifference === null ? point.difference : Math.min(row.maximumNegativeDifference, point.difference); }
+  if (Number.isFinite(point.deviation)) row.maximumDeviation = row.maximumDeviation === null ? point.deviation : Math.max(row.maximumDeviation, point.deviation);
+  row.timeInStateMs += durationMs; row.totalObservedDurationMs += durationMs;
+  if (['warning', 'critical'].includes(point.status) && !point.inTransitionGrace) { row.outOfRangeDurationMs += durationMs; row.firstDeviationTimestampMs = row.firstDeviationTimestampMs ?? point.timestampMs; row.lastDeviationTimestampMs = point.timestampMs; }
+  row.statusCounts[point.status] = (row.statusCounts[point.status] || 0) + 1; row.reasonCode = row.reasonCode || point.reasonCode; acc.stateAccumulators.set(state, row);
+}
+function finalizeStateSummaries(acc, totalObservedDurationMs) {
+  return [...acc.stateAccumulators.values()].map(row => { const status = chooseStatusFromCounts(row.statusCounts); const outOfRangePercent = row.totalObservedDurationMs ? Math.min(100, row.outOfRangeDurationMs / row.totalObservedDurationMs * 100) : 0; return sanitizeSummary({ state: row.state, timeInStateMs: cleanNumeric(row.timeInStateMs), timeInStatePercent: totalObservedDurationMs ? cleanNumeric(row.timeInStateMs / totalObservedDurationMs * 100) : 0, expected: row.expected, allowedLow: row.allowedLow, allowedHigh: row.allowedHigh, sampleCount: row.sampleCount, evaluatedSampleCount: row.evaluatedSampleCount, averageActual: row.sampleCount ? cleanNumeric(row.sumActual / row.sampleCount) : null, minimumActual: row.minimumActual, maximumActual: row.maximumActual, minActual: row.minimumActual, maxActual: row.maximumActual, totalObservedDurationMs: cleanNumeric(row.totalObservedDurationMs), outOfRangeDurationMs: cleanNumeric(row.outOfRangeDurationMs), outOfRangePercent: cleanNumeric(outOfRangePercent), longestDeviationDurationMs: 0, longestDeviationMs: 0, deviationEventCount: 0, firstDeviationTimestampMs: row.firstDeviationTimestampMs, lastDeviationTimestampMs: row.lastDeviationTimestampMs, averageDifference: row.diffCount ? cleanNumeric(row.sumDifference / row.diffCount) : null, maximumPositiveDifference: row.maximumPositiveDifference, maximumNegativeDifference: row.maximumNegativeDifference, maximumDeviation: row.maximumDeviation, status, reasonCode: row.reasonCode, recommendedAction: actionForStatus(status, acc.rule) }); }).sort((a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state));
 }
 
 function canonicalNoRule(discovered = {}, inputs = [], options = {}) {
-  return canonicalSummary({ id: discovered.ruleId || `NO_RULE_${normalizeToken(discovered.signal || 'signal')}`, row: null, system: discovered.system || 'Unmapped', signal: discovered.signal || '', parameterName: discovered.signal || '', logSource: discovered.logSource || '', sourceType: discovered.logSource || '' }, inputs, { ...options, status: 'no_rule', reasonCode: 'no_matching_rule', reason: 'Signal has data but no matching rule exists.', coverage: { ruleAvailable: false, sourceAvailable: true, signalMatched: true, dataAvailable: inputs.length > 0, numericDataAvailable: inputs.some(row => finiteOrNull(row.actual) !== null), timestampDataAvailable: inputs.some(row => finiteOrNull(row.timestampMs ?? row.t) !== null), stateDataAvailable: false, fullyEvaluated: false, blocker: 'no_rule', blockerReason: 'No matching rule' } });
+  const limit = Number.isFinite(options.maxChartPoints) ? options.maxChartPoints : 2000;
+  const sampled = [];
+  const stride = inputs.length > limit ? Math.ceil(inputs.length / Math.max(1, limit - 1)) : 1;
+  for (let index = 0; index < inputs.length; index += 1) {
+    if (sampled.length >= limit) break;
+    if (index === 0 || index === inputs.length - 1 || index % stride === 0) sampled.push({ ...inputs[index], status: 'no_rule', evaluated: false, reasonCode: 'no_matching_rule', reason: 'Signal has data but no matching rule exists.' });
+  }
+  const summary = canonicalSummary({ id: discovered.ruleId || `NO_RULE_${normalizeToken(discovered.signal || 'signal')}`, row: null, system: discovered.system || 'Unmapped', signal: discovered.signal || '', parameterName: discovered.signal || '', logSource: discovered.logSource || '', sourceType: discovered.logSource || '' }, sampled, { ...options, status: 'no_rule', reasonCode: 'no_matching_rule', reason: 'Signal has data but no matching rule exists.', coverage: { ruleAvailable: false, sourceAvailable: true, signalMatched: true, dataAvailable: inputs.length > 0, numericDataAvailable: inputs.some(row => finiteOrNull(row.actual) !== null), timestampDataAvailable: inputs.some(row => finiteOrNull(row.timestampMs ?? row.t) !== null), stateDataAvailable: inputs.some(row => normalizeState(row.machineState) || normalizeState(row.systemState)), fullyEvaluated: false, blocker: 'no_rule', blockerReason: 'No matching rule' } });
+  return { ...summary, sampleCount: inputs.length, matchedRows: inputs.length, rawPointCount: inputs.length, renderedPointCount: summary.chartPoints.length, downsampled: inputs.length > summary.chartPoints.length };
 }
 
 function chooseParameterStatus(points, forced) {

@@ -61,7 +61,7 @@ export function chooseInitialParameter(result, system) {
 }
 
 export function validateAnalysisResult(result) {
-  const required = ['metadata', 'systemHealth', 'deviationEvents', 'signalSummaries', 'chartSeries', 'stateTimeline', 'diagnosticsSummary'];
+  const required = ['metadata', 'systemHealth', 'deviationEvents', 'signalSummaries', 'stateTimeline', 'diagnosticsSummary'];
   const missing = required.filter(key => !(key in (result || {})));
   if (missing.length) return { valid: false, reason: `Invalid AnalysisResult. Missing: ${missing.join(', ')}` };
   if (!Array.isArray(result.systemHealth) || !Array.isArray(result.deviationEvents) || !Array.isArray(result.signalSummaries)) return { valid: false, reason: 'Invalid AnalysisResult collection schema.' };
@@ -99,8 +99,9 @@ export function deviationText(actual, item = {}) {
 function rangeBounds(opts) {
   const nums = [opts.actual, opts.expectedLow, opts.expectedHigh, opts.warningLow, opts.warningHigh, opts.criticalLow, opts.criticalHigh].filter(Number.isFinite);
   if (!nums.length) return null;
-  let min = Math.min(...nums);
-  let max = Math.max(...nums);
+  let min = nums[0];
+  let max = nums[0];
+  for (const value of nums) { min = Math.min(min, value); max = Math.max(max, value); }
   const span = max - min || Math.max(1, Math.abs(max) || 1);
   min -= span * 0.16;
   max += span * 0.16;
@@ -185,10 +186,11 @@ export function renderParameterCard(row, selectedId) {
 }
 
 export function renderStateTimeline({ stateTimeline = [], events = [], selectedEventId = null, onEvent = false } = {}) {
-  const timestamps = [...stateTimeline.flatMap(row => [row.startMs, row.endMs]), ...events.flatMap(row => [row.startTimestampMs, row.endTimestampMs])].filter(Number.isFinite);
-  if (!timestamps.length) return renderEmptyState('Machine state unavailable', 'Actual values remain visible, but state context was not present in the current AnalysisResult.', 'needs_validation');
-  const start = Math.min(...timestamps);
-  const end = Math.max(...timestamps);
+  let start = null;
+  let end = null;
+  for (const row of stateTimeline) for (const value of [row.startMs, row.endMs]) if (Number.isFinite(value)) { start = start === null ? value : Math.min(start, value); end = end === null ? value : Math.max(end, value); }
+  for (const row of events) for (const value of [row.startTimestampMs, row.endTimestampMs]) if (Number.isFinite(value)) { start = start === null ? value : Math.min(start, value); end = end === null ? value : Math.max(end, value); }
+  if (start === null || end === null) return renderEmptyState('Machine state unavailable', 'Actual values remain visible, but state context was not present in the current AnalysisResult.', 'needs_validation');
   const span = end - start || 1;
   const stateSegments = stateTimeline.map(row => `<span class="state-segment state-${slug(row.label)}" title="${escapeAttr(row.label || 'State')}" style="left:${((row.startMs - start) / span) * 100}%;width:${Math.max(1, ((row.endMs - row.startMs) / span) * 100)}%"></span>`).join('');
   const markers = events.slice(0, 40).map(event => `<button class="timeline-marker ${statusClass(event.severity)}" ${onEvent ? `data-event="${escapeAttr(event.id)}"` : ''} title="${escapeAttr(`${fmtTime(event.startTimestampMs)} · ${event.system} · ${event.signal}`)}" style="left:${((event.startTimestampMs - start) / span) * 100}%" aria-pressed="${event.id === selectedEventId}">${statusIcon(event.severity)}</button>`).join('');
@@ -198,9 +200,15 @@ export function renderStateTimeline({ stateTimeline = [], events = [], selectedE
 export function renderActualExpectedChart(chart = [], selected = {}, events = []) {
   const samples = chart.filter(point => Number.isFinite(point.actual)).sort((a, b) => (a.t || 0) - (b.t || 0));
   if (!samples.length) return renderEmptyState('No chart samples available', 'The parameter has no numeric samples in the current AnalysisResult.', 'no_data');
-  const expectedValues = samples.flatMap(point => [point.expectedLow, point.expectedHigh, point.expectedValue, point.expected]).filter(Number.isFinite);
-  const values = [...samples.map(point => point.actual), ...expectedValues];
-  let min = Math.min(...values), max = Math.max(...values);
+  let min = null;
+  let max = null;
+  for (const point of samples) {
+    for (const value of [point.actual, point.expectedLow, point.expectedHigh, point.expectedValue, point.expected]) {
+      if (!Number.isFinite(value)) continue;
+      min = min === null ? value : Math.min(min, value);
+      max = max === null ? value : Math.max(max, value);
+    }
+  }
   const spanY = max - min || Math.max(1, Math.abs(max) || 1);
   min -= spanY * 0.12; max += spanY * 0.12;
   const first = samples[0].t ?? 0;
