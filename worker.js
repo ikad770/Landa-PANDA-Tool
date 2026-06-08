@@ -5,7 +5,7 @@ import { ADAPTERS, getAdapter, getRuleMatchesForRow } from './adapters.js';
 import { APP_STAGES, MAX_CHART_POINTS_PER_RULE, MAX_DEVIATION_EVENTS_PER_RULE, MAX_EVIDENCE_PREVIEW_PER_RULE, MIN_DEVIATION_GAP_MS, REQUIRED_SOURCE_PATHS, STATUS_PRIORITY, SYSTEMS } from './config.js';
 import { createStateIndex } from './machine-states.js';
 import { buildAnalysisPlan, parseRulesWorkbook, serializePlan } from './rules.js';
-import { analyzeParameter, evaluateValue, formatRange, normalizeText } from './evaluation.js';
+import { analyzeParameter, assertCanonicalSerializable, evaluateValue, formatRange, normalizeText } from './evaluation.js';
 import { buildServiceDecision } from './service-decision.js';
 
 let cancelled = false;
@@ -24,11 +24,37 @@ self.onmessage = async event => {
   progressState = { filesCompleted: 0, filesTotal: 0, currentSource: '', currentFile: '', relevantValuesFound: 0, signalsMatched: new Set() };
   try {
     const analysisResult = await runAnalysis(event.data.autocollectFile, event.data.rulesFile);
+    assertWorkerPayloadSerializable({ type: 'complete', analysisResult });
     postMessage({ type: 'complete', analysisResult });
   } catch (error) {
-    postMessage({ type: 'error', message: error?.message || String(error), diagnosticsSummary: diagnostics, analysisAudit });
+    const errorDetails = serializeWorkerError(error);
+    postMessage({ type: 'error', message: errorDetails.message, error: errorDetails, diagnosticsSummary: { ...(diagnostics || {}), blockedAnalysisError: errorDetails }, analysisAudit });
   }
 };
+
+
+function assertWorkerPayloadSerializable(payload) {
+  assertCanonicalSerializable(payload, 'worker payload');
+  if (typeof structuredClone === 'function') structuredClone(payload);
+  return payload;
+}
+
+function serializeWorkerError(error, context = {}) {
+  const stack = String(error?.stack || '')
+    .split('\n')
+    .filter(frame => /\/(evaluation|worker|service-decision|rules|adapters|machine-states|render[^/]*)\.js|^\s*at\s+(analyzeParameter|canonicalSummary|durationModel|finalizeResult|runtimeToSummary|buildServiceDecision)/.test(frame))
+    .slice(0, 12)
+    .join('\n');
+  return {
+    name: error?.name || 'Error',
+    message: error?.message || String(error),
+    stack,
+    phase: context.phase || progressState?.currentStage || 'analysis_worker',
+    ruleId: context.ruleId || null,
+    ruleRow: context.ruleRow || null,
+    signal: context.signal || null
+  };
+}
 
 function createAudit() {
   return {
@@ -46,6 +72,7 @@ function assertNotCancelled() { if (cancelled) throw new Error('Analysis cancell
 function tick() { return new Promise(resolve => setTimeout(resolve, 0)); }
 
 function setStage(stage, fraction, message, details = {}) {
+  if (progressState) progressState.currentStage = stage;
   const elapsedMs = performance.now() - startedAt;
   let pct = 0;
   for (const [key, , weight] of APP_STAGES) {

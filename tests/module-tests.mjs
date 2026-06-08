@@ -4,7 +4,7 @@ import { execSync } from 'node:child_process';
 import { authenticateLocalPrototype, clearSession, createLocalSession, readStoredSession, storeSession, validateLoginFields } from '../auth.js';
 import { AUTH_CONFIG, USER_FACING_STAGES, normalizeSourceIdentity } from '../config.js';
 import { ADAPTERS, getRuleMatchesForRow, matchRuleForRow, parseSlashTimestamp, parseSourceTimestamp } from '../adapters.js';
-import { analyzeParameter, computeAllowedRange, consolidateDeviationEvents, evaluateValue, inferCheckType, normalizeState, normalizeToken, parseNumber, parseTolerance, selectExpected, summarizeStateComparisons, timeWeightedOutOfRange } from '../evaluation.js';
+import { analyzeParameter, assertCanonicalSerializable, computeAllowedRange, consolidateDeviationEvents, evaluateValue, inferCheckType, normalizeState, normalizeToken, parseNumber, parseTolerance, sanitizeCanonicalValue, selectExpected, summarizeStateComparisons, timeWeightedOutOfRange } from '../evaluation.js';
 import { createStateIndex } from '../machine-states.js';
 import { parseRulesWorkbook } from '../rules.js';
 import { chooseInitialParameter, chooseInitialSystem, getServiceDecision, groupParameters, normalizeStatus, renderActualExpectedChart, renderComparisonGauge, validateAnalysisResult } from '../render.js';
@@ -35,6 +35,45 @@ function assertNoUnsafeNumbers(value, path = 'output') {
   if (typeof value === 'number') assert.ok(Number.isFinite(value), `${path} is finite`);
   if (Array.isArray(value)) value.forEach((item, index) => assertNoUnsafeNumbers(item, `${path}[${index}]`));
   else if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) assertNoUnsafeNumbers(item, `${path}.${key}`);
+}
+
+
+function assertNoCircularReferences(value, label = 'value') {
+  const seen = new WeakSet();
+  const active = new WeakSet();
+  const stack = [{ value, path: label, exit: false }];
+  while (stack.length) {
+    const frame = stack.pop();
+    const current = frame.value;
+    if (!current || typeof current !== 'object') continue;
+    if (frame.exit) { active.delete(current); continue; }
+    assert.equal(active.has(current), false, `${frame.path} is not circular`);
+    if (seen.has(current)) continue;
+    seen.add(current);
+    active.add(current);
+    stack.push({ value: current, path: frame.path, exit: true });
+    const entries = Array.isArray(current) ? current.map((item, index) => [index, item]) : Object.entries(current);
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const [key, item] = entries[index];
+      stack.push({ value: item, path: `${frame.path}.${key}`, exit: false });
+    }
+  }
+}
+
+function assertNoUndefinedValues(value, label = 'value') {
+  const stack = [{ value, path: label }];
+  while (stack.length) {
+    const { value: current, path } = stack.pop();
+    assert.notEqual(current, undefined, `${path} is not undefined`);
+    if (!current || typeof current !== 'object') continue;
+    const entries = Array.isArray(current) ? current.map((item, index) => [index, item]) : Object.entries(current);
+    for (const [key, item] of entries) stack.push({ value: item, path: `${path}.${key}` });
+  }
+}
+
+function assertStructuredCloneable(value, label = 'value') {
+  if (typeof structuredClone === 'function') assert.doesNotThrow(() => structuredClone(value), `${label} is structured-clone compatible`);
+  else assert.doesNotThrow(() => new MessageChannel().port1.postMessage(value), `${label} is message-channel clone compatible`);
 }
 
 function baseResult(overrides = {}) {
@@ -407,6 +446,68 @@ assert.equal(statusDecision.evaluationCoverage.fullyEvaluatedRules, 2, 'Count de
 assert.equal(statusDecision.evaluationCoverage.matchedSignals, 3, 'Count definition: matched signals require at least one matched row');
 assert.equal(statusDecision.nextRecommendedAction, 'No service action configured for this rule.', 'Recommended actions are not invented when no configured action exists');
 assert.equal(statusDecision.kpis.fullyEvaluatedRules, 2, 'Radar KPI fully evaluated rules uses parameter-level definitions');
+
+const hotfixRule = {
+  id: 'HOTFIX-PRESSURE', row: 42, ruleRow: 42, system: 'BSS', subsystem: 'Ink', component: 'Pump', signal: 'PumpPressure', parameterName: 'Pump Pressure',
+  logSource: 'BSSNotifications', sourceType: 'BSSNotifications', unit: 'bar', genericExpected: 10, tolerance: { mode: 'absolute', value: 1 },
+  warningDurationSec: 1, criticalDurationSec: 3, transitionGraceSec: 2, warningAction: 'Inspect pressure trend.', criticalAction: 'Stop and service pump.'
+};
+const hotfixInputs = [
+  { timestampMs: 1000, actual: 10, machineState: 'Ready', systemState: 'Ready', sourceFile: 'bss.csv', row: 1 },
+  { timestampMs: 2000, actual: 12.4, machineState: 'Printing', systemState: 'Printing', sourceFile: 'bss.csv', row: 2 },
+  { timestampMs: 3000, actual: 12.6, machineState: 'Printing', systemState: 'Printing', sourceFile: 'bss.csv', row: 3 },
+  { timestampMs: 4000, actual: 12.7, machineState: 'Printing', systemState: 'Printing', sourceFile: 'bss.csv', row: 4 },
+  { timestampMs: 5000, actual: 12.8, machineState: 'Printing', systemState: 'Printing', sourceFile: 'bss.csv', row: 5 },
+  { timestampMs: 6000, actual: 10.2, machineState: 'Standby', systemState: 'Standby', sourceFile: 'bss.csv', row: 6 },
+  { timestampMs: 7000, actual: 12.5, machineState: 'Printing', systemState: 'Printing', sourceFile: 'bss.csv', row: 7 },
+  { timestampMs: 8000, actual: 12.9, machineState: 'Printing', systemState: 'Printing', sourceFile: 'bss.csv', row: 8 }
+];
+const hotfixSummary = analyzeParameter(hotfixRule, hotfixInputs);
+assert.ok(hotfixSummary.chartPoints.length >= 8, 'Hotfix regression fixture produces multiple chart points');
+assert.ok(hotfixSummary.stateSummaries.length >= 2, 'Hotfix regression fixture produces multiple state summaries');
+assert.ok(hotfixSummary.deviationEvents.length >= 1, 'Hotfix regression fixture produces deviation events');
+assert.doesNotThrow(() => JSON.stringify(hotfixSummary), 'Canonical parameter summary is JSON serializable');
+assertStructuredCloneable(hotfixSummary, 'Canonical parameter summary');
+assertNoCircularReferences(hotfixSummary, 'hotfixSummary');
+assertNoUnsafeNumbers(hotfixSummary);
+assertNoUndefinedValues(hotfixSummary, 'hotfixSummary');
+for (const stateSummary of hotfixSummary.stateSummaries) {
+  assert.equal(stateSummary.parent, undefined, 'State summary does not contain parent parameter summary');
+  assert.equal(stateSummary.parameterSummary, undefined, 'State summary does not contain parameter summary alias');
+  assert.equal(stateSummary.deviationEvents, undefined, 'State summary does not nest deviation events');
+}
+for (const event of hotfixSummary.deviationEvents) {
+  assert.equal(event.parameter, undefined, 'Deviation event does not contain parent parameter summary');
+  assert.equal(event.parameterSummary, undefined, 'Deviation event does not contain parameter summary alias');
+  assert.equal(event.chartPoints, undefined, 'Deviation event does not contain chart points');
+}
+for (const point of hotfixSummary.chartPoints) {
+  assert.equal(point.rule, undefined, 'Chart point does not contain rule object');
+  assert.equal(point.runtime, undefined, 'Chart point does not contain runtime object');
+  assert.equal(point.summary, undefined, 'Chart point does not contain parent summary');
+}
+const hotfixPayload = {
+  metadata: { rulesValid: 1, relevantValuesFound: hotfixSummary.matchedRows, classifiedPoints: hotfixSummary.classifiedPoints, fullyEvaluatedPoints: hotfixSummary.fullyEvaluatedPoints, blockingReason: null },
+  systemHealth: [{ system: hotfixSummary.system, status: hotfixSummary.status, evaluated: hotfixSummary.fullyEvaluatedPoints, deviations: hotfixSummary.deviationEventCount }],
+  deviationEvents: hotfixSummary.deviationEvents,
+  signalSummaries: [hotfixSummary],
+  chartSeries: { [hotfixSummary.ruleId]: hotfixSummary.chartPoints },
+  stateTimeline: [],
+  diagnosticsSummary: { analysisAudit: { resultSchemaValid: true } }
+};
+hotfixPayload.serviceDecision = buildServiceDecision(hotfixPayload);
+assertCanonicalSerializable(hotfixPayload);
+assert.doesNotThrow(() => JSON.stringify(hotfixPayload), 'Full worker/service-decision payload is JSON serializable');
+assertStructuredCloneable(hotfixPayload, 'Full worker/service-decision payload');
+assertNoCircularReferences(hotfixPayload, 'hotfixPayload');
+const circular = { name: 'cycle' };
+circular.self = circular;
+assert.throws(() => sanitizeCanonicalValue(circular), /circular reference/, 'Recursive sanitizer terminates and rejects circular canonical input');
+const largeInputs = Array.from({ length: 150000 }, (_, index) => ({ timestampMs: index * 1000, actual: index % 10 === 0 ? 12.5 : 10, machineState: index % 50 < 5 ? 'Ready' : 'Printing', systemState: index % 50 < 5 ? 'Ready' : 'Printing', sourceFile: 'large.csv', row: index + 1 }));
+const largeSummary = analyzeParameter(hotfixRule, largeInputs);
+assert.equal(largeSummary.chartPoints.length, largeInputs.length, 'Large parameter analysis completes without spread/recursion stack overflow');
+assert.doesNotThrow(() => JSON.stringify({ status: largeSummary.status, chartPoints: largeSummary.chartPoints.slice(0, 5), stateSummaries: largeSummary.stateSummaries, deviationEvents: largeSummary.deviationEvents.slice(0, 5) }), 'Large summary sample remains JSON serializable');
+
 const forbiddenBinary = /\.(png|jpe?g|webp|gif|bmp|ico|zip|xlsx?|pdf|docx|pptx|ttf|otf|woff2?)$/i;
 const changedFiles = isInsideGitWorkTree() ? execSync('git diff --name-only', { encoding: 'utf8' }).trim().split(/\n/).filter(Boolean) : [];
 assert.equal(changedFiles.some(file => forbiddenBinary.test(file)), false, 'Git diff contains no changed binary file paths when Git metadata exists');
