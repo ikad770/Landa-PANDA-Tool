@@ -28,6 +28,8 @@ export function buildServiceDecision(result = {}) {
   const primarySystem = (systemRisk.sort(bySystemPriority)[0]?.system) || primaryFinding?.system || systemsRequiringAttention.sort(bySystemPriority)[0]?.system || fullyEvaluatedSystems[0]?.system || systems[0]?.system || null;
   const machineStatus = chooseMachineStatus({ criticalFindings, warningFindings, validationProblems, configurationProblems, rules, systems });
   const nextRecommendedAction = buildRecommendedAction(machineStatus, primaryFinding, { configurationProblems, validationProblems, operationalFindings });
+  const stateSummaries = rules.flatMap(rule => (rule.stateSummaries || []).map(state => ({ ...state, system: rule.system, signal: rule.signal, ruleRow: rule.ruleRow })));
+  const recommendedActions = buildRecommendedActions(rules);
   const fullyEvaluatedRules = rules.filter(rule => ['ok', 'warning', 'critical'].includes(normalizeDecisionStatus(rule.status)) && (rule.fullyEvaluatedPoints || 0) > 0);
   const matchedSignals = rules.filter(rule => (rule.matchedRows || 0) > 0);
   const analysisCompleteness = ratio(metadata.rulesEvaluated || statusCounts.ok + statusCounts.warning + statusCounts.critical, metadata.rulesValid || rules.length);
@@ -51,6 +53,13 @@ export function buildServiceDecision(result = {}) {
     primarySystem,
     primaryFinding,
     topFindings: operationalFindings.slice(0, 3),
+    parameterSummaries: rules,
+    systemSummaries: systems,
+    stateSummaries,
+    deviationEvents: events,
+    recommendedActions,
+    evaluationCoverage: { fullyEvaluatedRules: fullyEvaluatedRules.length, matchedSignals: matchedSignals.length, rulesRequiringConfiguration: configurationProblems.length, rulesRequiringValidation: validationProblems.length },
+    diagnosticsSummary: result.diagnosticsSummary || {},
     nextRecommendedAction,
     fullyEvaluatedRules,
     matchedSignals,
@@ -116,9 +125,7 @@ function buildRecommendedAction(status, finding, groups) {
 function validationAction(rows) {
   const top = rows[0];
   if (!top) return 'Correct validation context, then rerun analysis.';
-  if (top.blocker === 'missing_state') return `Align MachineState logs with ${top.system} signal timestamps so row ${top.ruleRow || '—'} can be evaluated.`;
-  if (top.blocker === 'invalid_timestamp') return `Correct the source timestamp format for ${top.system} row ${top.ruleRow || '—'}, then rerun analysis.`;
-  return `Resolve validation blocker for ${top.system} row ${top.ruleRow || '—'}: ${top.latestReason || top.blocker || 'missing evaluation context'}.`;
+  return `Fix timestamp/state/source mapping for rule row ${top.ruleRow || '—'}.`;
 }
 
 function configurationAction(rows) {
@@ -127,7 +134,7 @@ function configurationAction(rows) {
   const [system, count] = Object.entries(bySystem).sort((a, b) => b[1] - a[1])[0];
   const row = rows.find(item => item.system === system);
   const missing = missingConfigurationText(row);
-  return count === 1 ? `Update Excel row ${row?.ruleRow || '—'} for ${system}: add ${missing}.` : `Complete ${count} incomplete ${system} rule definitions before operational evaluation.`;
+  return count === 1 ? `Complete missing Expected / Tolerance configuration in Excel row ${row?.ruleRow || '—'}.` : `Complete missing Expected / Tolerance configuration in ${count} Excel rows for ${system}.`;
 }
 
 function buildMachineSummary(status, primarySystem, finding, groups) {
@@ -171,4 +178,14 @@ function ratio(numerator, denominator) {
   if (!total) return { numerator: Number(numerator) || 0, denominator: total, percent: 0, label: '0%' };
   const value = Math.max(0, Math.min(1, (Number(numerator) || 0) / total));
   return { numerator: Number(numerator) || 0, denominator: total, percent: Math.round(value * 100), label: `${Math.round(value * 100)}%` };
+}
+
+function buildRecommendedActions(rules) {
+  return rules.filter(rule => ['critical', 'warning', 'needs_configuration', 'needs_validation'].includes(normalizeDecisionStatus(rule.status))).slice(0, 25).map(rule => {
+    const status = normalizeDecisionStatus(rule.status);
+    if (status === 'critical') return { ruleRow: rule.ruleRow, system: rule.system, signal: rule.signal, status, action: rule.recommendedAction || 'No service action configured for this rule.' };
+    if (status === 'warning') return { ruleRow: rule.ruleRow, system: rule.system, signal: rule.signal, status, action: rule.recommendedAction || 'No service action configured for this rule.' };
+    if (status === 'needs_configuration') return { ruleRow: rule.ruleRow, system: rule.system, signal: rule.signal, status, action: `Complete missing Expected / Tolerance configuration in Excel row ${rule.ruleRow || '—'}.` };
+    return { ruleRow: rule.ruleRow, system: rule.system, signal: rule.signal, status, action: `Fix timestamp/state/source mapping for rule row ${rule.ruleRow || '—'}.` };
+  });
 }

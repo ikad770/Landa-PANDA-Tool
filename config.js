@@ -50,6 +50,7 @@ export const MAX_EVIDENCE_SAMPLES_PER_RULE = 20;
 export const MAX_INVALID_TIMESTAMP_EXAMPLES = 5;
 export const MAX_DEVIATION_EVENTS_PER_RULE = 200;
 export const MIN_DEVIATION_GAP_MS = 30000;
+export const MAX_STATE_LOOKUP_GAP_MS = 30 * 60 * 1000;
 
 export const RADAR_SYSTEMS = ['DPS', 'DFES', 'MSPS', 'ITS', 'IPS', 'ICS', 'Ventilation', 'ECS', 'IRD', 'QCS', 'BSS', 'STS', 'IPU'];
 export const SYSTEMS = [...RADAR_SYSTEMS, 'FEC', 'CWS', 'PSS', 'Dryer'];
@@ -84,6 +85,32 @@ export const REQUIRED_SOURCE_PATHS = {
   AlertsMonitoring: ['logs/AlertsMonitoring.txt', 'logs/AletrsMonitoring.txt']
 };
 
+export const SOURCE_ALIASES = {
+  BSSNotifications: ['BSSNotifications', 'BSS Notifications', 'bssnotifications', 'BSS', 'LLCINotifications/BSS', 'logs/LLCINotifications/BSS'],
+  IPSNotifications: ['IPSNotifications', 'IPS Notifications', 'ipsnotifications', 'IPS', 'LLCINotifications/IPS', 'logs/LLCINotifications/IPS'],
+  FECNotifications: ['FECNotifications', 'FEC Notifications', 'fecnotifications', 'FEC', 'logs/FECNotifications'],
+  MachineStates: ['MachineStates', 'Machine States', 'logs/MachineStates'],
+  AlertsMonitoring: ['AlertsMonitoring', 'Alerts Monitoring', 'AletrsMonitoring', 'logs/AlertsMonitoring.txt', 'logs/AletrsMonitoring.txt']
+};
+
+function sourceToken(value) {
+  const path = String(value ?? '').replace(/\\/g, '/').replace(/\uFEFF/g, '').replace(/\u00A0/g, ' ').trim();
+  const parts = path.split('/').filter(Boolean);
+  const tail = parts.slice(-2).join('/') || path;
+  return tail.toLowerCase().replace(/[^a-z0-9/]+/g, '').replace(/\.(csv|txt|zip)$/i, '');
+}
+
+const SOURCE_ALIAS_INDEX = Object.fromEntries(Object.entries(SOURCE_ALIASES).flatMap(([canonical, aliases]) => aliases.map(alias => [sourceToken(alias), canonical])));
+
+export function normalizeSourceIdentity(value) {
+  const token = sourceToken(value);
+  if (!token) return '';
+  if (SOURCE_ALIAS_INDEX[token]) return SOURCE_ALIAS_INDEX[token];
+  const byPath = Object.entries(SOURCE_ALIAS_INDEX).find(([alias]) => token.endsWith(alias) || token.includes(`/${alias}`));
+  return byPath?.[1] || String(value ?? '').trim();
+}
+
+
 export const SIGNAL_ALIASES = {
   fillflowmeteractualvalve: ['fillflowmeteractualvalue'],
   fillflowmeteractualvalue: ['fillflowmeteractualvalve'],
@@ -116,5 +143,5 @@ export const EXPECTED_STATE_COLUMNS = {
   Error: 'Expected Error'
 };
 
-export const SUPPORTED_CHECK_TYPES = new Set(['range', 'range_percent', 'above threshold', 'below threshold', 'exact', 'max', 'min']);
+export const SUPPORTED_CHECK_TYPES = new Set(['range', 'range_percent', 'threshold', 'above threshold', 'below threshold', 'exact', 'max', 'min']);
 export const PENDING_CHECK_TYPES = new Set(['delta', 'trend', 'flatline']);

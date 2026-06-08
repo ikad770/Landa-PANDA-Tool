@@ -1,4 +1,5 @@
 import { ADAPTERS } from './adapters.js';
+import { normalizeSourceIdentity } from './config.js';
 import { expectedValuesFromRow, inferCheckType, normalizeCheckType, normalizeText, normalizeToken, parseRangeSpec, parseThreshold, parseTolerance, validateRule } from './evaluation.js';
 
 const HEADER_ALIASES = {
@@ -6,9 +7,28 @@ const HEADER_ALIASES = {
   Subsystem: ['Subsystem', 'Sub System', 'Sub-system'],
   Component: ['Component', 'Machine Component'],
   'Log Signal Name': ['Log Signal Name', 'Signal Name', 'Log Signal', 'Signal', 'Parameter Signal'],
-  'Log Source': ['Log Source', 'Source', 'LogSource', 'Log File', 'Data Source']
+  'Log Source': ['Log Source', 'Source', 'LogSource', 'Log File', 'Data Source'],
+  'Parameter Name': ['Parameter Name', 'Parameter', 'Name'],
+  'Parameter Type': ['Parameter Type', 'Type'],
+  Unit: ['Unit', 'Units'],
+  'Check Type': ['Check Type', 'Check', 'Validation Type'],
+  'Expected ON': ['Expected ON', 'ON Expected'],
+  'Expected Standby': ['Expected Standby', 'Standby Expected'],
+  'Expected Ready': ['Expected Ready', 'Ready Expected'],
+  'Expected Prepare2Print': ['Expected Prepare2Print', 'Prepare2Print Expected', 'Expected Prepare To Print'],
+  'Expected Printing': ['Expected Printing', 'Printing Expected'],
+  'Expected PrintEnd': ['Expected PrintEnd', 'PrintEnd Expected', 'Expected Print End'],
+  'Expected Recovery': ['Expected Recovery', 'Recovery Expected'],
+  'Expected Error': ['Expected Error', 'Error Expected'],
+  'Spec Tolerance': ['Spec Tolerance', 'Tolerance', 'Allowed Tolerance', 'Limit', 'Threshold'],
+  'Warning Low': ['Warning Low', 'Warning Min', 'WarningLow'],
+  'Warning High': ['Warning High', 'Warning Max', 'WarningHigh'],
+  'Critical Low': ['Critical Low', 'Critical Min', 'CriticalLow'],
+  'Critical High': ['Critical High', 'Critical Max', 'CriticalHigh'],
+  'Warning Action': ['Warning Action'],
+  'Critical Action': ['Critical Action']
 };
-const REQUIRED_HEADER_GROUPS = ['System', 'Log Signal Name', 'Log Source'];
+const REQUIRED_HEADER_GROUPS = ['System', 'Subsystem', 'Component', 'Log Signal Name', 'Log Source'];
 
 function headerKey(value) {
   return normalizeToken(value);
@@ -45,7 +65,7 @@ export function parseRulesWorkbook(XLSX, buffer, audit) {
   audit.rulesSheetFound = true;
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
   const headerIndex = rows.findIndex(row => REQUIRED_HEADER_GROUPS.every(required => rowHasHeader(row, required)));
-  if (headerIndex < 0) throw new Error('Could not detect the real Rules header row with System, Log Signal Name, and Log Source.');
+  if (headerIndex < 0) throw new Error('Could not detect the real Rules header row with System, Subsystem, Component, Log Signal Name, and Log Source.');
   audit.rulesHeaderRow = headerIndex + 1;
   const rawHeader = rows[headerIndex].map(normalizeText);
   const normalizedHeaderByIndex = rawHeader.map(canonicalizeHeader);
@@ -57,7 +77,7 @@ export function parseRulesWorkbook(XLSX, buffer, audit) {
     const { expectedByState, expectedRangeByState, genericExpected, genericExpectedRange } = expectedValuesFromRow(row);
     const explicitRange = parseRangeSpec(getCell(row, ['Allowed Range', 'Spec Range', 'Expected Range']));
     const rawLogSource = normalizeText(getCell(row, ['Log Source', 'Source', 'LogSource']));
-    const logSource = canonicalLogSource(rawLogSource);
+    const logSource = normalizeSourceIdentity(rawLogSource);
     const checkType = normalizeText(getCell(row, ['Check Type', 'Check', 'Validation Type']));
     const rule = {
       id: `R${i + 1}`,
@@ -133,20 +153,4 @@ export function serializePlan(plan) {
     rulesBySystem: Object.fromEntries([...plan.rulesBySystem].map(([system, rows]) => [system, rows.length])),
     requiredSignals: Object.fromEntries([...plan.requiredSignals].map(([source, signals]) => [source, [...signals]]))
   };
-}
-
-function canonicalLogSource(value) {
-  const token = normalizeToken(value);
-  const map = {
-    bssnotifications: 'BSSNotifications',
-    bssnotification: 'BSSNotifications',
-    ipsnotifications: 'IPSNotifications',
-    ipsnotification: 'IPSNotifications',
-    fecnotifications: 'FECNotifications',
-    fecnotification: 'FECNotifications',
-    machinestates: 'MachineStates',
-    alertsmonitoring: 'AlertsMonitoring',
-    aletrsmonitoring: 'AlertsMonitoring'
-  };
-  return map[token] || normalizeText(value);
 }

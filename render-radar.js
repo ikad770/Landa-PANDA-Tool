@@ -194,5 +194,22 @@ function machineFallbackSvg() {
 export function renderDiagnostics(result) {
   const d = result?.diagnosticsSummary;
   if (!d) { $('diagnosticsPre').textContent = 'No diagnostics available.'; return; }
-  $('diagnosticsPre').textContent = JSON.stringify({ timestampParsing: d.timestampParsing, ruleCoverage: d.ruleCoverage, dataTimeRanges: d.dataTimeRanges, sourceStats: d.sourceStats, evaluationBlockers: d.evaluationBlockers, reasons: d.reasons, parserWarnings: d.parserWarnings }, null, 2);
+  const evaluationAudit = (d.ruleCoverage || []).map(row => ({
+    'Excel Row': row.excelRow, System: row.system, Subsystem: row.subsystem, Signal: row.signal, Source: row.source,
+    'Source Files': row.sourceFilesFound, 'Matched Values': row.matchedValues, 'Valid Timestamps': row.validTimestamps,
+    'States Found': row.statesFound, 'Expected States Configured': row.expectedStatesConfigured, Tolerance: row.tolerance,
+    Evaluator: row.evaluator, 'Evaluated Points': row.evaluatedPoints, OK: row.okCount, Warning: row.warningCount,
+    Critical: row.criticalCount, 'Needs Validation': row.needsValidationCount, 'Needs Configuration': row.needsConfigurationCount,
+    'Primary Blocker': row.primaryBlocker || 'None', 'Match Reason': row.matchReason
+  }));
+  const sourceAudit = d.sourceAudit || Object.entries(d.sourceStats || {}).map(([source, stats]) => ({ source, ...stats }));
+  $('diagnosticsPre').textContent = JSON.stringify({
+    'Evaluation Audit': evaluationAudit,
+    'Source Audit': sourceAudit,
+    timestampParsing: d.timestampParsing,
+    dataTimeRanges: d.dataTimeRanges,
+    evaluationBlockers: d.evaluationBlockers,
+    reasons: d.reasons,
+    parserWarnings: d.parserWarnings
+  }, null, 2);
 }
