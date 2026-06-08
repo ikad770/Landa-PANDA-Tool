@@ -1,5 +1,5 @@
 import { STATUS_PRIORITY } from './config.js';
-import { escapeHtml, fmtDuration, fmtNum, fmtTime, renderStatusBadge, statusClass, statusLabel } from './render.js';
+import { escapeAttribute, escapeHtml, fmtDuration, fmtNum, fmtTime, renderStatusBadge, statusClass, statusLabel } from './render.js';
 
 export function validateAnalysisResult(result) {
   if (!result || result.schemaVersion !== '2.0') return { valid: false, reason: 'Worker did not return a V2 result.' };
@@ -37,7 +37,7 @@ export function renderServiceRadar(app) {
 
 function initResultsWorkspace(result) {
   const root = document.getElementById('v2ResultsRoot');
-  const state = { query: '', source: 'all', coverage: 'all', selectedId: result.signalCatalog[0]?.signalId || null };
+  const state = { query: '', source: 'all', coverage: 'all', selectedId: result.signalCatalog[0]?.signalId || null, selectedIds: new Set([result.signalCatalog[0]?.signalId].filter(Boolean)), expandedSystems: new Set((result.signalHierarchy || []).slice(0, 3).map(system => system.systemId)), expandedComponents: new Set() };
   const sources = Array.from(new Set(result.signalCatalog.map(signal => signal.sourceName))).sort();
   root.innerHTML = `${renderTopSummary(result)}
   <section class="results-grid">
@@ -45,7 +45,7 @@ function initResultsWorkspace(result) {
       <input id="signalSearch" class="search-input" placeholder="Search signals">
       <select id="sourceFilter"><option value="all">All sources</option>${sources.map(source => `<option>${escapeHtml(source)}</option>`).join('')}</select>
       <select id="coverageFilter"><option value="all">All coverage</option><option value="rule">Rule</option><option value="no_rule">No Rule</option></select>
-      <div id="signalList" class="signal-list"></div>
+      <div class="selection-actions"><button id="clearSignalSelection" class="text-button">Clear selection</button><span id="selectionCount" class="tiny">0 selected</span></div><div id="signalList" class="signal-list"></div>
     </aside>
     <main class="panel trend-panel"><div class="panel-title"><h2 id="selectedSignalTitle">Selected signal</h2><span id="selectedSignalBadge"></span></div><div id="signalChart"></div><div id="stateTimeline" class="state-timeline"></div><div id="signalMetrics" class="metric-grid"></div></main>
     <aside class="panel analysis-summary"><div class="panel-title"><h2>Analysis Summary</h2></div><div id="parameterSummary"></div></aside>
@@ -55,6 +55,7 @@ function initResultsWorkspace(result) {
   document.getElementById('signalSearch').oninput = event => { state.query = event.target.value; render(); };
   document.getElementById('sourceFilter').onchange = event => { state.source = event.target.value; render(); };
   document.getElementById('coverageFilter').onchange = event => { state.coverage = event.target.value; render(); };
+  document.getElementById('clearSignalSelection').onclick = () => { state.selectedIds.clear(); state.selectedId = null; render(); };
   render();
 }
 
@@ -70,27 +71,129 @@ function summaryMetric(label, value) {
 }
 
 function renderSelection(result, state) {
-  const filtered = result.signalCatalog.filter(signal => {
-    if (state.query && !`${signal.signalName} ${signal.sourceName}`.toLowerCase().includes(state.query.toLowerCase())) return false;
-    if (state.source !== 'all' && signal.sourceName !== state.source) return false;
-    if (state.coverage === 'rule' && !signal.hasRule) return false;
-    if (state.coverage === 'no_rule' && signal.hasRule) return false;
-    return true;
-  });
-  if (!filtered.find(signal => signal.signalId === state.selectedId)) state.selectedId = filtered[0]?.signalId || result.signalCatalog[0]?.signalId || null;
-  document.getElementById('signalList').innerHTML = filtered.map(signal => `<button class="signal-item ${signal.signalId === state.selectedId ? 'active' : ''}" data-signal-id="${signal.signalId}"><strong>${escapeHtml(signal.signalName)}</strong><small>${escapeHtml(signal.sourceName)}</small><span>${fmtNum(signal.latestValue)} ${escapeHtml(signal.unit || '')}</span>${renderStatusBadge(signal.hasRule ? 'ok' : 'no_rule', signal.hasRule ? 'Rule' : 'No Rule')}</button>`).join('') || '<p class="empty-state">No signals match the filters.</p>';
-  document.querySelectorAll('[data-signal-id]').forEach(button => { button.onclick = () => { state.selectedId = button.dataset.signalId; renderSelection(result, state); }; });
-  const signal = result.signalCatalog.find(item => item.signalId === state.selectedId);
-  const parameter = result.parameterSummaries.find(item => item.signalId === state.selectedId);
-  if (!signal) return;
-  document.getElementById('selectedSignalTitle').textContent = signal.signalName;
-  document.getElementById('selectedSignalBadge').innerHTML = renderStatusBadge(parameter?.status || 'no_rule', parameter ? statusLabel(parameter.status) : 'No Rule');
-  document.getElementById('signalChart').innerHTML = renderSvgChart(signal, parameter);
-  document.getElementById('stateTimeline').innerHTML = renderStateTimeline(result.stateTimeline, result.metadata.selectedRange);
-  document.getElementById('signalMetrics').innerHTML = [
-    ['Latest', `${fmtNum(signal.latestValue)} ${signal.unit || ''}`], ['Average', fmtNum(signal.average)], ['Minimum', fmtNum(signal.minimum)], ['Maximum', fmtNum(signal.maximum)], ['Samples', signal.sampleCount], ['First', fmtTime(signal.firstTimestampMs)], ['Last', fmtTime(signal.lastTimestampMs)], ['Chart points', `${signal.renderedPointCount} / ${signal.rawPointCount}`]
-  ].map(([label, value]) => summaryMetric(label, value)).join('');
-  document.getElementById('parameterSummary').innerHTML = parameter ? renderParameter(parameter) : `<div class="no-rule-box">${renderStatusBadge('no_rule')}<p>Signal is available for exploration but has no evaluation rule.</p><p>No operational severity is assigned.</p></div>`;
+  const filteredSignals = result.signalCatalog.filter(signal => matchesSignalFilter(signal, state));
+  const filteredIds = new Set(filteredSignals.map(signal => signal.signalId));
+  for (const id of Array.from(state.selectedIds)) if (!filteredIds.has(id)) state.selectedIds.delete(id);
+  if (!state.selectedIds.size && filteredSignals[0]) state.selectedIds.add(filteredSignals[0].signalId);
+  state.selectedId = Array.from(state.selectedIds)[0] || null;
+  document.getElementById('selectionCount').textContent = `${state.selectedIds.size} selected`;
+  document.getElementById('signalList').innerHTML = renderSignalHierarchy(result, state, filteredIds);
+  bindNavigatorEvents(result, state);
+
+  const selectedSignals = Array.from(state.selectedIds).map(id => result.signalCatalog.find(item => item.signalId === id)).filter(Boolean);
+  const visibleSignals = selectedSignals.slice(0, 12);
+  const primary = visibleSignals[0];
+  const primaryParameter = result.parameterSummaries.find(item => item.signalId === primary?.signalId);
+  if (!primary) {
+    document.getElementById('selectedSignalTitle').textContent = 'No signal selected';
+    document.getElementById('signalChart').innerHTML = '<div class="empty-state">Select one or more signals.</div>';
+    return;
+  }
+  const mode = selectedSignals.length > 1 ? 'comparison' : 'single';
+  document.getElementById('selectedSignalTitle').textContent = mode === 'comparison' ? `${selectedSignals.length} selected signals` : primary.signalName;
+  document.getElementById('selectedSignalBadge').innerHTML = mode === 'comparison' ? renderStatusBadge('ok', 'Compare') : renderStatusBadge(primaryParameter?.status || 'no_rule', primaryParameter ? statusLabel(primaryParameter.status) : 'No Rule');
+  document.getElementById('signalChart').innerHTML = mode === 'comparison' ? renderMultiSignalChart(visibleSignals) : renderSvgChart(primary, primaryParameter);
+  document.getElementById('stateTimeline').innerHTML = renderTimelineBlock(result, primary);
+  document.getElementById('signalMetrics').innerHTML = renderSelectionMetrics(selectedSignals, visibleSignals);
+  document.getElementById('parameterSummary').innerHTML = mode === 'comparison' ? renderComparisonSummary(selectedSignals) : (primaryParameter ? renderParameter(primaryParameter) : `<div class="no-rule-box">${renderStatusBadge('no_rule')}<p>Signal is available for exploration but has no evaluation rule.</p><p>No operational severity is assigned.</p></div>`);
+}
+
+function matchesSignalFilter(signal, state) {
+  if (state.query && !`${signal.signalName} ${signal.sourceName} ${signal.subsystem} ${signal.component} ${signal.deviceGroup}`.toLowerCase().includes(state.query.toLowerCase())) return false;
+  if (state.source !== 'all' && signal.sourceName !== state.source) return false;
+  if (state.coverage === 'rule' && !signal.hasRule) return false;
+  if (state.coverage === 'no_rule' && signal.hasRule) return false;
+  return true;
+}
+
+function renderSignalHierarchy(result, state, filteredIds) {
+  const hierarchy = result.signalHierarchy?.length ? result.signalHierarchy : buildHierarchyFromCatalog(result.signalCatalog);
+  const html = hierarchy.map(system => {
+    const systemSignals = system.components.flatMap(component => component.signals).filter(signal => filteredIds.has(signal.signalId));
+    if (!systemSignals.length) return '';
+    const expanded = state.expandedSystems.has(system.systemId);
+    return `<div class="nav-group"><button class="nav-row nav-system" data-system-toggle="${escapeAttribute(system.systemId)}"><span>${expanded ? '▾' : '▸'}</span><strong>${escapeHtml(system.systemName)}</strong><small>${systemSignals.length}</small><button class="text-button" data-select-system="${escapeAttribute(system.systemId)}">All</button></button>${expanded ? system.components.map(component => renderComponentNode(component, state, filteredIds)).join('') : ''}</div>`;
+  }).join('');
+  return html || '<p class="empty-state">No signals match the filters.</p>';
+}
+
+function renderComponentNode(component, state, filteredIds) {
+  const signals = component.signals.filter(signal => filteredIds.has(signal.signalId));
+  if (!signals.length) return '';
+  const expanded = state.expandedComponents.has(component.componentId);
+  return `<div class="nav-component"><button class="nav-row" data-component-toggle="${escapeAttribute(component.componentId)}"><span>${expanded ? '▾' : '▸'}</span><strong>${escapeHtml(component.componentName)}</strong><small>${signals.length}</small><button class="text-button" data-select-component="${escapeAttribute(component.componentId)}">All</button></button>${expanded ? signals.map(signal => `<label class="signal-item ${state.selectedIds.has(signal.signalId) ? 'active' : ''}"><input type="checkbox" data-signal-check="${escapeAttribute(signal.signalId)}" ${state.selectedIds.has(signal.signalId) ? 'checked' : ''}><button type="button" data-signal-id="${escapeAttribute(signal.signalId)}"><strong>${escapeHtml(signal.signalName)}</strong><small>${escapeHtml(signal.sourceName)}</small><span>${fmtNum(signal.latestValue)} ${escapeHtml(signal.unit || '')}</span>${renderStatusBadge(signal.status || (signal.hasRule ? 'ok' : 'no_rule'), signal.hasRule ? 'Rule' : 'No Rule')}</button></label>`).join('') : ''}</div>`;
+}
+
+function bindNavigatorEvents(result, state) {
+  document.querySelectorAll('[data-system-toggle]').forEach(button => { button.onclick = event => { if (event.target.dataset.selectSystem) return; toggleSet(state.expandedSystems, button.dataset.systemToggle); renderSelection(result, state); }; });
+  document.querySelectorAll('[data-component-toggle]').forEach(button => { button.onclick = event => { if (event.target.dataset.selectComponent) return; toggleSet(state.expandedComponents, button.dataset.componentToggle); renderSelection(result, state); }; });
+  document.querySelectorAll('[data-signal-id]').forEach(button => { button.onclick = () => { state.selectedIds = new Set([button.dataset.signalId]); renderSelection(result, state); }; });
+  document.querySelectorAll('[data-signal-check]').forEach(input => { input.onchange = () => { if (input.checked) state.selectedIds.add(input.dataset.signalCheck); else state.selectedIds.delete(input.dataset.signalCheck); renderSelection(result, state); }; });
+  document.querySelectorAll('[data-select-component]').forEach(button => { button.onclick = event => { event.stopPropagation(); const component = findHierarchyComponent(result, button.dataset.selectComponent); for (const signal of component?.signals || []) state.selectedIds.add(signal.signalId); renderSelection(result, state); }; });
+  document.querySelectorAll('[data-select-system]').forEach(button => { button.onclick = event => { event.stopPropagation(); const system = (result.signalHierarchy || []).find(item => item.systemId === button.dataset.selectSystem); for (const signal of system?.components.flatMap(component => component.signals) || []) state.selectedIds.add(signal.signalId); renderSelection(result, state); }; });
+}
+
+function toggleSet(set, value) { if (set.has(value)) set.delete(value); else set.add(value); }
+function findHierarchyComponent(result, id) { return (result.signalHierarchy || []).flatMap(system => system.components || []).find(component => component.componentId === id); }
+
+function renderSelectionMetrics(selectedSignals, visibleSignals) {
+  const unitGroups = Array.from(new Set(selectedSignals.map(signal => signal.unit || 'unitless')));
+  const warning = selectedSignals.length > 12 ? `<div class="metric warning"><label>Visible series limit</label><b>Showing 12 of ${selectedSignals.length}</b></div>` : '';
+  const unitWarning = unitGroups.length > 2 ? `<div class="metric warning"><label>Unit safety</label><b>${unitGroups.length} unit groups; filter or split charts</b></div>` : '';
+  return `${warning}${unitWarning}${summaryMetric('Selected', selectedSignals.length)}${summaryMetric('Visible series', visibleSignals.length)}${summaryMetric('Unit groups', unitGroups.join(', '))}${summaryMetric('Samples', selectedSignals.reduce((sum, signal) => sum + (signal.sampleCount || 0), 0))}`;
+}
+
+function renderComparisonSummary(signals) {
+  const topVariable = [...signals].sort((a, b) => ((b.maximum ?? 0) - (b.minimum ?? 0)) - ((a.maximum ?? 0) - (a.minimum ?? 0))).slice(0, 8);
+  const abnormal = signals.filter(signal => ['critical', 'warning', 'needs_validation', 'needs_configuration'].includes(signal.status)).slice(0, 8);
+  return `<div class="comparison-summary"><h3>Whole selection summary</h3><p>Large selections are summarized first. Select individual signals to add them to the graph.</p><h4>Top abnormal signals</h4>${abnormal.map(signal => `<p>${renderStatusBadge(signal.status)} ${escapeHtml(signal.signalName)}</p>`).join('') || '<p>No abnormal selected signals.</p>'}<h4>Top variable signals</h4>${topVariable.map(signal => `<p>${escapeHtml(signal.signalName)} · range ${fmtNum((signal.maximum ?? 0) - (signal.minimum ?? 0))}</p>`).join('')}</div>`;
+}
+
+function renderTimelineBlock(result, signal) {
+  const systemTimeline = result.systemStateTimelineBySystem?.[signal.subsystem] || result.systemStateTimelineBySystem?.[signal.component] || [];
+  return `<div class="timeline-label">Machine State</div>${renderStateTimeline(result.machineStateTimeline || result.stateTimeline || [], result.metadata.selectedRange)}<div class="timeline-label">System State</div>${renderStateTimeline(systemTimeline, result.metadata.selectedRange)}`;
+}
+
+function renderMultiSignalChart(signals) {
+  const series = signals.filter(signal => (signal.chartPoints || []).length);
+  if (!series.length) return '<div class="empty-state">No chartable points.</div>';
+  const unitGroups = Array.from(new Set(series.map(signal => signal.unit || 'unitless')));
+  const allPoints = series.flatMap(signal => signal.chartPoints.map(point => ({ ...point, signal })));
+  let minY = null; let maxY = null; let minT = null; let maxT = null;
+  for (const point of allPoints) {
+    if (Number.isFinite(point.actual)) {
+      minY = minY === null ? point.actual : Math.min(minY, point.actual);
+      maxY = maxY === null ? point.actual : Math.max(maxY, point.actual);
+    }
+    minT = minT === null ? point.t : Math.min(minT, point.t);
+    maxT = maxT === null ? point.t : Math.max(maxT, point.t);
+  }
+  if (minY === maxY) { minY -= 1; maxY += 1; }
+  const x = t => 54 + ((t - minT) / Math.max(1, maxT - minT)) * 686;
+  const y = v => 310 - ((v - minY) / Math.max(1, maxY - minY)) * 250;
+  const colors = ['#39c7f3', '#43d17d', '#f4c542', '#ff8a4c', '#b38cff', '#ff5f68', '#7ee7d7', '#d6f35a', '#7aa7ff', '#f58bd1', '#a4c2f4', '#f6b26b'];
+  const paths = series.map((signal, index) => {
+    const path = signal.chartPoints.filter(point => Number.isFinite(point.actual)).map((point, pointIndex) => `${pointIndex ? 'L' : 'M'} ${x(point.t).toFixed(1)} ${y(point.actual).toFixed(1)}`).join(' ');
+    return `<path class="actual-line" style="stroke:${colors[index % colors.length]}" d="${path}"><title>${escapeHtml(signal.signalName)}</title></path>`;
+  }).join('');
+  const legend = series.map((signal, index) => `<span class="chart-legend-item" style="--c:${colors[index % colors.length]}"><b></b>${escapeHtml(signal.signalName)} · latest ${fmtNum(signal.latestValue)} · min ${fmtNum(signal.minimum)} · max ${fmtNum(signal.maximum)} · avg ${fmtNum(signal.average)}</span>`).join('');
+  const unitWarning = unitGroups.length > 2 ? `<p class="warning-text">Warning: ${unitGroups.length} incompatible unit groups selected. Compare with filtering or stacked charts.</p>` : unitGroups.length === 2 ? '<p class="warning-text">Dual-unit comparison; verify scale before interpreting.</p>' : '';
+  return `${unitWarning}<svg class="actual-expected-chart" viewBox="0 0 800 360" role="img"><line class="chart-axis" x1="54" x2="740" y1="310" y2="310"></line><line class="chart-axis" x1="54" x2="54" y1="40" y2="310"></line>${paths}<text x="54" y="24">Multi-signal comparison</text><text x="54" y="340">${fmtTime(minT)}</text><text x="560" y="340">${fmtTime(maxT)}</text></svg><div class="chart-legend">${legend}</div>`;
+}
+
+function buildHierarchyFromCatalog(signalCatalog = []) {
+  const systems = new Map();
+  for (const signal of signalCatalog) {
+    const systemName = signal.subsystem || signal.system || 'Unclassified';
+    const systemId = systemName.toLowerCase().replace(/[^a-z0-9]+/g, '_') || 'unclassified';
+    const componentName = signal.deviceGroup || signal.component || 'Unclassified';
+    const componentId = `${systemName}::${componentName}`.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    if (!systems.has(systemId)) systems.set(systemId, { systemId, systemName, components: new Map() });
+    const system = systems.get(systemId);
+    if (!system.components.has(componentId)) system.components.set(componentId, { componentId, componentName, signals: [] });
+    system.components.get(componentId).signals.push(signal);
+  }
+  return Array.from(systems.values()).map(system => ({ ...system, components: Array.from(system.components.values()) }));
 }
 
 function renderSvgChart(signal, parameter) {

@@ -2,7 +2,6 @@ import JSZip from 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
 import { MAX_CHART_POINTS_PER_SIGNAL, V2_PROGRESS_STAGES, MAX_STACK_FRAMES } from './config.js';
 import { parseDelimitedText } from './adapters.js';
-import { appendRows } from './parsing-utils.js';
 import { parseRulesWorkbook } from './rules.js';
 import { runV2Pipeline } from './v2-pipeline.js';
 
@@ -63,10 +62,10 @@ async function extractRowsFromArchive(file) {
       const nested = await JSZip.loadAsync(await entry.async('arraybuffer'));
       for (const nestedEntry of Object.values(nested.files)) {
         if (nestedEntry.dir || !isSupportedText(nestedEntry.name)) continue;
-        appendRows(rows, parseDelimitedText(await nestedEntry.async('text'), nestedEntry.name));
+        parseDelimitedText(await nestedEntry.async('text'), nestedEntry.name, { collect: false, onRow: row => rows.push(row) });
       }
     } else if (isSupportedText(name)) {
-      appendRows(rows, parseDelimitedText(await entry.async('text'), name));
+      parseDelimitedText(await entry.async('text'), name, { collect: false, onRow: row => rows.push(row) });
     }
     processed += 1;
     emitProgress('parse', entries.length ? processed / entries.length : 1, `Parsed ${name}.`, processed, entries.length);

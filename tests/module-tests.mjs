@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import { authenticateLocalPrototype, validateLoginFields } from '../auth.js';
 import { AUTH_CONFIG, MAX_CHART_POINTS_PER_SIGNAL, USER_FACING_STAGES, normalizeSourceIdentity } from '../config.js';
-import { normalizeSourceRow, parseDelimitedText, parseFlexibleTimestamp } from '../adapters.js';
+import { detectLogSchema, inferFecSignal, normalizeSourceRow, parseDelimitedText, parseFlexibleTimestamp } from '../adapters.js';
 import { appendRows, parseTextLogsToRows } from '../parsing-utils.js';
-import { normalizeRulesRows } from '../rules.js';
+import { buildRulesIndex, findRuleDiagnostics, normalizeRulesRows } from '../rules.js';
 import { comparePoint, computeAllowedRange, normalizeState, normalizeToken, parseNumber, resolveExpected } from '../evaluation.js';
-import { createStateTimeline } from '../machine-states.js';
+import { createStateTimeline, createSystemStateTimelines } from '../machine-states.js';
 import { assertV2Invariants, createChartSampler, runV2Pipeline } from '../v2-pipeline.js';
 
 function walk(value, visitor, path = 'result', seen = new WeakSet()) {
@@ -100,6 +100,69 @@ assert.equal(normalizeSourceRow({ Timestamp: '2026-01-01T00:00:00Z', Signal: 'Te
 const partialRule = normalizeRulesRows([{ System: 'IPS', 'Log Signal Name': 'Temp', 'Log Source': 'source-a', 'Expected Printing': 0 }])[0];
 assert.equal(partialRule.expectedByState.get('Printing'), 0, 'numeric zero remains configured');
 
+
+// Real schema adapters — BSS, FEC, MachineStates.
+const bssCsv = `Timestamp,Action,MessageType,LLCIKey,MachineType,Component,SubComponent,ParameterType,Value,IsAlert
+05/07/2026 16:19:44:544139,Get,Parameter,3149317,CommonMachine,BCUInputsOutputs,FillActualTemperatureC,Float,34.5,False
+05/07/2026 16:19:45:544139,Get,Parameter,3149318,CommonMachine,BCUInputsOutputs,Enabled,Bool,False,False
+05/07/2026 16:19:46:544139,StateMachine,,3149319,CommonMachine,States,,Prepare2Print,,False
+05/07/2026 16:19:47:544139,SubsystemState,,3149320,CommonMachine,States,BCS_State,String,Ready,False`;
+assert.equal(detectLogSchema(bssCsv.split('\n')[0].split(','), 'BSS.csv'), 'bss_notification');
+const bssRows = parseDelimitedText(bssCsv, 'BSS Notifications.csv');
+const bssSignal = bssRows.find(row => row.signalName === 'FillActualTemperatureC');
+assert.equal(bssSignal.component, 'BCUInputsOutputs');
+assert.equal(bssSignal.subsystem, 'BSS');
+assert.equal(bssSignal.numericValue, 34.5);
+assert.equal(bssRows.some(row => row.signalName === 'Enabled' && row.kind === 'sample'), false, 'Boolean BSS parameters are not numeric trend samples');
+assert.equal(bssRows.find(row => row.scope === 'machine').machineState, 'Prepare2Print');
+assert.equal(bssRows.find(row => row.scope === 'system').systemState, 'Ready');
+
+const fecCsv = `Timestamp,Type,CableId,PSSID,SetPoint,Enabled,HasErrors,HasWarnings,PSCState,Status,State
+05/07/2026 16:34:49:702291,DeviceStatus,260,IPU1 Pressure(12345),73.25459,False,False,False,Off,0,
+05/07/2026 16:34:50:702291,ControlStatus,261,DRY2 PWM(28557),55,True,False,False,On,0,
+05/07/2026 16:34:51:702291,DeviceStatus,262,Ch6PeakCurrent(28558),10,True,False,False,On,0,
+05/07/2026 16:34:52:702291,StateMachine,,IPU,,False,False,False,,0,Prepare2Print`;
+assert.equal(detectLogSchema(fecCsv.split('\n')[0].split(','), 'FEC.csv'), 'fec_notification');
+const fecRows = parseDelimitedText(fecCsv, 'FEC Notifications.csv');
+const ipuPressure = fecRows.find(row => row.signalName === 'IPU1 Pressure');
+assert.equal(ipuPressure.metadata.signalNumericId, '12345');
+assert.equal(ipuPressure.numericValue, 73.25459);
+assert.equal(ipuPressure.metadata.deviceInstance, '260');
+assert.equal(ipuPressure.subsystem, 'IPU');
+assert.equal(ipuPressure.deviceGroup, 'IPU1');
+assert.equal(fecRows.find(row => row.signalName === 'DRY2 PWM').subsystem, 'Dryer / IRD');
+assert.equal(fecRows.find(row => row.signalName === 'Ch6PeakCurrent').deviceGroup, 'DRY6');
+assert.equal(fecRows.find(row => row.scope === 'system').systemState, 'Prepare2Print');
+assert.equal(fecRows.some(row => new RegExp(['Spitfire', 'Server', 'Modules'].join('\\.')).test(row.signalName || '')), false);
+assert.deepEqual(inferFecSignal('WaterInTemp'), { subsystem: 'CWS', component: 'CWS', deviceGroup: 'CWS' });
+
+const msCsv = `Time,Machine,BSS,IPS,PSS,Dryer,IPU,Ventilation,CWS,IRD,DFES,DPS,QCS,ICS,ECS,MSPS,ITS
+07/05/2026 08:29:35.474�,Ready,---,---,---,Standby,---,---,---,---,---,---,---,---,---,---,---
+07/05/2026 08:29:36.474,---,On,---,---,Standby,Prepare2Print,---,---,---,---,---,---,---,---,---,---
+07/05/2026 08:29:37.474,Printing,---,---,---,Standby,---,---,---,---,---,---,---,---,---,---,---
+07/05/2026 08:29:38.474,---,---,---,---,Printing,---,---,---,---,---,---,---,---,---,---,---`;
+assert.equal(detectLogSchema(msCsv.split('\n')[0].split(','), 'MachineStates.csv'), 'machine_states');
+const msRows = parseDelimitedText(msCsv, 'MachineStates.csv');
+assert.equal(msRows.filter(row => row.scope === 'machine').length, 2);
+const msRange = { startTimestampMs: parseFlexibleTimestamp('07/05/2026 08:29:35.474'), endTimestampMs: parseFlexibleTimestamp('07/05/2026 08:29:39.474') };
+const machineIntervals = createStateTimeline(msRows.filter(row => row.scope === 'machine'), msRange);
+assert.equal(machineIntervals[0].state, 'Ready');
+assert.equal(machineIntervals[1].state, 'Printing');
+const systemIntervals = createSystemStateTimelines(msRows.filter(row => row.scope === 'system'), msRange);
+assert.equal(systemIntervals.Dryer.length, 2, 'adjacent equal Dryer sparse updates merge before changed state');
+assert.equal(systemIntervals.IPU[0].state, 'Prepare2Print');
+assert.ok(parseFlexibleTimestamp('05/07/2026 16:19:44:544139') < parseFlexibleTimestamp('05/07/2026 16:34:49:702291'));
+assert.equal(new Date(parseFlexibleTimestamp('07/05/2026 08:29:35.474')).getMonth(), 4, 'DD/MM/YYYY month is May');
+
+const realRules = normalizeRulesRows([
+  { System: 'BSS', 'Log Source': 'BSS', 'Log Signal Name': 'FillActualTemperatureC', 'Expected Ready': 35, 'Spec Tolerance': 5 },
+  { System: 'IPU', 'Log Source': 'FEC', 'Log Signal Name': 'IPU1 Pressure', 'Expected Prepare2Print': 73, 'Spec Tolerance': 3 },
+  { System: 'IPU', 'Log Source': 'FEC', 'Log Signal Name': 'IPU1 Pressure', 'Expected Ready': 73, 'Spec Tolerance': 3 }
+]);
+const realIndex = buildRulesIndex(realRules);
+assert.equal(findRuleDiagnostics(realIndex, { sourceId: 'bss', sourceType: 'bss_notification', sourceName: 'BSS Notifications.csv', subsystem: 'BSS', normalizedSignal: normalizeToken('FillActualTemperatureC') }).status, 'exact_match');
+assert.equal(findRuleDiagnostics(realIndex, { sourceId: 'fec', sourceType: 'fec_notification', sourceName: 'FEC Notifications.csv', subsystem: 'IPU', normalizedSignal: normalizeToken('IPU1 Pressure') }).status, 'duplicate_rules');
+
 const appendRegressionRowCount = 150_000;
 const appendRegressionText = `Timestamp,Signal,Value,Unit,Machine State,Source
 ${Array.from({ length: appendRegressionRowCount }, (_, i) => `2026-01-01T00:00:${String(i % 60).padStart(2, '0')}Z,Pressure,${i},bar,Printing,source-a`).join('\n')}`;
@@ -171,6 +234,8 @@ const runtimeDuration = performance.now() - t0;
 assert.equal(result.schemaVersion, '2.0');
 assert.equal(result.summary.configuredSignals, 13);
 assert.equal(result.summary.discoveredSignals, 30);
+assert.ok(Array.isArray(result.signalHierarchy));
+assert.ok(result.signalHierarchy.some(system => system.components?.length));
 assert.equal(result.metadata.rowsProcessed, rows.length);
 assert.ok(result.summary.noRuleSignals >= 18);
 assert.ok(result.summary.noDataRules >= 1);

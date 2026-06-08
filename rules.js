@@ -37,6 +37,7 @@ export function normalizeRuleRow(row, index = 0) {
     normalizedSignal: normalizeToken(signalName),
     sourceName: sourceName || 'unknown',
     normalizedSource: normalizeSourceIdentity(sourceName),
+    sourceAliases: sourceAliases(sourceName),
     valueMetric: normalizeText(get(FIELD_ALIASES.valueMetric)) || null,
     checkType: normalizeText(get(FIELD_ALIASES.checkType)) || 'tolerance',
     genericExpected: parseNumber(get(FIELD_ALIASES.genericExpected)),
@@ -75,15 +76,45 @@ export function parseRulesWorkbook(XLSX, arrayBuffer) {
 export function buildRulesIndex(rules) {
   const exact = new Map();
   const bySignal = new Map();
+  const duplicates = new Map();
   for (const rule of rules) {
-    const key = `${rule.normalizedSource}::${rule.normalizedSignal}`;
-    exact.set(key, rule);
+    for (const source of rule.sourceAliases || [rule.normalizedSource]) {
+      const key = `${source}::${rule.normalizedSignal}`;
+      if (exact.has(key)) duplicates.set(key, [...(duplicates.get(key) || [exact.get(key)]), rule]);
+      else exact.set(key, rule);
+    }
     if (!bySignal.has(rule.normalizedSignal)) bySignal.set(rule.normalizedSignal, []);
     bySignal.get(rule.normalizedSignal).push(rule);
   }
-  return { exact, bySignal };
+  return { exact, bySignal, duplicates };
 }
 
 export function findRuleForStream(index, stream) {
-  return index.exact.get(`${stream.sourceId}::${stream.normalizedSignal}`) || index.bySignal.get(stream.normalizedSignal)?.[0] || null;
+  return findRuleDiagnostics(index, stream).rule;
+}
+
+export function findRuleDiagnostics(index, stream) {
+  const keys = streamMatchSources(stream).map(source => `${source}::${stream.normalizedSignal}`);
+  for (const key of keys) {
+    if (index.duplicates?.has(key)) return { status: 'duplicate_rules', rule: index.duplicates.get(key)[0], rules: index.duplicates.get(key), key };
+    if (index.exact.has(key)) return { status: 'exact_match', rule: index.exact.get(key), key };
+  }
+  const candidates = index.bySignal.get(stream.normalizedSignal) || [];
+  if (candidates.length === 1) return { status: 'normalized_match', rule: candidates[0] };
+  if (candidates.length > 1) return { status: 'ambiguous_match', rule: null, rules: candidates };
+  return { status: 'no_match', rule: null };
+}
+
+function streamMatchSources(stream) {
+  const sources = [stream.sourceId, normalizeSourceIdentity(stream.sourceName), normalizeSourceIdentity(stream.sourceType), normalizeSourceIdentity(stream.subsystem)];
+  if (stream.sourceType === 'bss_notification') sources.push(normalizeSourceIdentity('BSS'));
+  if (stream.sourceType === 'fec_notification') sources.push(normalizeSourceIdentity('FEC'));
+  return Array.from(new Set(sources.filter(Boolean)));
+}
+
+function sourceAliases(sourceName) {
+  const aliases = [normalizeSourceIdentity(sourceName)];
+  if (/\bBSS\b|bss_notification/i.test(sourceName || '')) aliases.push(normalizeSourceIdentity('BSS'));
+  if (/\bFEC\b|fec_notification/i.test(sourceName || '')) aliases.push(normalizeSourceIdentity('FEC'));
+  return Array.from(new Set(aliases.filter(Boolean)));
 }

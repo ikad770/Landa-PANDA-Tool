@@ -1,5 +1,5 @@
 import { MAX_CHART_POINTS_PER_SIGNAL, MAX_DIAGNOSTIC_ENTRIES, MAX_DIAGNOSTIC_MESSAGE_LENGTH } from './config.js';
-import { createStateResolver, createStateTimeline } from './machine-states.js';
+import { createStateResolver, createStateTimeline, createSystemStateTimelines, resolveTimeline } from './machine-states.js';
 import { buildRulesIndex, findRuleForStream } from './rules.js';
 import { comparePoint, createParameterAccumulator, finalizeParameterAccumulator, updateParameterAccumulator } from './evaluation.js';
 import { buildServiceDecision } from './service-decision.js';
@@ -100,65 +100,77 @@ export function runV2Pipeline({ rows = [], rules = [], inputFiles = [], progress
   const streams = new Map();
   let firstTimestampMs = null;
   let lastTimestampMs = null;
-  const statePoints = [];
+  const machineStateUpdates = [];
+  const systemStateUpdates = [];
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
-    if (!Number.isFinite(row.timestampMs) || !row.normalizedSignal) continue;
+    if (!Number.isFinite(row.timestampMs)) continue;
     firstTimestampMs = firstTimestampMs === null ? row.timestampMs : Math.min(firstTimestampMs, row.timestampMs);
     lastTimestampMs = lastTimestampMs === null ? row.timestampMs : Math.max(lastTimestampMs, row.timestampMs);
-    if (row.machineState) statePoints.push(row);
-    const key = `${row.sourceId}::${row.normalizedSignal}`;
+    if (row.kind === 'state_update') {
+      if (row.scope === 'machine') machineStateUpdates.push(row);
+      if (row.scope === 'system') systemStateUpdates.push(row);
+      continue;
+    }
+    if (row.kind && row.kind !== 'sample') continue;
+    if (!row.normalizedSignal || !Number.isFinite(row.numericValue)) continue;
+    const key = streamKey(row);
     let stream = streams.get(key);
     if (!stream) {
       stream = createStream(row, streams.size + 1, chartLimit);
+      const rule = findRuleForStream(rulesIndex, stream);
+      if (rule) attachRuleToStream(stream, rule);
       streams.set(key, stream);
     }
-    stream.points.push(row);
     updateStreamAggregates(stream, row);
     if (i % 5000 === 0) progress('index', i / Math.max(1, rows.length), 'Indexing signal rows.', i, rows.length);
   }
-  for (const stream of streams.values()) stream.points.sort((a, b) => a.timestampMs - b.timestampMs);
   const selectedRange = { startTimestampMs: firstTimestampMs, endTimestampMs: lastTimestampMs };
-  const stateTimeline = createStateTimeline(statePoints, selectedRange);
-  const resolveState = createStateResolver(stateTimeline);
+  const machineStateTimeline = createStateTimeline(machineStateUpdates, selectedRange);
+  const stateTimeline = machineStateTimeline.map(item => ({ ...item }));
+  const resolveMachineState = createStateResolver(machineStateTimeline);
+  const systemStateTimelineBySystem = createSystemStateTimelines(systemStateUpdates, selectedRange);
   progress('analyze', 0, 'Matching rules to streams.', 0, streams.size + rules.length);
 
   const matchedRules = new Set();
+  for (const stream of streams.values()) {
+    if (stream.rule) matchedRules.add(stream.rule.ruleId);
+  }
+
+  let processedRows = 0;
+  for (const row of rows) {
+    if (!Number.isFinite(row.timestampMs) || (row.kind && row.kind !== 'sample') || !row.normalizedSignal || !Number.isFinite(row.numericValue)) continue;
+    const stream = streams.get(streamKey(row));
+    if (!stream) continue;
+    const aligned = alignSampleState(row, stream, resolveMachineState, systemStateTimelineBySystem);
+    if (stream.rule && stream.accumulator) {
+      const comparison = comparePoint(stream.rule, { ...row, machineState: aligned.machineState, systemState: aligned.systemState }, aligned);
+      updateParameterAccumulator(stream.accumulator, { ...row, machineState: aligned.machineState, systemState: aligned.systemState }, comparison);
+      stream.sampler.add({ timestampMs: row.timestampMs, actual: row.numericValue, expected: comparison.expected, allowedLow: comparison.allowedLow, allowedHigh: comparison.allowedHigh, status: comparison.status, machineState: comparison.machineState, systemState: comparison.systemState });
+      stream.statusCounts[comparison.status] = (stream.statusCounts[comparison.status] || 0) + 1;
+    } else {
+      stream.sampler.add({ timestampMs: row.timestampMs, actual: row.numericValue, status: 'no_rule', machineState: aligned.machineState, systemState: aligned.systemState });
+    }
+    stream.stateSource = aligned.stateSource;
+    stream.stateConflict = stream.stateConflict || aligned.stateConflict;
+    processedRows += 1;
+    if (processedRows % 5000 === 0) progress('analyze', processedRows / Math.max(1, rows.length), 'Evaluating streams.', processedRows, rows.length);
+  }
+
   const parameterSummaries = [];
   let processedStreams = 0;
   for (const stream of streams.values()) {
-    const rule = findRuleForStream(rulesIndex, stream);
-    if (rule) {
-      matchedRules.add(rule.ruleId);
-      stream.hasRule = true;
-      stream.ruleId = rule.ruleId;
-      stream.parameterId = rule.parameterId;
-      stream.system = rule.system;
-      const acc = createParameterAccumulator(rule, stream);
-      for (const point of stream.points) {
-        const resolved = resolveState(point.timestampMs);
-        const state = { ...resolved, machineState: point.machineState || resolved.machineState, systemState: point.systemState || resolved.systemState };
-        const comparison = comparePoint(rule, point, state);
-        updateParameterAccumulator(acc, point, comparison);
-        stream.sampler.add({ timestampMs: point.timestampMs, actual: point.numericValue, expected: comparison.expected, allowedLow: comparison.allowedLow, allowedHigh: comparison.allowedHigh, status: comparison.status, machineState: comparison.machineState });
-      }
-      const sampled = stream.sampler.finish();
-      stream.chartPoints = sampled.chartPoints;
-      stream.rawPointCount = sampled.rawPointCount;
-      stream.renderedPointCount = sampled.renderedPointCount;
-      stream.downsampled = sampled.downsampled;
-      parameterSummaries.push(finalizeParameterAccumulator(acc, sampled));
-    } else {
-      for (const point of stream.points) stream.sampler.add({ timestampMs: point.timestampMs, actual: point.numericValue, status: 'no_rule', machineState: point.machineState });
-      const sampled = stream.sampler.finish();
-      stream.chartPoints = sampled.chartPoints;
-      stream.rawPointCount = sampled.rawPointCount;
-      stream.renderedPointCount = sampled.renderedPointCount;
-      stream.downsampled = sampled.downsampled;
-    }
-    stream.points = null;
+    const sampled = stream.sampler.finish();
+    stream.chartPoints = sampled.chartPoints;
+    stream.rawPointCount = sampled.rawPointCount;
+    stream.renderedPointCount = sampled.renderedPointCount;
+    stream.downsampled = sampled.downsampled;
+    if (stream.accumulator) parameterSummaries.push(finalizeParameterAccumulator(stream.accumulator, sampled));
+    stream.sampler = null;
+    stream.accumulator = null;
+    stream.rule = null;
     processedStreams += 1;
-    progress('analyze', processedStreams / Math.max(1, streams.size), 'Evaluating streams.', processedStreams, streams.size);
+    progress('analyze', processedStreams / Math.max(1, streams.size), 'Finalizing streams.', processedStreams, streams.size);
   }
 
   for (const rule of rules) {
@@ -168,6 +180,7 @@ export function runV2Pipeline({ rows = [], rules = [], inputFiles = [], progress
   }
   progress('finalize', 0.2, 'Building signal catalog.', 1, 5);
   const signalCatalog = Array.from(streams.values()).map(streamToCatalogEntry);
+  const signalHierarchy = buildSignalHierarchy(signalCatalog);
   const systems = buildServiceDecision({ parameterSummaries, signalCatalog });
   progress('finalize', 0.55, 'Summarizing systems.', 3, 5);
   const completedAt = new Date().toISOString();
@@ -185,9 +198,12 @@ export function runV2Pipeline({ rows = [], rules = [], inputFiles = [], progress
     },
     summary: summarize(signalCatalog, parameterSummaries, rules),
     signalCatalog,
+    signalHierarchy,
     parameterSummaries,
     systems,
     stateTimeline,
+    machineStateTimeline,
+    systemStateTimelineBySystem,
     diagnostics
   };
   progress('finalize', 0.9, 'Checking V2 result invariants.', 4, 5);
@@ -196,15 +212,68 @@ export function runV2Pipeline({ rows = [], rules = [], inputFiles = [], progress
   return result;
 }
 
+function streamKey(row) {
+  return `${row.sourceId || row.sourceName}::${row.subsystem || ''}::${row.deviceGroup || row.component || ''}::${row.normalizedSignal}`;
+}
+
+function attachRuleToStream(stream, rule) {
+  stream.hasRule = true;
+  stream.ruleId = rule.ruleId;
+  stream.parameterId = rule.parameterId;
+  stream.system = rule.system || stream.subsystem;
+  stream.rule = rule;
+  stream.accumulator = createParameterAccumulator(rule, stream);
+}
+
+function alignSampleState(row, stream, resolveMachineState, systemStateTimelineBySystem) {
+  const machine = row.machineState ? { machineState: row.machineState, status: 'exact' } : resolveMachineState(row.timestampMs);
+  const candidates = relevantStateSystems(stream);
+  let chosen = null;
+  let alternate = null;
+  for (const system of candidates) {
+    const resolved = resolveTimeline(systemStateTimelineBySystem[system] || [], row.timestampMs);
+    if (resolved.state && ['matched', 'previous_state'].includes(resolved.status)) {
+      if (!chosen) chosen = { system, ...resolved };
+      else if (!alternate) alternate = { system, ...resolved };
+    }
+  }
+  const rowSystemState = row.systemState || null;
+  const systemState = rowSystemState || chosen?.state || null;
+  const conflict = rowSystemState && chosen?.state && rowSystemState !== chosen.state ? { status: 'conflict', primary: rowSystemState, alternate: chosen.state, source: chosen.system } : null;
+  return {
+    machineState: machine.machineState || machine.state || null,
+    systemState,
+    status: machine.status || 'missing',
+    stateSource: rowSystemState ? 'row' : chosen ? chosen.system : null,
+    alternateSystemState: alternate?.state || null,
+    stateConflict: conflict
+  };
+}
+
+function relevantStateSystems(stream) {
+  if (stream.subsystem === 'BSS') return ['BSS'];
+  if (stream.subsystem === 'IPU') return ['IPU'];
+  if (stream.subsystem === 'Dryer / IRD') return ['Dryer / IRD', 'Dryer', 'IRD'];
+  if (stream.subsystem === 'CWS') return ['CWS'];
+  if (stream.subsystem === 'Ventilation') return ['Ventilation'];
+  return [stream.subsystem, stream.system].filter(Boolean);
+}
+
 function createStream(row, index, chartLimit) {
   return {
     signalId: `signal-${index}`,
     signalName: row.signalName,
     normalizedSignal: row.normalizedSignal,
     sourceName: row.sourceName,
+    sourceType: row.sourceType || 'generic',
     sourceId: row.sourceId,
-    system: 'Unassigned',
+    subsystem: row.subsystem || 'Generic',
+    component: row.component || 'Unclassified',
+    deviceGroup: row.deviceGroup || row.component || 'Unclassified',
+    signalSourceId: row.signalId || null,
+    system: row.subsystem || 'Generic',
     unit: row.unit || null,
+    dataType: row.metadata?.type || row.metadata?.valueType || 'numeric',
     sampleCount: 0,
     validNumericCount: 0,
     firstTimestampMs: null,
@@ -217,7 +286,9 @@ function createStream(row, index, chartLimit) {
     hasRule: false,
     ruleId: null,
     parameterId: null,
-    points: [],
+    stateSource: null,
+    stateConflict: null,
+    statusCounts: {},
     sampler: createChartSampler(chartLimit),
     chartPoints: []
   };
@@ -244,11 +315,19 @@ function streamToCatalogEntry(stream) {
     signalName: stream.signalName,
     normalizedSignal: stream.normalizedSignal,
     sourceName: stream.sourceName,
+    sourceType: stream.sourceType,
     system: stream.system,
+    subsystem: stream.subsystem,
+    component: stream.component,
+    deviceGroup: stream.deviceGroup,
     unit: stream.unit,
     hasRule: stream.hasRule,
     parameterId: stream.parameterId,
-    status: stream.hasRule ? 'configured' : 'no_rule',
+    status: deriveStreamStatus(stream),
+    dataType: stream.dataType,
+    statusCounts: stream.statusCounts,
+    stateSource: stream.stateSource,
+    stateConflict: stream.stateConflict,
     sampleCount: stream.sampleCount,
     firstTimestampMs: stream.firstTimestampMs,
     lastTimestampMs: stream.lastTimestampMs,
@@ -261,6 +340,53 @@ function streamToCatalogEntry(stream) {
     renderedPointCount: stream.renderedPointCount,
     downsampled: stream.downsampled
   };
+}
+
+function deriveStreamStatus(stream) {
+  if (!stream.hasRule) return 'no_rule';
+  const counts = stream.statusCounts || {};
+  if (counts.critical) return 'critical';
+  if (counts.warning) return 'warning';
+  if (counts.ok) return 'ok';
+  if (counts.needs_validation) return 'needs_validation';
+  if (counts.needs_configuration) return 'needs_configuration';
+  return 'configured';
+}
+
+export function buildSignalHierarchy(signalCatalog = []) {
+  const systems = new Map();
+  for (const signal of signalCatalog) {
+    const systemName = signal.subsystem || signal.system || 'Unclassified';
+    const componentName = signal.deviceGroup || signal.component || 'Unclassified';
+    if (!systems.has(systemName)) systems.set(systemName, createHierarchySystem(systemName));
+    const system = systems.get(systemName);
+    system.sampleCount += signal.sampleCount || 0;
+    system.signalCount += 1;
+    if (signal.hasRule) system.configuredCount += 1;
+    system.statusCounts[signal.status] = (system.statusCounts[signal.status] || 0) + 1;
+    if (!system._components.has(componentName)) system._components.set(componentName, createHierarchyComponent(systemName, componentName, signal.component));
+    const component = system._components.get(componentName);
+    component.signalCount += 1;
+    component.signals.push(stripChartPoints(signal));
+  }
+  return Array.from(systems.values()).map(system => {
+    system.components = Array.from(system._components.values()).map(component => ({ ...component, signals: component.signals.sort((a, b) => a.signalName.localeCompare(b.signalName)) })).sort((a, b) => a.componentName.localeCompare(b.componentName));
+    delete system._components;
+    return system;
+  }).sort((a, b) => a.systemName.localeCompare(b.systemName));
+}
+
+function createHierarchySystem(systemName) {
+  return { systemId: systemName.toLowerCase().replace(/[^a-z0-9]+/g, '_') || 'unclassified', systemName, sampleCount: 0, signalCount: 0, configuredCount: 0, statusCounts: {}, components: [], _components: new Map() };
+}
+
+function createHierarchyComponent(systemName, componentName, sourceComponent) {
+  return { componentId: `${systemName}::${componentName}`.toLowerCase().replace(/[^a-z0-9]+/g, '_'), componentName, deviceGroup: componentName, sourceComponent: sourceComponent || componentName, signalCount: 0, signals: [] };
+}
+
+function stripChartPoints(signal) {
+  const { chartPoints, statusCounts, stateConflict, ...rest } = signal;
+  return { ...rest, statusCounts: { ...(statusCounts || {}) }, stateConflict: stateConflict ? { ...stateConflict } : null };
 }
 
 function summarize(signalCatalog, parameterSummaries, rules) {
