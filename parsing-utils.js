@@ -10,7 +10,7 @@ export function parseTextLogsToRows(logs, progress = () => {}) {
   const rows = [];
   let processed = 0;
   for (const log of logs) {
-    appendRows(rows, parseDelimitedText(log.text, log.name));
+    parseDelimitedText(log.text, log.name, { collect: false, onRow: row => rows.push(row) });
     processed += 1;
     progress(processed, logs.length, log.name, rows.length);
   }
