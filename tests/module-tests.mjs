@@ -4,13 +4,38 @@ import { execSync } from 'node:child_process';
 import { authenticateLocalPrototype, clearSession, createLocalSession, readStoredSession, storeSession, validateLoginFields } from '../auth.js';
 import { AUTH_CONFIG, USER_FACING_STAGES, normalizeSourceIdentity } from '../config.js';
 import { ADAPTERS, getRuleMatchesForRow, matchRuleForRow, parseSlashTimestamp, parseSourceTimestamp } from '../adapters.js';
-import { consolidateDeviationEvents, evaluateValue, inferCheckType, normalizeState, normalizeToken, parseTolerance, summarizeStateComparisons, timeWeightedOutOfRange } from '../evaluation.js';
+import { analyzeParameter, computeAllowedRange, consolidateDeviationEvents, evaluateValue, inferCheckType, normalizeState, normalizeToken, parseNumber, parseTolerance, selectExpected, summarizeStateComparisons, timeWeightedOutOfRange } from '../evaluation.js';
 import { createStateIndex } from '../machine-states.js';
 import { parseRulesWorkbook } from '../rules.js';
 import { chooseInitialParameter, chooseInitialSystem, getServiceDecision, groupParameters, normalizeStatus, renderActualExpectedChart, renderComparisonGauge, validateAnalysisResult } from '../render.js';
 import { buildServiceDecision } from '../service-decision.js';
 import { renderHotspot } from '../render-radar.js';
 import { sortComparisonRows } from '../render-drilldown.js';
+
+
+function isInsideGitWorkTree() {
+  try { return execSync('git rev-parse --is-inside-work-tree', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() === 'true'; }
+  catch { return false; }
+}
+
+function scanProjectFiles(dir = new URL('../', import.meta.url)) {
+  const root = new URL(dir);
+  const out = [];
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    if (['.git', 'node_modules'].includes(entry.name)) continue;
+    const url = new URL(entry.name + (entry.isDirectory() ? '/' : ''), root);
+    if (entry.isDirectory()) out.push(...scanProjectFiles(url));
+    else out.push(url.pathname);
+  }
+  return out;
+}
+
+function assertNoUnsafeNumbers(value, path = 'output') {
+  if (value === undefined) assert.fail(`${path} is undefined`);
+  if (typeof value === 'number') assert.ok(Number.isFinite(value), `${path} is finite`);
+  if (Array.isArray(value)) value.forEach((item, index) => assertNoUnsafeNumbers(item, `${path}[${index}]`));
+  else if (value && typeof value === 'object') for (const [key, item] of Object.entries(value)) assertNoUnsafeNumbers(item, `${path}.${key}`);
+}
 
 function baseResult(overrides = {}) {
   const metadata = {
@@ -41,6 +66,67 @@ function baseResult(overrides = {}) {
   };
 }
 
+
+
+assert.equal(parseNumber('42'), 42, 'parseNumber parses integer');
+assert.equal(parseNumber('42.5'), 42.5, 'parseNumber parses decimal');
+assert.equal(parseNumber('42,5'), 42.5, 'parseNumber parses decimal comma');
+assert.equal(parseNumber('1,234.5'), 1234.5, 'parseNumber parses thousands separator');
+assert.equal(parseNumber('0'), 0, 'parseNumber preserves zero');
+assert.equal(parseNumber('-4.2'), -4.2, 'parseNumber parses negative');
+assert.equal(parseNumber('not numeric'), null, 'parseNumber rejects invalid text');
+assert.equal(parseNumber(''), null, 'parseNumber rejects blank text');
+assert.deepEqual(parseTolerance('bad tolerance'), null, 'Invalid tolerance returns null');
+assert.deepEqual(parseTolerance('0'), { mode: 'absolute', value: 0 }, 'Zero tolerance is valid');
+assert.equal(normalizeState('ON'), 'ON', 'ON normalizes');
+assert.equal(normalizeState('on'), 'ON', 'on normalizes');
+assert.equal(normalizeState('Standby'), 'Standby', 'Standby normalizes');
+assert.equal(normalizeState('Ready'), 'Ready', 'Ready normalizes');
+assert.equal(normalizeState('Prepare2Print'), 'Prepare2Print', 'Prepare2Print normalizes');
+assert.equal(normalizeState('Printing'), 'Printing', 'Printing normalizes');
+assert.equal(normalizeState('PrintEnd'), 'PrintEnd', 'PrintEnd normalizes');
+assert.equal(normalizeState('Recovery'), 'Recovery', 'Recovery normalizes');
+assert.equal(normalizeState('Error'), 'Error', 'Error normalizes');
+const expectedPriorityRule = { expectedByState: { ON: 0, Printing: 40 }, expectedRangeByState: {}, genericExpected: 12, genericExpectedRange: null };
+assert.equal(selectExpected(expectedPriorityRule, { systemState: 'Printing', machineState: 'ON' }).value, 40, 'System state Expected has priority');
+assert.equal(selectExpected(expectedPriorityRule, { machineState: 'ON' }).value, 0, 'Machine state Expected fallback preserves zero');
+assert.equal(selectExpected({ expectedByState: {}, expectedRangeByState: {}, genericExpected: 5 }, { machineState: 'ON' }).value, 5, 'Generic Expected is used only without state-specific config');
+assert.equal(selectExpected(expectedPriorityRule, { machineState: 'Ready' }).reasonCode, 'missing_expected_for_state', 'Missing encountered state Expected is explicit');
+assert.deepEqual(computeAllowedRange({ tolerance: parseTolerance('±2') }, 25).allowedLow, 23, 'Absolute tolerance computes low');
+assert.equal(computeAllowedRange({ tolerance: parseTolerance('10%') }, 40).allowedHigh, 44, 'Percentage tolerance computes high');
+assert.equal(computeAllowedRange({ tolerance: parseTolerance('60 Max') }, null).allowedHigh, 60, 'Max rule computes high open range');
+assert.equal(computeAllowedRange({ tolerance: parseTolerance('5 Min') }, null).allowedLow, 5, 'Min rule computes low open range');
+assert.equal(computeAllowedRange({ genericExpectedRange: { low: 2, high: 4, target: 3 } }, 3).allowedHigh, 4, 'Explicit range computes allowed high');
+assert.equal(computeAllowedRange({ genericExpectedRange: { low: 4, high: 2, target: 3 } }, 3).reasonCode, 'invalid_range_configuration', 'Invalid low/high is rejected');
+assert.equal(computeAllowedRange({ checkType: 'range' }, 3).reasonCode, 'missing_required_tolerance', 'Missing tolerance is rejected for range');
+const diffDev = evaluateValue({ checkType: '', expectedByState: { ON: 25 }, genericExpected: null, tolerance: parseTolerance('±2'), warningLow: null, warningHigh: null, criticalLow: null, criticalHigh: null }, 29.2, { status: 'matched', machineState: 'ON', systemState: 'ON' });
+assert.equal(Number(diffDev.difference.toFixed(1)), 4.2, 'Difference is actual minus expected');
+assert.equal(Number(diffDev.deviation.toFixed(1)), 2.2, 'Deviation is distance outside allowed range');
+assert.equal(diffDev.deviationDirection, 'above', 'Deviation direction is above');
+const canonicalRule = { id: 'R-CAN', row: 77, system: 'BSS', subsystem: 'BCU', component: 'Fill', signal: 'FillActualTemperatureC', parameterName: 'Fill Temperature', logSource: 'BSSNotifications', sourceType: 'BSSNotifications', expectedByState: { ON: 25, Printing: 40 }, expectedRangeByState: {}, genericExpected: null, genericExpectedRange: null, tolerance: parseTolerance('±2'), warningLow: null, warningHigh: null, criticalLow: 20, criticalHigh: 45, warningDurationSec: 2, criticalDurationSec: 4, transitionGraceSec: 1, warningAction: '', criticalAction: '', outOfSpecAction: '' };
+const canonical = analyzeParameter(canonicalRule, [
+  { timestampMs: 0, actual: 25, machineState: 'ON', systemState: 'ON' },
+  { timestampMs: 1000, actual: 29.2, machineState: 'ON', systemState: 'ON' },
+  { timestampMs: 2000, actual: 29.2, machineState: 'Printing', systemState: 'Printing' },
+  { timestampMs: 3000, actual: 43, machineState: 'Printing', systemState: 'Printing' },
+  { timestampMs: 4000, actual: 46, machineState: 'Printing', systemState: 'Printing' },
+  { timestampMs: 5000, actual: 46, machineState: 'Printing', systemState: 'Printing' }
+]);
+assert.ok(['warning', 'critical', 'ok'].includes(canonical.status), 'Canonical analyzer returns operational status after evaluation');
+assert.ok(canonical.chartPoints.some(point => point.inTransitionGrace), 'Transition grace marks points visible');
+assert.ok(canonical.deviationEvents.length >= 1, 'Deviation events are consolidated canonically');
+assert.ok(canonical.stateSummaries.some(row => row.state === 'ON'), 'State-Based Health Matrix includes encountered ON state');
+assert.ok(canonical.stateSummaries.some(row => row.state === 'Printing'), 'State-Based Health Matrix includes encountered Printing state');
+assertNoUnsafeNumbers(canonical, 'canonical');
+assert.equal(analyzeParameter({ ...canonicalRule, id: 'NODATA' }, []).status, 'no_data', 'Valid rule without rows returns no_data');
+assert.equal(evaluateValue({ checkType: 'range', expectedByState: { ON: 1 }, genericExpected: null, tolerance: parseTolerance('±1'), warningDurationSec: 5, criticalDurationSec: 2 }, 3, { machineState: 'ON', systemState: 'ON' }).reasonCode, 'invalid_duration_configuration', 'Critical Duration below Warning Duration is invalid');
+const spike = analyzeParameter({ ...canonicalRule, criticalLow: null, criticalHigh: null, warningDurationSec: 5, criticalDurationSec: null, transitionGraceSec: 0 }, [
+  { timestampMs: 0, actual: 29, machineState: 'ON', systemState: 'ON' },
+  { timestampMs: 1000, actual: 25, machineState: 'ON', systemState: 'ON' }
+]);
+assert.equal(spike.status, 'ok', 'Short abnormal spike below Warning Duration is not finalized as Warning');
+const noRuleDecision = buildServiceDecision({ metadata: { rulesValid: 1, relevantSignalsRequired: 2 }, systemHealth: [], signalSummaries: [{ ruleId: 'DISC', system: 'BSS', signal: 'Unruled', status: 'no_rule', matchedRows: 1, evaluatedSampleCount: 0 }], deviationEvents: [] });
+assert.equal(noRuleDecision.kpis.noRuleParameters, 1, 'No-rule KPI counts unique discovered signals');
 
 assert.equal(normalizeSourceIdentity('BSSNotifications'), 'BSSNotifications', 'Canonical source identity is preserved');
 assert.equal(normalizeSourceIdentity('BSS Notifications'), 'BSSNotifications', 'Spaced BSS source alias normalizes');
@@ -321,8 +407,10 @@ assert.equal(statusDecision.evaluationCoverage.fullyEvaluatedRules, 2, 'Count de
 assert.equal(statusDecision.evaluationCoverage.matchedSignals, 3, 'Count definition: matched signals require at least one matched row');
 assert.equal(statusDecision.nextRecommendedAction, 'No service action configured for this rule.', 'Recommended actions are not invented when no configured action exists');
 assert.equal(statusDecision.kpis.fullyEvaluatedRules, 2, 'Radar KPI fully evaluated rules uses parameter-level definitions');
-const changedFiles = execSync('git diff --name-only', { encoding: 'utf8' }).trim().split(/\n/).filter(Boolean);
-assert.equal(changedFiles.some(file => /\.(png|jpe?g|webp|gif|bmp|ico|zip|xlsx?|pdf|docx|pptx|ttf|otf|woff2?)$/i.test(file)), false, 'Git diff contains no changed binary file paths');
+const forbiddenBinary = /\.(png|jpe?g|webp|gif|bmp|ico|zip|xlsx?|pdf|docx|pptx|ttf|otf|woff2?)$/i;
+const changedFiles = isInsideGitWorkTree() ? execSync('git diff --name-only', { encoding: 'utf8' }).trim().split(/\n/).filter(Boolean) : [];
+assert.equal(changedFiles.some(file => forbiddenBinary.test(file)), false, 'Git diff contains no changed binary file paths when Git metadata exists');
+assert.equal(scanProjectFiles().some(file => forbiddenBinary.test(file)), false, 'Source tree scan contains no forbidden binary file paths and does not depend on .git');
 
 assert.match(css, /--accent-cyan:#39c7f3/, 'Cyan accent mapping exists');
 assert.match(css, /--status-ok:#43d17d/, 'OK green mapping exists');
