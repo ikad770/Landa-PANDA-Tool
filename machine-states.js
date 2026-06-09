@@ -7,7 +7,7 @@ export function createStateTimeline(points = [], selectedRange = {}) {
     const raw = point.machineState || point.rawState || point.systemState;
     const state = normalizeState(raw) || raw;
     if (!Number.isFinite(point.timestampMs) || !state) continue;
-    transitions.push({ state, timestampMs: point.timestampMs });
+    transitions.push({ state, timestampMs: point.timestampMs, source: point.sourceName || point.sourceType || point.source || null });
   }
   return transitionsToIntervals(transitions, selectedRange);
 }
@@ -20,11 +20,36 @@ export function createSystemStateTimelines(points = [], selectedRange = {}) {
     const state = normalizeState(raw) || raw;
     if (!system || !Number.isFinite(point.timestampMs) || !state) continue;
     if (!grouped.has(system)) grouped.set(system, []);
-    grouped.get(system).push({ state, timestampMs: point.timestampMs, sourceType: point.sourceType || null });
+    grouped.get(system).push({ state, timestampMs: point.timestampMs, source: point.sourceName || point.sourceType || point.source || null });
   }
   const timelines = {};
   for (const [system, transitions] of grouped) timelines[system] = transitionsToIntervals(transitions, selectedRange);
   return timelines;
+}
+
+export function createMachineStateTimelines(machineStateRows = [], selectedRange = {}) {
+  const machineRows = [];
+  const systemRows = [];
+  for (const row of machineStateRows || []) {
+    if (row?.scope === 'machine') machineRows.push(row);
+    else if (row?.scope === 'system') systemRows.push(row);
+  }
+  const machineTimeline = createStateTimeline(machineRows, selectedRange);
+  const systemTimelinesBySystem = createSystemStateTimelines(systemRows, selectedRange);
+  return {
+    machineTimeline,
+    systemTimelinesBySystem,
+    resolveStateAt(timestampMs, system) {
+      const machine = resolveTimeline(machineTimeline, timestampMs);
+      const systemResolved = resolveTimeline(systemTimelinesBySystem?.[system] || [], timestampMs);
+      return {
+        machineState: machine.state,
+        systemState: systemResolved.state,
+        stateSource: systemResolved.state ? system : machine.state ? 'Machine' : null,
+        stateStatus: systemResolved.status !== 'missing' ? systemResolved.status : machine.status
+      };
+    }
+  };
 }
 
 function transitionsToIntervals(input = [], selectedRange = {}) {
@@ -50,7 +75,7 @@ function transitionsToIntervals(input = [], selectedRange = {}) {
       previous.endTimestampMs = endTimestampMs;
       previous.durationMs = previous.endTimestampMs - previous.startTimestampMs;
     } else {
-      intervals.push({ state: current.state, startTimestampMs, endTimestampMs, durationMs: endTimestampMs - startTimestampMs });
+      intervals.push({ state: current.state, startTimestampMs, endTimestampMs, durationMs: endTimestampMs - startTimestampMs, source: current.source || null });
     }
   }
   return intervals;
@@ -59,12 +84,12 @@ function transitionsToIntervals(input = [], selectedRange = {}) {
 export function createStateResolver(timeline = [], maxLookupGapMs = MAX_STATE_LOOKUP_GAP_MS) {
   return function resolve(timestampMs) {
     const resolved = resolveTimeline(timeline, timestampMs, maxLookupGapMs);
-    return { machineState: resolved.state, systemState: resolved.state, status: resolved.status };
+    return { machineState: resolved.state, systemState: resolved.state, status: resolved.status, stateSource: resolved.source || null, stateStatus: resolved.status };
   };
 }
 
 export function resolveTimeline(timeline = [], timestampMs, maxLookupGapMs = MAX_STATE_LOOKUP_GAP_MS) {
-  if (!Number.isFinite(timestampMs)) return { state: null, status: 'missing' };
+  if (!Number.isFinite(timestampMs)) return { state: null, status: 'missing', source: null };
   let lo = 0;
   let hi = timeline.length - 1;
   let match = null;
@@ -72,9 +97,9 @@ export function resolveTimeline(timeline = [], timestampMs, maxLookupGapMs = MAX
     const mid = (lo + hi) >> 1;
     if (timeline[mid].startTimestampMs <= timestampMs) { match = timeline[mid]; lo = mid + 1; } else { hi = mid - 1; }
   }
-  if (!match) return { state: null, status: 'missing' };
-  if (timestampMs <= match.endTimestampMs) return { state: match.state, status: 'matched' };
+  if (!match) return { state: null, status: 'missing', source: null };
+  if (timestampMs <= match.endTimestampMs) return { state: match.state, status: 'matched', source: match.source || null };
   const age = timestampMs - match.endTimestampMs;
-  if (age > maxLookupGapMs) return { state: match.state, status: 'too_old' };
-  return { state: match.state, status: 'previous_state' };
+  if (age > maxLookupGapMs) return { state: match.state, status: 'too_old', source: match.source || null };
+  return { state: match.state, status: 'previous_state', source: match.source || null };
 }

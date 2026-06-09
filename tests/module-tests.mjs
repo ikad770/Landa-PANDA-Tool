@@ -6,7 +6,7 @@ import { detectLogSchema, inferFecSignal, normalizeSourceRow, parseDelimitedText
 import { appendRows, parseTextLogsToRows } from '../parsing-utils.js';
 import { buildRulesIndex, findRuleDiagnostics, normalizeRulesRows } from '../rules.js';
 import { comparePoint, computeAllowedRange, normalizeState, normalizeToken, parseNumber, resolveExpected } from '../evaluation.js';
-import { createStateTimeline, createSystemStateTimelines } from '../machine-states.js';
+import { createMachineStateTimelines, createStateTimeline, createSystemStateTimelines } from '../machine-states.js';
 import { assertV2Invariants, createChartSampler, runV2Pipeline } from '../v2-pipeline.js';
 
 function walk(value, visitor, path = 'result', seen = new WeakSet()) {
@@ -112,6 +112,7 @@ const bssRows = parseDelimitedText(bssCsv, 'BSS Notifications.csv');
 const bssSignal = bssRows.find(row => row.signalName === 'FillActualTemperatureC');
 assert.equal(bssSignal.component, 'BCUInputsOutputs');
 assert.equal(bssSignal.subsystem, 'BSS');
+assert.equal(bssSignal.sourceType, 'bss');
 assert.equal(bssSignal.numericValue, 34.5);
 assert.equal(bssRows.some(row => row.signalName === 'Enabled' && row.kind === 'sample'), false, 'Boolean BSS parameters are not numeric trend samples');
 assert.equal(bssRows.find(row => row.scope === 'machine').machineState, 'Prepare2Print');
@@ -129,8 +130,9 @@ assert.equal(ipuPressure.metadata.signalNumericId, '12345');
 assert.equal(ipuPressure.numericValue, 73.25459);
 assert.equal(ipuPressure.metadata.deviceInstance, '260');
 assert.equal(ipuPressure.subsystem, 'IPU');
+assert.equal(ipuPressure.sourceType, 'fec');
 assert.equal(ipuPressure.deviceGroup, 'IPU1');
-assert.equal(fecRows.find(row => row.signalName === 'DRY2 PWM').subsystem, 'Dryer / IRD');
+assert.equal(fecRows.find(row => row.signalName === 'DRY2 PWM').subsystem, 'IRD');
 assert.equal(fecRows.find(row => row.signalName === 'Ch6PeakCurrent').deviceGroup, 'DRY6');
 assert.equal(fecRows.find(row => row.scope === 'system').systemState, 'Prepare2Print');
 assert.equal(fecRows.some(row => new RegExp(['Spitfire', 'Server', 'Modules'].join('\\.')).test(row.signalName || '')), false);
@@ -148,9 +150,12 @@ const msRange = { startTimestampMs: parseFlexibleTimestamp('07/05/2026 08:29:35.
 const machineIntervals = createStateTimeline(msRows.filter(row => row.scope === 'machine'), msRange);
 assert.equal(machineIntervals[0].state, 'Ready');
 assert.equal(machineIntervals[1].state, 'Printing');
+const stateTimelines = createMachineStateTimelines(msRows, msRange);
 const systemIntervals = createSystemStateTimelines(msRows.filter(row => row.scope === 'system'), msRange);
 assert.equal(systemIntervals.Dryer.length, 2, 'adjacent equal Dryer sparse updates merge before changed state');
 assert.equal(systemIntervals.IPU[0].state, 'Prepare2Print');
+assert.equal(stateTimelines.resolveStateAt(parseFlexibleTimestamp('07/05/2026 08:29:36.974'), 'IPU').systemState, 'Prepare2Print');
+assert.equal(systemIntervals.BSS[0].state, 'ON', 'each subsystem carries forward independently');
 assert.ok(parseFlexibleTimestamp('05/07/2026 16:19:44:544139') < parseFlexibleTimestamp('05/07/2026 16:34:49:702291'));
 assert.equal(new Date(parseFlexibleTimestamp('07/05/2026 08:29:35.474')).getMonth(), 4, 'DD/MM/YYYY month is May');
 
@@ -160,8 +165,22 @@ const realRules = normalizeRulesRows([
   { System: 'IPU', 'Log Source': 'FEC', 'Log Signal Name': 'IPU1 Pressure', 'Expected Ready': 73, 'Spec Tolerance': 3 }
 ]);
 const realIndex = buildRulesIndex(realRules);
-assert.equal(findRuleDiagnostics(realIndex, { sourceId: 'bss', sourceType: 'bss_notification', sourceName: 'BSS Notifications.csv', subsystem: 'BSS', normalizedSignal: normalizeToken('FillActualTemperatureC') }).status, 'exact_match');
-assert.equal(findRuleDiagnostics(realIndex, { sourceId: 'fec', sourceType: 'fec_notification', sourceName: 'FEC Notifications.csv', subsystem: 'IPU', normalizedSignal: normalizeToken('IPU1 Pressure') }).status, 'duplicate_rules');
+assert.equal(findRuleDiagnostics(realIndex, { sourceId: 'bss', sourceType: 'bss', sourceName: 'BSS Notifications.csv', subsystem: 'BSS', normalizedSignal: normalizeToken('FillActualTemperatureC') }).status, 'exact_match');
+assert.equal(findRuleDiagnostics(realIndex, { sourceId: 'fec', sourceType: 'fec', sourceName: 'FEC Notifications.csv', subsystem: 'IPU', normalizedSignal: normalizeToken('IPU1 Pressure') }).status, 'duplicate_rules');
+
+const realSchemaRows = [...bssRows, ...fecRows, ...msRows];
+const realPipeline = runV2Pipeline({ rows: realSchemaRows, rules: realRules, inputFiles: [{ name: 'real-schemas.zip' }], startedMs: Date.now() });
+assert.equal(realPipeline.summary.discoveredSignals, 4);
+assert.ok(realPipeline.metadata.rowsProcessed > 0);
+assert.ok(realPipeline.signalHierarchy.every(system => system.systemName !== 'Unassigned'));
+assert.ok(realPipeline.signalHierarchy.find(system => system.systemName === 'BSS')?.components.find(component => component.componentName === 'BCUInputsOutputs')?.signals.some(signal => signal.signalName === 'FillActualTemperatureC'));
+assert.ok(realPipeline.signalHierarchy.find(system => system.systemName === 'IPU')?.components.find(component => component.componentName === 'IPU1')?.signals.some(signal => signal.signalName === 'IPU1 Pressure'));
+assert.ok(realPipeline.signalHierarchy.find(system => system.systemName === 'IRD')?.components.find(component => component.componentName === 'DRY2')?.signals.some(signal => signal.signalName === 'DRY2 PWM'));
+assert.ok(realPipeline.signalCatalog.every(signal => signal.chartPoints.length > 0 && signal.chartPoints.length <= MAX_CHART_POINTS_PER_SIGNAL));
+assert.ok(realPipeline.machineStateTimeline.length > 0);
+assert.ok(realPipeline.systemStateTimelineBySystem.IPU.length > 0);
+assert.equal(realPipeline.signalCatalog.find(signal => signal.signalName === 'DRY2 PWM').status, 'no_rule');
+assert.throws(() => runV2Pipeline({ rows: [{ kind: 'state_update', timestampMs: Date.UTC(2026, 0, 1), scope: 'machine', machineState: 'Ready' }], rules: [] }), /NO_NUMERIC_SIGNALS_FOUND/);
 
 const appendRegressionRowCount = 150_000;
 const appendRegressionText = `Timestamp,Signal,Value,Unit,Machine State,Source

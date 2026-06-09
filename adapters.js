@@ -76,17 +76,17 @@ export function parseBssNotificationRow(row, context = {}) {
   if (!Number.isFinite(timestampMs)) return null;
   if (action === 'StateMachine') {
     const state = normalizeText(row.ParameterType);
-    return state ? { kind: 'state_update', sourceType: 'bss_notification', sourceName: context.sourceName || 'BSS Notifications', timestampMs, scope: 'machine', machineState: normalizeState(state) || state, rawState: state, metadata: { action } } : null;
+    return state ? { kind: 'state_update', sourceType: 'bss', sourceName: context.sourceName || 'BSS Notifications', timestampMs, scope: 'machine', machineState: normalizeState(state) || state, rawState: state, metadata: { action } } : null;
   }
   if (action === 'SubsystemState') {
     const state = normalizeText(row.Value);
-    return state ? { kind: 'state_update', sourceType: 'bss_notification', sourceName: context.sourceName || 'BSS Notifications', timestampMs, scope: 'system', subsystem: 'BSS', component, stateStream: signalName || component, systemState: normalizeState(state) || state, rawState: state, metadata: { action } } : null;
+    return state ? { kind: 'state_update', sourceType: 'bss', sourceName: context.sourceName || 'BSS Notifications', timestampMs, scope: 'system', subsystem: 'BSS', component, stateStream: signalName || component, systemState: normalizeState(state) || state, rawState: state, metadata: { action } } : null;
   }
   if (messageType !== 'Parameter' || !signalName) return null;
   const numericValue = parseNumber(row.Value);
   const metadata = { valueType: normalizeText(row.ParameterType) || null, machineType: normalizeText(row.MachineType) || null, isAlert: parseBoolean(row.IsAlert), action };
-  if (!Number.isFinite(numericValue)) return { kind: 'metadata_signal', sourceType: 'bss_notification', sourceName: context.sourceName || 'BSS Notifications', subsystem: 'BSS', component, deviceGroup: component, signalId: normalizeText(row.LLCIKey) || null, signalName, normalizedSignal: normalizeToken(signalName), timestampMs, unit: inferUnit(signalName), dataType: metadata.valueType || 'metadata', metadata };
-  return { kind: 'sample', sourceType: 'bss_notification', sourceId: normalizeSourceIdentity('BSS'), sourceName: context.sourceName || 'BSS Notifications', subsystem: 'BSS', component, deviceGroup: component, signalId: normalizeText(row.LLCIKey) || null, signalName, normalizedSignal: normalizeToken(signalName), timestampMs, numericValue, unit: inferUnit(signalName), machineState: null, systemState: null, metadata };
+  if (!Number.isFinite(numericValue)) return { kind: 'metadata_signal', sourceType: 'bss', sourceName: context.sourceName || 'BSS Notifications', subsystem: 'BSS', component, deviceGroup: component, signalId: normalizeText(row.LLCIKey) || null, signalName, normalizedSignal: normalizeToken(signalName), timestampMs, unit: inferUnit(signalName), dataType: metadata.valueType || 'metadata', metadata };
+  return { kind: 'sample', sourceType: 'bss', sourceId: normalizeSourceIdentity('BSS'), sourceName: context.sourceName || 'BSS Notifications', subsystem: 'BSS', component, deviceGroup: component, signalId: normalizeText(row.LLCIKey) || null, signalName, normalizedSignal: normalizeToken(signalName), timestampMs, numericValue, unit: inferUnit(signalName), machineState: null, systemState: null, metadata };
 }
 
 export function parseFecNotificationRow(row, context = {}) {
@@ -97,14 +97,14 @@ export function parseFecNotificationRow(row, context = {}) {
   if (type === 'StateMachine') {
     const subsystem = normalizeText(row.PSSID) || 'FEC';
     const state = normalizeText(row.State);
-    return state ? { kind: 'state_update', sourceType: 'fec_notification', sourceName: context.sourceName || 'FEC Notifications', timestampMs, scope: 'system', subsystem: canonicalFecSubsystem(subsystem), component: subsystem, stateStream: subsystem, systemState: normalizeState(state) || state, rawState: state, metadata: { type } } : null;
+    return state ? { kind: 'state_update', sourceType: 'fec', sourceName: context.sourceName || 'FEC Notifications', timestampMs, scope: 'system', subsystem: canonicalFecSubsystem(subsystem), component: subsystem, stateStream: subsystem, systemState: normalizeState(state) || state, rawState: state, metadata: { type } } : null;
   }
   if (!['DeviceStatus', 'ControlStatus'].includes(type) || !parsed.signalName) return null;
   const numericValue = parseNumber(row.SetPoint);
   const inferred = inferFecSignal(parsed.signalName);
   const metadata = { type, rawPssid: normalizeText(row.PSSID), signalNumericId: parsed.signalNumericId, deviceInstance: normalizeText(row.CableId) || null, enabled: parseBoolean(row.Enabled), hasErrors: parseBoolean(row.HasErrors), hasWarnings: parseBoolean(row.HasWarnings), deviceState: normalizeText(row.PSCState) || null, statusCode: normalizeText(row.Status) || null, state: normalizeText(row.State) || null };
-  if (!Number.isFinite(numericValue)) return { kind: 'metadata_signal', sourceType: 'fec_notification', sourceName: context.sourceName || 'FEC Notifications', subsystem: inferred.subsystem, component: inferred.component, deviceGroup: inferred.deviceGroup, signalId: parsed.signalNumericId || metadata.deviceInstance || null, signalName: parsed.signalName, normalizedSignal: normalizeToken(parsed.signalName), timestampMs, unit: inferUnit(parsed.signalName), dataType: type, metadata };
-  return { kind: 'sample', sourceType: 'fec_notification', sourceId: normalizeSourceIdentity('FEC'), sourceName: context.sourceName || 'FEC Notifications', subsystem: inferred.subsystem, component: inferred.component, deviceGroup: inferred.deviceGroup, signalId: parsed.signalNumericId || metadata.deviceInstance || null, signalName: parsed.signalName, normalizedSignal: normalizeToken(parsed.signalName), timestampMs, numericValue, unit: inferUnit(parsed.signalName), machineState: null, systemState: null, metadata };
+  if (!Number.isFinite(numericValue)) return { kind: 'metadata_signal', sourceType: 'fec', sourceName: context.sourceName || 'FEC Notifications', subsystem: inferred.subsystem, component: inferred.component, deviceGroup: inferred.deviceGroup, signalId: parsed.signalNumericId || metadata.deviceInstance || null, signalName: parsed.signalName, normalizedSignal: normalizeToken(parsed.signalName), timestampMs, unit: inferUnit(parsed.signalName), dataType: type, metadata };
+  return { kind: 'sample', sourceType: 'fec', sourceId: normalizeSourceIdentity('FEC'), sourceName: context.sourceName || 'FEC Notifications', subsystem: inferred.subsystem, component: inferred.component, deviceGroup: inferred.deviceGroup, signalId: parsed.signalNumericId || metadata.deviceInstance || null, signalName: parsed.signalName, normalizedSignal: normalizeToken(parsed.signalName), timestampMs, numericValue, unit: inferUnit(parsed.signalName), machineState: null, systemState: null, metadata };
 }
 
 export function parsePssid(value) {
@@ -120,16 +120,16 @@ export function inferFecSignal(signalName) {
   const dry = name.match(/\b(DRY\s*(?:1[01]|[1-9]))\b/i) || name.match(/^(?:AL\s*(1[01]|[1-9])\s+Temp|Ch\s*(1[01]|[1-9])\s+Heater|Ch(1[01]|[1-9])PeakCurrent)/i);
   if (dry) {
     const unit = dry[1] ? dry[1].replace(/\s+/g, '').toUpperCase() : `DRY${dry[2] || dry[3]}`;
-    return { subsystem: 'Dryer / IRD', component: unit, deviceGroup: unit };
+    return { subsystem: 'IRD', component: unit, deviceGroup: unit };
   }
   if (/WaterInTemp|WaterOutTemp|CWSSupplyTemp|CWSReturnTemp/i.test(name)) return { subsystem: 'CWS', component: 'CWS', deviceGroup: 'CWS' };
   if (/Ventilation/i.test(name)) return { subsystem: 'Ventilation', component: 'Ventilation', deviceGroup: 'Ventilation' };
-  return { subsystem: 'FEC / Unclassified', component: 'Unclassified', deviceGroup: 'Unclassified' };
+  return { subsystem: 'FEC', component: 'Unclassified', deviceGroup: 'Unclassified' };
 }
 
 function canonicalFecSubsystem(value) {
-  if (/^Dryer$/i.test(value) || /^IRD$/i.test(value)) return 'Dryer / IRD';
-  return normalizeText(value) || 'FEC / Unclassified';
+  if (/^Dryer$/i.test(value) || /^IRD$/i.test(value)) return 'IRD';
+  return normalizeText(value) || 'FEC';
 }
 
 export function parseMachineStatesRows(rows, context = {}) {
@@ -176,13 +176,14 @@ function firstValue(row, names) {
 }
 
 export function parseDelimitedText(text, sourceName = 'uploaded-log', options = {}) {
-  const { onRow = null, collect = true } = options || {};
+  const { onRow = null, onUnsupported = null, onSchema = null, collect = true } = options || {};
   const clean = cleanCsvText(text);
   const lines = clean.split('\n').filter(line => line.trim());
   if (lines.length < 2) return collect === false ? [] : [];
   const delimiter = chooseDelimiter(lines[0]);
   const rawHeaders = splitLine(lines[0], delimiter);
   const schema = detectLogSchema(rawHeaders, sourceName);
+  if (onSchema) onSchema({ schema, sourceName, headers: rawHeaders.map(header => normalizeText(header)) });
   const headers = schema === 'generic' ? rawHeaders.map(normalizeHeader) : rawHeaders.map(header => normalizeText(header));
   const rows = collect === false ? null : [];
   const matrixRows = schema === 'machine_states' ? [] : null;
@@ -197,6 +198,7 @@ export function parseDelimitedText(text, sourceName = 'uploaded-log', options = 
     for (let c = 0; c < headers.length; c += 1) row[headers[c]] = cells[c] ?? '';
     if (schema === 'machine_states') { matrixRows.push(row); continue; }
     const parsed = schema === 'bss_notification' ? parseBssNotificationRow(row, { sourceName }) : schema === 'fec_notification' ? parseFecNotificationRow(row, { sourceName }) : normalizeGenericRow(row, sourceName);
+    if (!parsed && onUnsupported) onUnsupported({ schema, sourceName, lineNumber: i + 1 });
     emit(parsed);
   }
   if (schema === 'machine_states') for (const item of parseMachineStatesRows(matrixRows, { sourceName })) emit(item);

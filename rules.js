@@ -107,14 +107,14 @@ export function findRuleDiagnostics(index, stream) {
 
 function streamMatchSources(stream) {
   const sources = [stream.sourceId, normalizeSourceIdentity(stream.sourceName), normalizeSourceIdentity(stream.sourceType), normalizeSourceIdentity(stream.subsystem)];
-  if (stream.sourceType === 'bss_notification') sources.push(normalizeSourceIdentity('BSS'));
-  if (stream.sourceType === 'fec_notification') sources.push(normalizeSourceIdentity('FEC'));
+  if (stream.sourceType === 'bss' || stream.sourceType === 'bss_notification') sources.push(normalizeSourceIdentity('BSS'));
+  if (stream.sourceType === 'fec' || stream.sourceType === 'fec_notification') sources.push(normalizeSourceIdentity('FEC'));
   return Array.from(new Set(sources.filter(Boolean)));
 }
 
 function sourceAliases(sourceName) {
   const aliases = [normalizeSourceIdentity(sourceName)];
-  if (/\bBSS\b|bss_notification/i.test(sourceName || '')) aliases.push(normalizeSourceIdentity('BSS'));
-  if (/\bFEC\b|fec_notification/i.test(sourceName || '')) aliases.push(normalizeSourceIdentity('FEC'));
+  if (/\bBSS\b|bss_notification|^bss$/i.test(sourceName || '')) aliases.push(normalizeSourceIdentity('BSS'));
+  if (/\bFEC\b|fec_notification|^fec$/i.test(sourceName || '')) aliases.push(normalizeSourceIdentity('FEC'));
   return Array.from(new Set(aliases.filter(Boolean)));
 }

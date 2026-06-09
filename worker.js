@@ -34,8 +34,15 @@ async function runWorkerV2({ autocollectFile, rulesFile }, startedAt, startedMs)
   assertNotCancelled();
   const rules = parseRulesWorkbook(XLSX, rulesBuffer);
   emitProgress('parse', 0.05, `Parsed ${rules.length} configured rules.`, 0, 1);
-  const rows = await extractRowsFromArchive(autocollectFile);
-  emitProgress('parse', 1, `Parsed ${rows.length} supported log rows.`, rows.length, rows.length);
+  const extraction = await extractRowsFromArchive(autocollectFile);
+  const rows = extraction.rows;
+  emitProgress('parse', 1, `Scanned ${extraction.stats.filesScanned} files; parsed ${extraction.stats.rowsParsed} rows; found ${extraction.stats.numericSamplesFound} numeric samples, ${extraction.stats.stateUpdatesFound} state updates, and ${extraction.stats.unsupportedRows} unsupported rows.`, extraction.stats.rowsParsed, extraction.stats.filesScanned);
+  if (!extraction.stats.numericSamplesFound) {
+    const error = stageError('parse', 'NO_NUMERIC_SIGNALS_FOUND: No numeric BSS, FEC, or generic signal samples were found in the uploaded logs.');
+    error.code = 'NO_NUMERIC_SIGNALS_FOUND';
+    error.diagnostics = extraction.stats;
+    throw error;
+  }
   assertNotCancelled();
   const result = runV2Pipeline({
     rows,
@@ -54,6 +61,7 @@ async function extractRowsFromArchive(file) {
   const zip = await JSZip.loadAsync(await file.arrayBuffer());
   const entries = Object.values(zip.files).filter(entry => !entry.dir);
   const rows = [];
+  const stats = { filesScanned: 0, rowsParsed: 0, numericSamplesFound: 0, stateUpdatesFound: 0, unsupportedRows: 0, schemas: {} };
   let processed = 0;
   for (const entry of entries) {
     assertNotCancelled();
@@ -62,15 +70,30 @@ async function extractRowsFromArchive(file) {
       const nested = await JSZip.loadAsync(await entry.async('arraybuffer'));
       for (const nestedEntry of Object.values(nested.files)) {
         if (nestedEntry.dir || !isSupportedText(nestedEntry.name)) continue;
-        parseDelimitedText(await nestedEntry.async('text'), nestedEntry.name, { collect: false, onRow: row => rows.push(row) });
+        stats.filesScanned += 1;
+        parseDelimitedText(await nestedEntry.async('text'), nestedEntry.name, { collect: false, onSchema: schema => recordSchema(stats, schema), onUnsupported: () => { stats.rowsParsed += 1; stats.unsupportedRows += 1; }, onRow: row => handleParsedRow(row, rows, stats) });
       }
     } else if (isSupportedText(name)) {
-      parseDelimitedText(await entry.async('text'), name, { collect: false, onRow: row => rows.push(row) });
+      stats.filesScanned += 1;
+      parseDelimitedText(await entry.async('text'), name, { collect: false, onSchema: schema => recordSchema(stats, schema), onUnsupported: () => { stats.rowsParsed += 1; stats.unsupportedRows += 1; }, onRow: row => handleParsedRow(row, rows, stats) });
     }
     processed += 1;
     emitProgress('parse', entries.length ? processed / entries.length : 1, `Parsed ${name}.`, processed, entries.length);
   }
-  return rows;
+  return { rows, stats };
+}
+
+function recordSchema(stats, info) {
+  const key = info?.schema || 'unknown';
+  stats.schemas[key] = (stats.schemas[key] || 0) + 1;
+}
+
+function handleParsedRow(row, rows, stats) {
+  stats.rowsParsed += 1;
+  if (row?.kind === 'sample' && Number.isFinite(row.numericValue)) stats.numericSamplesFound += 1;
+  else if (row?.kind === 'state_update') stats.stateUpdatesFound += 1;
+  else stats.unsupportedRows += 1;
+  rows.push(row);
 }
 
 function isSupportedText(name) {
@@ -114,6 +137,7 @@ function serializeWorkerError(error) {
     signal: error?.signal || null,
     ruleId: error?.ruleId || null,
     ruleRow: error?.ruleRow || null,
+    diagnostics: error?.diagnostics || null,
     stackFrames: String(error?.stack || '').split('\n').slice(1, MAX_STACK_FRAMES + 1).map(line => line.trim())
   };
 }
