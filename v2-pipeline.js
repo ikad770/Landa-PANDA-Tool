@@ -1,5 +1,5 @@
 import { MAX_CHART_POINTS_PER_SIGNAL, MAX_DIAGNOSTIC_ENTRIES, MAX_DIAGNOSTIC_MESSAGE_LENGTH } from './config.js';
-import { createStateResolver, createStateTimeline, createSystemStateTimelines, resolveTimeline } from './machine-states.js';
+import { createMachineStateTimelines, createStateResolver, resolveTimeline } from './machine-states.js';
 import { buildRulesIndex, findRuleForStream } from './rules.js';
 import { comparePoint, createParameterAccumulator, finalizeParameterAccumulator, updateParameterAccumulator } from './evaluation.js';
 import { buildServiceDecision } from './service-decision.js';
@@ -24,7 +24,7 @@ function scalarOnly(input) {
 }
 
 export function createChartSampler(limit = MAX_CHART_POINTS_PER_SIGNAL) {
-  const safeLimit = Math.max(10, Math.min(3000, Number(limit) || MAX_CHART_POINTS_PER_SIGNAL));
+  const safeLimit = Math.max(10, Math.min(MAX_CHART_POINTS_PER_SIGNAL, Number(limit) || MAX_CHART_POINTS_PER_SIGNAL));
   const points = [];
   let rawPointCount = 0;
   let bucket = null;
@@ -74,7 +74,10 @@ function compactPoint(point) {
     allowedLow: point.allowedLow ?? null,
     allowedHigh: point.allowedHigh ?? null,
     status: point.status || 'no_rule',
-    machineState: point.machineState || null
+    machineState: point.machineState || null,
+    systemState: point.systemState || null,
+    stateSource: point.stateSource || null,
+    stateStatus: point.stateStatus || null
   };
 }
 
@@ -102,6 +105,7 @@ export function runV2Pipeline({ rows = [], rules = [], inputFiles = [], progress
   let lastTimestampMs = null;
   const machineStateUpdates = [];
   const systemStateUpdates = [];
+  let unsupportedRows = 0;
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
     if (!Number.isFinite(row.timestampMs)) continue;
@@ -112,12 +116,12 @@ export function runV2Pipeline({ rows = [], rules = [], inputFiles = [], progress
       if (row.scope === 'system') systemStateUpdates.push(row);
       continue;
     }
-    if (row.kind && row.kind !== 'sample') continue;
-    if (!row.normalizedSignal || !Number.isFinite(row.numericValue)) continue;
+    if (row.kind && row.kind !== 'sample') { unsupportedRows += 1; continue; }
+    if (!row.normalizedSignal || !Number.isFinite(row.numericValue)) { unsupportedRows += 1; continue; }
     const key = streamKey(row);
     let stream = streams.get(key);
     if (!stream) {
-      stream = createStream(row, streams.size + 1, chartLimit);
+      stream = createStream(row, streams.size + 1, Math.min(chartLimit, 1000));
       const rule = findRuleForStream(rulesIndex, stream);
       if (rule) attachRuleToStream(stream, rule);
       streams.set(key, stream);
@@ -125,11 +129,20 @@ export function runV2Pipeline({ rows = [], rules = [], inputFiles = [], progress
     updateStreamAggregates(stream, row);
     if (i % 5000 === 0) progress('index', i / Math.max(1, rows.length), 'Indexing signal rows.', i, rows.length);
   }
+  if (!streams.size) {
+    const error = new Error('NO_NUMERIC_SIGNALS_FOUND: No numeric BSS, FEC, MachineStates-adjacent, or generic signal samples were found.');
+    error.code = 'NO_NUMERIC_SIGNALS_FOUND';
+    error.stage = 'parse';
+    error.diagnostics = { rowsProcessed: rows.length, stateUpdates: machineStateUpdates.length + systemStateUpdates.length, unsupportedRows: Math.max(0, rows.length - machineStateUpdates.length - systemStateUpdates.length) };
+    addDiagnostic(diagnostics, 'error', error.message, error.diagnostics);
+    throw error;
+  }
   const selectedRange = { startTimestampMs: firstTimestampMs, endTimestampMs: lastTimestampMs };
-  const machineStateTimeline = createStateTimeline(machineStateUpdates, selectedRange);
+  const stateTimelines = createMachineStateTimelines([...machineStateUpdates, ...systemStateUpdates], selectedRange);
+  const machineStateTimeline = stateTimelines.machineTimeline;
   const stateTimeline = machineStateTimeline.map(item => ({ ...item }));
   const resolveMachineState = createStateResolver(machineStateTimeline);
-  const systemStateTimelineBySystem = createSystemStateTimelines(systemStateUpdates, selectedRange);
+  const systemStateTimelineBySystem = stateTimelines.systemTimelinesBySystem;
   progress('analyze', 0, 'Matching rules to streams.', 0, streams.size + rules.length);
 
   const matchedRules = new Set();
@@ -146,10 +159,10 @@ export function runV2Pipeline({ rows = [], rules = [], inputFiles = [], progress
     if (stream.rule && stream.accumulator) {
       const comparison = comparePoint(stream.rule, { ...row, machineState: aligned.machineState, systemState: aligned.systemState }, aligned);
       updateParameterAccumulator(stream.accumulator, { ...row, machineState: aligned.machineState, systemState: aligned.systemState }, comparison);
-      stream.sampler.add({ timestampMs: row.timestampMs, actual: row.numericValue, expected: comparison.expected, allowedLow: comparison.allowedLow, allowedHigh: comparison.allowedHigh, status: comparison.status, machineState: comparison.machineState, systemState: comparison.systemState });
+      stream.sampler.add({ timestampMs: row.timestampMs, actual: row.numericValue, expected: comparison.expected, allowedLow: comparison.allowedLow, allowedHigh: comparison.allowedHigh, status: comparison.status, machineState: comparison.machineState, systemState: comparison.systemState, stateSource: aligned.stateSource, stateStatus: aligned.stateStatus });
       stream.statusCounts[comparison.status] = (stream.statusCounts[comparison.status] || 0) + 1;
     } else {
-      stream.sampler.add({ timestampMs: row.timestampMs, actual: row.numericValue, status: 'no_rule', machineState: aligned.machineState, systemState: aligned.systemState });
+      stream.sampler.add({ timestampMs: row.timestampMs, actual: row.numericValue, status: 'no_rule', machineState: aligned.machineState, systemState: aligned.systemState, stateSource: aligned.stateSource, stateStatus: aligned.stateStatus });
     }
     stream.stateSource = aligned.stateSource;
     stream.stateConflict = stream.stateConflict || aligned.stateConflict;
@@ -194,7 +207,10 @@ export function runV2Pipeline({ rows = [], rules = [], inputFiles = [], progress
       selectedRange,
       inputFiles,
       filesProcessed: inputFiles.length,
-      rowsProcessed: rows.length
+      rowsProcessed: rows.length,
+      numericSamplesFound: Array.from(streams.values()).reduce((sum, stream) => sum + stream.sampleCount, 0),
+      stateUpdatesFound: machineStateUpdates.length + systemStateUpdates.length,
+      unsupportedRows
     },
     summary: summarize(signalCatalog, parameterSummaries, rules),
     signalCatalog,
@@ -244,7 +260,8 @@ function alignSampleState(row, stream, resolveMachineState, systemStateTimelineB
     machineState: machine.machineState || machine.state || null,
     systemState,
     status: machine.status || 'missing',
-    stateSource: rowSystemState ? 'row' : chosen ? chosen.system : null,
+    stateSource: rowSystemState ? 'row' : chosen ? chosen.system : machine.stateSource || null,
+    stateStatus: chosen?.status || machine.status || 'missing',
     alternateSystemState: alternate?.state || null,
     stateConflict: conflict
   };
@@ -253,7 +270,7 @@ function alignSampleState(row, stream, resolveMachineState, systemStateTimelineB
 function relevantStateSystems(stream) {
   if (stream.subsystem === 'BSS') return ['BSS'];
   if (stream.subsystem === 'IPU') return ['IPU'];
-  if (stream.subsystem === 'Dryer / IRD') return ['Dryer / IRD', 'Dryer', 'IRD'];
+  if (stream.subsystem === 'IRD') return ['IRD', 'Dryer'];
   if (stream.subsystem === 'CWS') return ['CWS'];
   if (stream.subsystem === 'Ventilation') return ['Ventilation'];
   return [stream.subsystem, stream.system].filter(Boolean);
@@ -289,8 +306,7 @@ function createStream(row, index, chartLimit) {
     stateSource: null,
     stateConflict: null,
     statusCounts: {},
-    sampler: createChartSampler(chartLimit),
-    chartPoints: []
+    sampler: createChartSampler(chartLimit)
   };
 }
 
