@@ -19,3 +19,8 @@ venv/
 # Node/local
 node_modules/
 .DS_Store
+
+# Validation runtime reports
+data/validation/*
+!data/validation/.gitkeep
+*validation-report.json
