@@ -101,8 +101,14 @@ class IngestionService:
                         flush()
                 flush()
             flush()
+            point_duplicates = self.store.deduplicate_signal_points()
+            state_duplicates = self.store.deduplicate_state_updates()
+            if point_duplicates or state_duplicates:
+                self.store.insert_diagnostics([Diagnostic(ingestion_id=ingestion_id, level="info", code="exact_duplicates_removed", message="Removed exact duplicate normalized rows", details={"signal_points": point_duplicates, "state_updates": state_duplicates})])
             rebuild_and_align_states(self.store)
             refresh_signal_catalog(self.store)
+            run.numeric_points_written = self.store.count_points()
+            run.state_updates_written = self.store.count_state_updates()
             run.discovered_signals = self.store.count_catalog()
             try:
                 ParquetStore(self.settings.processed_dir).export_signal_points(self.store)
