@@ -177,6 +177,109 @@ class DuckDBStore:
             """)
             con.commit()
 
+
+    def deduplicate_signal_points(self) -> int:
+        with self.connection() as con:
+            before = int(con.execute("SELECT count(*) FROM signal_points").fetchone()[0])
+            con.execute("""
+            DELETE FROM signal_points
+            WHERE rowid NOT IN (
+              SELECT min(rowid) FROM signal_points
+              GROUP BY press_id, source_type, system, component, device, signal_id, signal_name,
+                       timestamp_utc_or_local, numeric_value, coalesce(unit, '')
+            )
+            """)
+            after = int(con.execute("SELECT count(*) FROM signal_points").fetchone()[0])
+            con.commit()
+            return before - after
+
+    def deduplicate_state_updates(self) -> int:
+        with self.connection() as con:
+            before = int(con.execute("SELECT count(*) FROM state_updates").fetchone()[0])
+            con.execute("""
+            DELETE FROM state_updates
+            WHERE rowid NOT IN (
+              SELECT min(rowid) FROM state_updates
+              GROUP BY press_id, scope, coalesce(system, ''), timestamp, state
+            )
+            """)
+            after = int(con.execute("SELECT count(*) FROM state_updates").fetchone()[0])
+            con.commit()
+            return before - after
+
+    def count_state_updates(self) -> int:
+        with self.connection() as con:
+            return int(con.execute("SELECT count(*) FROM state_updates").fetchone()[0])
+
+    def reset_runtime_data(self) -> None:
+        with self.connection() as con:
+            for table in ("ingestion_runs", "signal_points", "signal_catalog", "state_updates", "state_intervals", "ingestion_diagnostics", "non_numeric_events"):
+                con.execute(f"DELETE FROM {table}")
+            con.commit()
+
+    def count_duplicate_signal_points(self) -> int:
+        with self.connection() as con:
+            row = con.execute("""
+            SELECT coalesce(sum(c - 1), 0) FROM (
+              SELECT count(*) AS c FROM signal_points
+              GROUP BY press_id, source_type, system, component, device, signal_id, signal_name,
+                       timestamp_utc_or_local, numeric_value, coalesce(unit, '')
+              HAVING count(*) > 1
+            )
+            """).fetchone()
+            return int(row[0] or 0)
+
+    def count_duplicate_state_updates(self) -> int:
+        with self.connection() as con:
+            row = con.execute("""
+            SELECT coalesce(sum(c - 1), 0) FROM (
+              SELECT count(*) AS c FROM state_updates
+              GROUP BY press_id, scope, coalesce(system, ''), timestamp, state
+              HAVING count(*) > 1
+            )
+            """).fetchone()
+            return int(row[0] or 0)
+
+    def point_source_overlap_summary(self, limit: int = 20) -> list[dict[str, Any]]:
+        with self.connection() as con:
+            rows = con.execute("""
+            SELECT source_type, signal_id, timestamp_utc_or_local AS timestamp, numeric_value,
+                   count(DISTINCT source_file) AS source_file_count, min(source_file) AS example_source_file
+            FROM signal_points
+            GROUP BY source_type, signal_id, timestamp_utc_or_local, numeric_value
+            HAVING count(DISTINCT source_file) > 1
+            ORDER BY source_file_count DESC, timestamp
+            LIMIT ?
+            """, [limit]).fetchall()
+            return [dict(r) for r in rows]
+
+    def catalog_summary(self) -> list[dict[str, Any]]:
+        with self.connection() as con:
+            rows = con.execute("""
+            SELECT system, count(DISTINCT component) AS component_count, count(DISTINCT signal_id) AS signal_count,
+                   coalesce(sum(sample_count), 0) AS point_count, min(first_timestamp) AS first_timestamp,
+                   max(last_timestamp) AS last_timestamp,
+                   sum(CASE WHEN component = 'Unclassified' OR signal_name = 'Unclassified' THEN 1 ELSE 0 END) AS unclassified_count
+            FROM signal_catalog GROUP BY system ORDER BY system
+            """).fetchall()
+            return [dict(r) for r in rows]
+
+    def time_coverage(self) -> dict[str, Any]:
+        with self.connection() as con:
+            row = con.execute("SELECT min(timestamp_utc_or_local), max(timestamp_utc_or_local), count(*) FROM signal_points").fetchone()
+            state_row = con.execute("SELECT min(start_timestamp), max(coalesce(end_timestamp, start_timestamp)), count(*) FROM state_intervals").fetchone()
+            return {"point_first": _parse(row[0]), "point_last": _parse(row[1]), "point_count": int(row[2] or 0), "state_first": _parse(state_row[0]), "state_last": _parse(state_row[1]), "state_interval_count": int(state_row[2] or 0)}
+
+    def count_intervals(self, scope: str | None = None) -> int:
+        with self.connection() as con:
+            if scope:
+                return int(con.execute("SELECT count(*) FROM state_intervals WHERE scope = ?", [scope]).fetchone()[0])
+            return int(con.execute("SELECT count(*) FROM state_intervals").fetchone()[0])
+
+    def state_systems(self) -> list[str]:
+        with self.connection() as con:
+            return [r[0] for r in con.execute("SELECT DISTINCT system FROM state_intervals WHERE scope = 'system' AND system IS NOT NULL ORDER BY system").fetchall()]
+
     def count_catalog(self) -> int:
         with self.connection() as con:
             return int(con.execute("SELECT count(*) FROM signal_catalog").fetchone()[0])
