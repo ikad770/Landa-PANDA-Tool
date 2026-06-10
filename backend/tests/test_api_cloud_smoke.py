@@ -7,8 +7,10 @@ from pathlib import Path
 
 import pytest
 
-fastapi_testclient = pytest.importorskip("fastapi.testclient")
-from fastapi.testclient import TestClient
+try:
+    from fastapi.testclient import TestClient
+except (ModuleNotFoundError, RuntimeError) as exc:
+    pytest.skip(f"FastAPI TestClient dependencies are unavailable: {exc}", allow_module_level=True)
 
 from backend.app.api.v1 import get_settings, get_store
 from backend.app.core.config import Settings
