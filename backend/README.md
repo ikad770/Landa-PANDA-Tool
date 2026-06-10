@@ -40,3 +40,36 @@ PANDA_RUN_SCALE_TEST=1 python -m pytest backend/tests/test_scale.py -s
 - `GET /api/v1/signals/{signal_id}/series`
 - `GET /api/v1/states`
 - `GET /api/v1/diagnostics`
+
+## Real Autocollect validation CLI
+
+The backend includes a production-path validation command for real PANDA V4 Autocollect data. It discovers BSS, FEC, and MachineStates folders, ingests all supported files in each source as one logical history, deduplicates exact split-file overlaps, rebuilds the catalog and state intervals, and validates queryable systems/signals/series/states.
+
+Windows Anaconda setup:
+
+```bat
+conda create -n panda-v4 python=3.11 -y
+conda activate panda-v4
+python -m pip install -e "backend[test]"
+```
+
+Autocollect-root mode:
+
+```bat
+python -m backend.app.tools.validate_real_data ^
+--autocollect-root "C:\path\to\autocollect-v8-..." ^
+--press-id "D14" ^
+--json-output "data\validation\D14-report.json"
+```
+
+Explicit-directory mode:
+
+```bat
+python -m backend.app.tools.validate_real_data ^
+--bss-dir "C:\path\OPC\Logs\LLCINotifications\BSS" ^
+--fec-dir "C:\path\OPC\Logs\FECNotifications" ^
+--machine-states-dir "C:\path\OPC\Logs\MachineStates" ^
+--press-id "D14"
+```
+
+Use `--reset-runtime-data` only when you want to clear configured PANDA runtime tables and generated processed outputs. The reset refuses unsafe paths and never deletes source logs. The final line is exactly `PANDA REAL-DATA VALIDATION: PASS` or `PANDA REAL-DATA VALIDATION: FAIL`; warnings are non-fatal unless a fail criterion is also present. See `../docs/real-data-validation.md` for details, runtime output locations, and GitHub fixture limitations.

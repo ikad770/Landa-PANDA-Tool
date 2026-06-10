@@ -108,7 +108,12 @@ def test_large_synthetic_rows_processed_in_batches(tmp_path, settings, store):
         handle.write(BSS_HEADER)
         for i in range(rows):
             signal = "TubActualLevelMM" if i % 2 == 0 else "FillActualTemperatureC"
-            handle.write(f"05/07/2026 10:{(i // 60) % 60:02d}:{i % 60:02d},,Parameter,k{i%2},S10,BCUMonitor,{signal},Double,{i % 100},False\n")
+            day = 1 + (i // 86400)
+            second_of_day = i % 86400
+            hour = second_of_day // 3600
+            minute = (second_of_day // 60) % 60
+            second = second_of_day % 60
+            handle.write(f"{day:02d}/07/2026 {hour:02d}:{minute:02d}:{second:02d},,Parameter,k{i%2},S10,BCUMonitor,{signal},Double,{i % 100},False\n")
     run = IngestionService(store, settings).ingest_paths([path])
     assert run.numeric_points_written == rows
     assert store.count_points() == rows
