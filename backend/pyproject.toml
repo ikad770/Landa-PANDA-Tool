@@ -1,0 +1,20 @@
+[project]
+name = "landa-panda-backend"
+version = "0.1.0"
+description = "PANDA V4 data foundation backend"
+requires-python = ">=3.11"
+dependencies = [
+  "duckdb>=1.0",
+  "fastapi>=0.115",
+  "pydantic>=2",
+  "python-multipart>=0.0.9",
+  "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".."]
+addopts = "-q"

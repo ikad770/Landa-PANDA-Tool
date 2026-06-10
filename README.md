@@ -1,86 +1,113 @@
-# PANDA Tool — Service Radar
+# PANDA Tool — V4 Data Foundation
 
-This repository contains a static, no-build PANDA Tool web application for rule-driven analysis of Landa autocollect archives.
+This repository now contains the clean PANDA V4 backend data foundation alongside the previous static browser prototype. The old browser runtime remains as reference only; V4 ingestion, signal discovery, state timelines, diagnostics, and bounded series querying are implemented in `backend/` and do not depend on Grafana or the old worker pipeline.
 
-## What the application does
+## What V4 implements in this milestone
 
-The tool runs the full analysis path in a module worker:
+- Ingests BSS, FEC, and MachineStates CSV/text files directly or inside normal/nested ZIP archives.
+- Detects exact real source headers before parsing.
+- Builds deterministic signal identities from press, source, system, component, device, and signal name; filenames are never used as signal identities.
+- Stores numeric time-series points incrementally in the backend store and exports normalized Parquet partitions when DuckDB/Parquet support is available.
+- Builds Machine State and System State intervals from sparse MachineStates and source state updates.
+- Aligns signal points with relevant state intervals using set-based storage updates.
+- Exposes versioned FastAPI endpoints for health, ingestions, systems, components, signals, bounded series, states, and diagnostics.
+- Provides pytest coverage for parsers, archives, storage, APIs, and an opt-in one-million-row scale test.
 
-1. Parses the uploaded Rules Excel workbook from the real detected header row.
-2. Derives required log sources from valid rules.
-3. Opens the root autocollect ZIP, finds `opc.zip`, and indexes only required paths.
-4. Parses sparse MachineStates files with forward-filled state transitions.
-5. Parses required notification logs, including BSS CSV files inside nested ZIPs.
-6. Matches source values to rule signals, including configured aliases.
-7. Evaluates actual values against state-specific expected values and tolerances.
-8. Consolidates deviation events and returns a compact `AnalysisResult`.
-9. Renders Service Radar and Drill-Down views from that same result.
+Rules evaluation, alerts, Azure integration, Service Radar UI, and System Drill-Down UI are intentionally not implemented in this PR.
 
-Diagnostics are intentionally isolated from the Service Radar. The internal `analysisAudit` object is available only from Diagnostics.
+## Repository layout
 
-## Local run instructions
+```text
+backend/
+  app/
+    api/                 Versioned API endpoints
+    core/                Settings and structured logging
+    ingestion/           Upload and archive traversal
+    models/              Canonical domain models
+    parsers/             BSS, FEC, and MachineStates parsers
+    services/            Ingestion, state, and catalog services
+    storage/             DuckDB-facing store and Parquet export helper
+  tests/                 pytest suite
+  pyproject.toml         Backend dependencies and pytest config
+frontend/README.md       Placeholder for future React work
+data/
+  raw/                   Runtime uploads, ignored by Git
+  processed/             Runtime DuckDB/Parquet outputs, ignored by Git
+scripts/                 Windows setup/run/test helpers
+```
 
-Because the app uses ES modules and a module worker, run it from a local HTTP server instead of opening `index.html` directly.
+## Local backend setup
+
+### Standard Python venv
 
 ```bash
-python3 -m http.server 8080
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS/Linux
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e "backend[test]"
 ```
 
-Then open:
+### Anaconda Prompt
+
+```bat
+conda create -n panda-v4 python=3.11
+conda activate panda-v4
+python -m pip install --upgrade pip
+python -m pip install -e backend[test]
+```
+
+If package installation is blocked by a corporate proxy, the parser/storage tests can still run in this repository's dependency-limited fallback mode, but production development should install the declared backend dependencies.
+
+## Run the backend
+
+```bash
+python -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Open Swagger/OpenAPI documentation at:
 
 ```text
-http://localhost:8080/
+http://127.0.0.1:8000/docs
 ```
 
-## Prototype authentication note
+## Run tests
 
-The local Login screen uses a client-side prototype credential only so the static application can demonstrate session flow without a backend. Production authentication must use a secure backend identity service, and credentials must never be exposed in client-side JavaScript.
-
-## Required inputs
-
-- **Autocollect ZIP**: root archive containing a nested `opc.zip`.
-- **Rules Excel**: workbook containing a PANDA rules sheet. The Rules header row can appear below row 1 as long as it contains:
-  - `System`
-  - `Subsystem`
-  - `Component`
-  - `Log Signal Name`
-  - `Log Source`
-
-## Source path mapping
-
-The analyzer opens only paths required by the Rules Excel:
-
-| Log source | Required path |
-| --- | --- |
-| `BSSNotifications` | `logs/LLCINotifications/BSS/` |
-| `IPSNotifications` | `logs/LLCINotifications/IPS/` |
-| `FECNotifications` | `logs/FECNotifications/` |
-| `MachineStates` | `logs/MachineStates/` |
-| `AlertsMonitoring` | `logs/AlertsMonitoring.txt` or `logs/AletrsMonitoring.txt` |
-
-MachineStates are always included when state-dependent rules exist.
-
-## Local machine image fallback
-
-To use the real machine image locally, place the image at:
-
-```text
-assets/landa-machine.png
+```bash
+python -m pytest backend
 ```
 
-The application will automatically use it. If the image is missing, the built-in CSS/SVG fallback is displayed. This fallback is expected until the binary asset is added manually and must not be treated as a data or code failure.
+Run the opt-in scale test:
 
+```bash
+PANDA_RUN_SCALE_TEST=1 python -m pytest backend/tests/test_scale.py -s
+```
 
-## Files
+Windows helper scripts:
 
-- `index.html` — static HTML shell.
-- `styles.css` — app, Service Radar, hotspot, and Drill-Down styles.
-- `app.js` — main-thread state, worker orchestration, progress, and navigation.
-- `worker.js` — archive indexing, source parsing, runtime evaluation, compact result assembly.
-- `adapters.js` — CSV cleanup, header normalization, timestamp parsing, source adapters, signal matching.
-- `rules.js` — Rules Excel parsing and analysis plan construction.
-- `machine-states.js` — sparse MachineStates forward-fill and binary-search state lookup.
-- `evaluation.js` — expected value selection, tolerance parsing, and status evaluation.
-- `render-radar.js` — Service Radar exports.
-- `render-drilldown.js` — Drill-Down exports.
-- `config.js` — hotspots, stage weights, statuses, source paths, aliases, and limits.
+```bat
+scripts\setup_windows.bat
+scripts\run_backend.bat
+scripts\run_tests.bat
+```
+
+## Configuration
+
+Copy `.env.example` or set environment variables directly:
+
+- `PANDA_DATA_DIR`
+- `PANDA_DUCKDB_PATH`
+- `PANDA_MAX_UPLOAD_MB`
+- `PANDA_MAX_ARCHIVE_DEPTH`
+- `PANDA_MAX_ARCHIVE_FILES`
+- `PANDA_MAX_UNCOMPRESSED_MB`
+- `PANDA_BATCH_SIZE`
+- `PANDA_DEFAULT_MAX_POINTS`
+
+Generated `.duckdb`, `.db`, and `.parquet` files belong under `data/processed/` and are ignored by Git.
+
+## Legacy static prototype
+
+The original static Service Radar prototype files (`index.html`, `app.js`, `worker.js`, `v2-pipeline.js`, rendering modules, and JavaScript tests) are retained unchanged for historical reference. They are not used by the V4 backend foundation.

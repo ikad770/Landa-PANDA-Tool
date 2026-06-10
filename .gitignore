@@ -1,0 +1,21 @@
+# Runtime storage and uploaded files
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+
+# Node/local
+node_modules/
+.DS_Store

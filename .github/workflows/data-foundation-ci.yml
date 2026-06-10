@@ -1,0 +1,50 @@
+name: Data Foundation CI
+
+on:
+  push:
+    branches:
+      - data-foundation
+  pull_request:
+    branches:
+      - data-foundation
+
+jobs:
+  backend-validation:
+    name: Backend validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e "backend[test]"
+
+      - name: Run pytest
+        run: python -m pytest
+
+      - name: Compile backend
+        run: python -m compileall backend
+
+      - name: Check whitespace errors
+        run: git diff --check
+
+      - name: Verify no forbidden binary files are added
+        shell: bash
+        run: |
+          forbidden_regex='\.(png|jpe?g|webp|gif|bmp|ico|zip|xlsx?|pdf|docx|pptx|ttf|otf|woff2?|parquet|duckdb|db)$'
+          matches=$(git ls-files | grep -E -i "$forbidden_regex" || true)
+          if [ -n "$matches" ]; then
+            echo "Forbidden binary/runtime file extensions are tracked:"
+            echo "$matches"
+            exit 1
+          fi
+          echo "No forbidden binary/runtime file extensions are tracked."
