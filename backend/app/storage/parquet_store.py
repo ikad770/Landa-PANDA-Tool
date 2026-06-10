@@ -14,12 +14,13 @@ class ParquetStore:
         self.series_dir.mkdir(parents=True, exist_ok=True)
 
     def export_signal_points(self, store: DuckDBStore) -> None:
-        store.con.execute(
-            """
-            COPY (
-              SELECT *, strftime(timestamp_utc_or_local, '%Y-%m-%d') AS date
-              FROM signal_points
-            ) TO ? (FORMAT PARQUET, PARTITION_BY (press_id, date, system), OVERWRITE_OR_IGNORE TRUE)
-            """,
-            [str(self.series_dir)],
-        )
+        with store.connection() as con:
+            con.execute(
+                """
+                COPY (
+                  SELECT *, strftime(timestamp_utc_or_local, '%Y-%m-%d') AS date
+                  FROM signal_points
+                ) TO ? (FORMAT PARQUET, PARTITION_BY (press_id, date, system), OVERWRITE_OR_IGNORE TRUE)
+                """,
+                [str(self.series_dir)],
+            )

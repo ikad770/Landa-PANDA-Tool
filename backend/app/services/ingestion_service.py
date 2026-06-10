@@ -103,7 +103,7 @@ class IngestionService:
             flush()
             rebuild_and_align_states(self.store)
             refresh_signal_catalog(self.store)
-            run.discovered_signals = int(self.store.con.execute("SELECT count(*) FROM signal_catalog").fetchone()[0])
+            run.discovered_signals = self.store.count_catalog()
             try:
                 ParquetStore(self.settings.processed_dir).export_signal_points(self.store)
             except Exception as exc:  # pragma: no cover - defensive optional export diagnostic
@@ -117,7 +117,7 @@ class IngestionService:
             raise
         finally:
             run.completed_at = datetime.now(UTC)
-            run.diagnostics_count = int(self.store.con.execute("SELECT count(*) FROM ingestion_diagnostics WHERE ingestion_id = ?", [ingestion_id]).fetchone()[0])
+            run.diagnostics_count = self.store.count_diagnostics(ingestion_id)
             self.store.update_run(run)
             duration_ms = int((time.perf_counter() - t0) * 1000)
             logger.info("ingestion completed", extra={"ingestion_id": ingestion_id, "stage": run.status, "files": run.files_seen, "rows": run.rows_seen, "written_points": run.numeric_points_written, "diagnostics_count": run.diagnostics_count, "duration_ms": duration_ms})

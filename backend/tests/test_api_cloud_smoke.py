@@ -8,9 +8,10 @@ import pytest
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
 from fastapi.testclient import TestClient
 
-from backend.app.api.v1 import get_settings
+from backend.app.api.v1 import get_settings, get_store
 from backend.app.core.config import Settings
 from backend.app.main import app
+from backend.app.storage.duckdb_store import DuckDBStore
 from backend.tests.conftest import BSS_HEADER, FEC_HEADER, MACHINE_HEADER
 
 
@@ -53,16 +54,22 @@ def _machine_states_fixture() -> bytes:
 @pytest.fixture
 def cloud_client(tmp_path: Path):
     settings = Settings(data_dir=tmp_path / "data", duckdb_path=tmp_path / "data" / "processed" / "smoke.duckdb", batch_size=10, default_max_points=25)
+    shared_store = DuckDBStore(settings.duckdb_path)
 
     def override_settings() -> Settings:
         return settings
 
+    def override_store() -> DuckDBStore:
+        return shared_store
+
     app.dependency_overrides[get_settings] = override_settings
+    app.dependency_overrides[get_store] = override_store
     try:
         with TestClient(app) as client:
             yield client
     finally:
         app.dependency_overrides.clear()
+        shared_store.close()
 
 
 def test_fastapi_synthetic_ingestion_smoke(cloud_client: TestClient):

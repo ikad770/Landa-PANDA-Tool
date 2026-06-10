@@ -28,7 +28,7 @@ def test_one_million_scale_ingestion(tmp_path: Path):
     run = IngestionService(store, settings).ingest_paths([path], press_id="scale")
     runtime = time.perf_counter() - t0
     assert run.numeric_points_written == rows
-    assert store.con.execute("SELECT count(*) FROM signal_points").fetchone()[0] == rows
+    assert store.count_points() == rows
     assert len(store.list_signals()) == 4
     assert {s["system"] for s in store.list_systems()} == systems
     signal_id = store.list_signals()[0]["signal_id"]

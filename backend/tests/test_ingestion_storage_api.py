@@ -111,7 +111,7 @@ def test_large_synthetic_rows_processed_in_batches(tmp_path, settings, store):
             handle.write(f"05/07/2026 10:{(i // 60) % 60:02d}:{i % 60:02d},,Parameter,k{i%2},S10,BCUMonitor,{signal},Double,{i % 100},False\n")
     run = IngestionService(store, settings).ingest_paths([path])
     assert run.numeric_points_written == rows
-    assert store.con.execute("SELECT count(*) FROM signal_points").fetchone()[0] == rows
+    assert store.count_points() == rows
     signal_id = store.list_signals(search="TubActual")[0]["signal_id"]
     agg, points = store.series(signal_id, max_points=25)
     assert agg["maximum"] == 98
