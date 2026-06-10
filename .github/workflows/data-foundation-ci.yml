@@ -3,10 +3,12 @@ name: Data Foundation CI
 on:
   push:
     branches:
+      - main
       - data-foundation
+      - real-data-validation
   pull_request:
     branches:
-      - data-foundation
+      - main
 
 jobs:
   backend-validation:
